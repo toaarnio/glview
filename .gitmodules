@@ -1,3 +1,6 @@
 [submodule "multiproc"]
 	path = multiproc
 	url = https://github.com/toaarnio/pymultiproc.git
+[submodule "imgio"]
+	path = imgio
+	url = https://github.com/toaarnio/imgio.git
