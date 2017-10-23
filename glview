@@ -1,0 +1,291 @@
+#!/usr/bin/python3 -B
+
+import sys, os, glob, time, struct  # built-in libraries
+import pygame                       # pip install pygame
+import numpy as np                  # pip install numpy
+import ModernGL                     # pip install ModernGL
+
+import imgio                   # local import: imgio.py
+import argv                    # local import: argv.py
+import multiproc               # local import: multiproc.py
+
+def main():
+    numtiles = argv.validint("--split", 1, [1, 2, 3, 4])
+    showHelp = argv.exists("--help")
+    argv.exitIfAnyUnparsedOptions()
+    if showHelp:
+        print("Usage: glview [options] [image.(pgm|ppm|png|jpg)] ...")
+        print()
+        print("  options:")
+        print("    --split 1|2|3|4     display images in N separate tiles")
+        print("    --help              show this help message")
+        print()
+        print("  runtime:")
+        print("    mouse wheel         zoom image; synchronized if multiple tiles")
+        print("    mouse left + move   pan image; synchronized if multiple tiles")
+        print("    PageUp/PageDown     cycle through images on active tile")
+        print("    1/2/3/4             select active tile for PageUp/PageDown")
+        print("    s                   split window into 1/2/3/4 tiles")
+        print("    f                   toggle fullscreen <-> windowed")
+        print("    esc                 terminate")
+        sys.exit(-1)
+
+    filepatterns = sys.argv[1:] or ["*"]
+    filenames, _ = argv.filenames(filepatterns, [".ppm", ".png", ".jpg", ".pgm"], sort=True)
+    numFiles = len(filenames)
+    enforce(numFiles > 0, "No valid PGM/PPM/PNG/JPG images to show. Terminating.")
+    print("See 'glview --help' for usage instructions.")
+
+    pygame.display.init()  # pygame.audio causes interference, leave it disabled
+    pygame.key.set_repeat(100, 100)  # 10 keypresses per second
+    info = pygame.display.Info()
+    screensize = (info.current_w, info.current_h)
+    winsize = (info.current_w //2, info.current_h // 2)
+    viewports = resize(numtiles, winsize, fullscreen=False)
+    ctx, prog, vao = initGL()
+    N = min(numFiles, 16)
+    textures = [None] * numFiles
+    print("Preloading the first %d / %d images, please wait..."%(N, numFiles))
+    textures[:N] = createTextures(ctx, filenames[:N])
+    ui(ctx, prog, vao, textures, filenames, screensize, winsize, viewports, numtiles)
+    pygame.quit()
+
+def ui(ctx, prog, vao, textures, filenames, screensize, winsize, viewports, numtiles):
+    numFiles = len(filenames)
+    colors = [(0.2, 0.0, 0.0), (0.0, 0.2, 0.0), (0.0, 0.0, 0.2), (0.2, 0.2, 0.0)]
+    imgPerTile = [0, 0, 0, 0]
+    activeTile = 0
+    fullscreen = False
+    dirty = True
+    exit = False;
+    while not exit:
+        # process all pending events before redraw
+        ev = pygame.event.wait()  # wait for first event
+        events = [ev] + pygame.event.get()  # get all pending events
+        for event in events:
+            # get event type & mouse state
+            quitEvent = event.type == pygame.QUIT
+            resizeEvent = event.type == pygame.VIDEORESIZE
+            exposeEvent = event.type == pygame.VIDEOEXPOSE
+            activeEvent = event.type == pygame.ACTIVEEVENT
+            keyDown = event.type == pygame.KEYDOWN
+            mouseDown = event.type == pygame.MOUSEBUTTONDOWN
+            mouseMotion = event.type == pygame.MOUSEMOTION
+            mouseUp = event.type == pygame.MOUSEBUTTONUP
+            left, mid, right = pygame.mouse.get_pressed()
+            # get event detail
+            escDown = keyDown and event.key == pygame.K_ESCAPE
+            delKey = keyDown and event.key == pygame.K_DELETE
+            inputFocusGain = activeEvent and event.state == 2 and event.gain == True
+            mouseFocusGain = activeEvent and event.state == 1 and event.gain == True
+            inputFocusLoss = activeEvent and event.state == 2 and event.gain == False
+            mouseFocusLoss = activeEvent and event.state == 1 and event.gain == False
+            pageUpDown = keyDown and event.key in [pygame.K_PAGEUP, pygame.K_KP9]
+            pageDownDown = keyDown and event.key in [pygame.K_PAGEDOWN, pygame.K_KP3]
+            numberKeyDown = keyDown and pygame.K_1 <= event.key <= pygame.K_4
+            numberOneDown = keyDown and event.key == pygame.K_1
+            numberTwoDown = keyDown and event.key == pygame.K_2
+            numberThreeDown = keyDown and event.key == pygame.K_3
+            numberFourDown = keyDown and event.key == pygame.K_4
+            toggleFullscreen = keyDown and event.key == pygame.K_f
+            cycleNumTiles = keyDown and event.key == pygame.K_s
+            wheelRollDown = mouseDown and event.button == 5
+            wheelRollUp = mouseDown and event.button == 4
+            leftDown = mouseDown and event.button == 1
+            leftUp = mouseUp and event.button == 1
+            mouseRelPos = pygame.mouse.get_rel()
+            # take action based on mouse state & event
+            exit = exit or quitEvent or escDown
+            if delKey and numtiles == 1:
+                imgidx = imgPerTile[activeTile]
+                filename = filenames[imgidx]
+                del textures[imgidx]
+                del filenames[imgidx]
+                os.remove(filename)
+                print("Deleted %s."%(filename))
+                numFiles -= 1
+                enforce(numFiles >= 1, "No images to display. Terminating.")
+                imgidx = min(imgidx, numFiles - 1)
+                imgPerTile[activeTile] = imgidx
+                dirty = True
+            if numberKeyDown and numtiles > 1:
+                numberKey = event.key - pygame.K_1
+                activeTile = numberKey if numberKey < numtiles else activeTile
+            if toggleFullscreen:
+                dirty = True
+                if not fullscreen:
+                    prevWinsize = winsize
+                    winsize = screensize
+                    viewports = resize(numtiles, screensize, fullscreen=True)
+                    fullscreen = True
+                else:
+                    winsize = prevWinsize
+                    viewports = resize(numtiles, winsize, fullscreen=False)
+                    fullscreen = False
+            if cycleNumTiles:
+                dirty = True
+                numtiles = (numtiles % 4) + 1  # 1,2,3,4,1,2,3,4,...
+                viewports = resize(numtiles, winsize, fullscreen=fullscreen)
+                activeTile = min(activeTile, numtiles-1)
+            if resizeEvent:
+                dirty = True
+                winsize = prevWinsize = event.size
+                viewports = resize(numtiles, winsize, fullscreen=False)
+            if pageUpDown or pageDownDown:
+                dirty = True
+                incr = 1 if pageDownDown else -1 if pageUpDown else 0
+                imgidx = imgPerTile[activeTile]
+                imgidx = (imgidx + incr) % numFiles
+                imgPerTile[activeTile] = imgidx
+            if leftDown:  # switch to virtual mouse mode
+                pygame.mouse.set_visible(False)
+                pygame.event.set_grab(True)
+            if leftUp:  # switch back to normal mouse mode
+                pygame.mouse.set_visible(True)
+                pygame.event.set_grab(False)
+                pygame.mouse.set_pos((winsize[0]/2, winsize[1]/2))
+            if wheelRollDown or wheelRollUp:
+                dirty = True
+                scaleFactor = 1.0 + 0.1 * wheelRollDown - 0.1 * wheelRollUp
+                prog.uniforms['scale'].value *= scaleFactor
+            if mouseMotion and left:
+                if 0 < np.linalg.norm(mouseRelPos) < 200:  # filter out pygame glitches & no-ops
+                    dirty = True
+                    imgidx = imgPerTile[activeTile]
+                    imgw = textures[imgidx].width
+                    imgh = textures[imgidx].height
+                    ooScale = 1.0 / prog.uniforms['scale'].value
+                    posX, posY = prog.uniforms['mousepos'].value
+                    posX += mouseRelPos[0] * 8.0 * ooScale / imgw
+                    posY -= mouseRelPos[1] * 8.0 * ooScale / imgh
+                    posX = np.clip(posX, -1.0, 1.0)
+                    posY = np.clip(posY, -1.0, 1.0)
+                    prog.uniforms['mousepos'].value = (posX, posY)
+        if dirty:
+            dirty = False
+            caption = "glview "
+            for i in range(numtiles):
+                imgidx = imgPerTile[i]
+                if textures[imgidx] is None:
+                    textures[imgidx] = createTexture(ctx, filenames[imgidx])
+                texture = textures[imgidx]
+                texture.use()
+                texw, texh = texture.width, texture.height
+                vpx, vpy, vpw, vph = viewports[i]
+                ctx.viewport = viewports[i]
+                ctx.clear(*colors[i], viewport=viewports[i])
+                xscale, yscale = getAspectRatio(vpw, vph, texw, texh)
+                prog.uniforms['aspect'].value = (xscale, yscale)
+                prog.uniforms['grayscale'].value = (texture.components == 1)
+                vao.render(ModernGL.TRIANGLE_STRIP)
+                caption = "%s | %d/%d: %s"%(caption, imgidx+1, numFiles, filenames[imgidx])
+            pygame.display.set_caption(caption)
+            pygame.display.flip()
+
+def initGL():
+    ctx = ModernGL.create_context()
+    ctx.enable(ModernGL.DEPTH_TEST)
+    shaderPath = os.path.dirname(os.path.realpath(__file__))
+    vshader = ctx.vertex_shader(open(os.path.join(shaderPath, 'panzoom.vs')).read())
+    fshader = ctx.fragment_shader(open(os.path.join(shaderPath, 'texture.fs')).read())
+    prog = ctx.program([vshader, fshader])
+    prog.uniforms['scale'].value = 1.0
+    prog.uniforms['mousepos'].value = (0.0, 0.0)
+    #prog.uniforms['imgsize'].value = (w, h)
+    #prog.uniforms['imgcenter'].value = imgcenter
+    #prog.uniforms['maxradius'].value = max(w, h) / 2
+    vbo = ctx.buffer(struct.pack('8f', -1.0, -1.0, -1.0, 1.0, 1.0, -1.0, 1.0, 1.0));
+    vao = ctx.simple_vertex_array(prog, vbo, ['vert'])
+    return ctx, prog, vao
+
+def createTexture(ctx, filename):
+    img = loadImage(filename)
+    h, w = img.shape[:2]
+    numbytes = img.nbytes
+    isFloat = img.itemsize >= 4
+    if img.ndim == 3:  # RGB
+        texture = ctx.texture((w, h), 3, img.flatten(), floats=isFloat)
+    if img.ndim == 2:  # grayscale
+        texture = ctx.texture((w, h), 1, img.flatten(), floats=isFloat)
+    texture.filter = ModernGL.NEAREST
+    return texture
+
+def createTextures(ctx, filenames):
+    t0 = time.time()
+    textures = []
+    totalSize = 0
+    n = 100
+    groups = [filenames[i*n:i*n+n] for i, _ in enumerate(filenames[::n])]
+    for group in groups:
+        images = multiproc.run(loadImage, group)
+        for img in images:
+            h, w = img.shape[:2]
+            numbytes = img.nbytes
+            isFloat = img.itemsize >= 4
+            if img.ndim == 3:  # RGB
+                texture = ctx.texture((w, h), 3, img.flatten(), floats=isFloat)
+            if img.ndim == 2:  # grayscale
+                texture = ctx.texture((w, h), 1, img.flatten(), floats=isFloat)
+            texture.filter = ModernGL.NEAREST
+            textures.append(texture)
+            totalSize += img.nbytes
+    elapsed = time.time() - t0
+    totalSize = totalSize / 1024**2
+    bandwidth = totalSize / elapsed
+    print("Copied %d MB of image data from disk to OpenGL in %.1f seconds (%d MB/sec)."%(totalSize, elapsed, bandwidth))
+    return textures
+
+def loadImage(filespec):
+    img, maxval = imgio.imread(filespec, verbose=True)
+    if img.ndim == 3:  # RGB
+        img = img[:, :, :3]  # scrap alpha channel, if any
+    if maxval == 255:
+        img = img.astype(np.uint8)
+    else:
+        img = img.astype(np.float32) / maxval
+        img = (img * 255).astype(np.uint8)
+    return img
+
+def resize(numtiles, winsize, fullscreen):
+    windowType = (pygame.FULLSCREEN | pygame.HWSURFACE) if fullscreen else pygame.RESIZABLE
+    pygame.display.set_mode(winsize, pygame.OPENGL | pygame.DOUBLEBUF | windowType)
+    w, h = winsize
+    viewports = {}
+    if numtiles == 1:
+        vpw, vph = (w, h)
+        viewports[0] = (0, 0, w, h)
+    elif numtiles == 2:
+        vpw, vph = (w // 2, h)
+        viewports[0] = (0,   0, vpw, vph)
+        viewports[1] = (vpw, 0, vpw, vph)
+    elif numtiles == 3:
+        vpw, vph = (w // 3, h)
+        viewports[0] = (0,     0, vpw, vph)
+        viewports[1] = (vpw,   0, vpw, vph)
+        viewports[2] = (2*vpw, 0, vpw, vph)
+    elif numtiles == 4:
+        vpw, vph = (w // 2, h // 2)
+        viewports[0] = (0,   vph, vpw, vph)  # bottom left => top left
+        viewports[1] = (vpw, vph, vpw, vph)  # bottom right => top right
+        viewports[2] = (0,   0, vpw, vph)    # top left => bottom left
+        viewports[3] = (vpw, 0, vpw, vph)    # top right => bottom right
+    return viewports
+
+def getAspectRatio(vpw, vph, texw, texh):
+    vpAspect = vpw / vph
+    texAspect = texw / texh
+    if texAspect > vpAspect:
+        # image wider than window => squeeze y => black top & bottom
+        xscale, yscale = (1.0, vpAspect / texAspect)
+    else:
+        # image narrower than window => squeeze x => black sides
+        xscale, yscale = (texAspect / vpAspect, 1.0)
+    return xscale, yscale
+
+def enforce(expression, messageIfFalse):
+    if not expression:
+        print(messageIfFalse)
+        sys.exit(-1)
+
+if __name__ == "__main__":
+    main()
