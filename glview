@@ -5,9 +5,12 @@ import pygame                       # pip install pygame
 import numpy as np                  # pip install numpy
 import ModernGL                     # pip install ModernGL
 
-import imgio                   # local import: imgio.py
+sys.path.append(os.path.join(os.path.dirname(os.path.realpath(__file__)), 'imgio'))
+sys.path.append(os.path.join(os.path.dirname(os.path.realpath(__file__)), 'multiproc'))
+
 import argv                    # local import: argv.py
-import multiproc               # local import: multiproc.py
+import imgio                   # submodule import: imgio.py
+import multiproc               # submodule import: multiproc.py
 
 def main():
     numtiles = argv.validint("--split", 1, [1, 2, 3, 4])
