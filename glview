@@ -1,6 +1,6 @@
 #!/usr/bin/python3 -B
 
-import sys, os, glob, time, struct  # built-in libraries
+import sys, os, time, struct        # built-in libraries
 import pygame                       # pip install pygame
 import numpy as np                  # pip install numpy
 import ModernGL                     # pip install ModernGL
