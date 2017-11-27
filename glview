@@ -218,20 +218,23 @@ def createTextures(ctx, filenames):
     textures = []
     totalSize = 0
     n = 100
-    groups = [filenames[i*n:i*n+n] for i, _ in enumerate(filenames[::n])]
-    for group in groups:
-        images = multiproc.run(loadImage, group)
-        for img in images:
-            h, w = img.shape[:2]
-            numbytes = img.nbytes
-            isFloat = img.itemsize >= 4
-            if img.ndim == 3:  # RGB
-                texture = ctx.texture((w, h), 3, img.flatten(), floats=isFloat)
-            if img.ndim == 2:  # grayscale
-                texture = ctx.texture((w, h), 1, img.flatten(), floats=isFloat)
-            texture.filter = ModernGL.NEAREST
-            textures.append(texture)
-            totalSize += img.nbytes
+    filegroups = [filenames[i*n:i*n+n] for i, _ in enumerate(filenames[::n])]
+    for filegroup in filegroups:
+        images = multiproc.run(loadImage, filegroup, raiseExceptions=False)
+        for idx, img in enumerate(images):
+            if img is None:
+                raise ValueError("Failed to load '%s'. Terminating."%(filegroup[idx]))
+            else:
+                h, w = img.shape[:2]
+                numbytes = img.nbytes
+                isFloat = img.itemsize >= 4
+                if img.ndim == 3:  # RGB
+                    texture = ctx.texture((w, h), 3, img.flatten(), floats=isFloat)
+                if img.ndim == 2:  # grayscale
+                    texture = ctx.texture((w, h), 1, img.flatten(), floats=isFloat)
+                texture.filter = ModernGL.NEAREST
+                textures.append(texture)
+                totalSize += img.nbytes
     elapsed = time.time() - t0
     totalSize = totalSize / 1024**2
     bandwidth = totalSize / elapsed
@@ -239,6 +242,10 @@ def createTextures(ctx, filenames):
     return textures
 
 def loadImage(filespec):
+    # This function is run in a separate process, so we can't access
+    # the GL context here. Otherwise we could upload the texture as
+    # soon as it's loaded, rather than having to memcpy it across the
+    # process boundary.
     img, maxval = imgio.imread(filespec, verbose=True)
     if img.ndim == 3:  # RGB
         img = img[:, :, :3]  # scrap alpha channel, if any
