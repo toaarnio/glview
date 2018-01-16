@@ -1,4 +1,4 @@
-#version 330
+#version 130
 
 uniform vec2 aspect;
 uniform float scale;
