@@ -34,7 +34,7 @@ def main():
         sys.exit(-1)
 
     filepatterns = sys.argv[1:] or ["*"]
-    filenames, _ = argv.filenames(filepatterns, [".ppm", ".png", ".jpg", ".pgm"], sort=True)
+    filenames, _ = argv.filenames(filepatterns, [".ppm", ".png", ".jpg", ".pgm"], sort=True, allowAllCaps=True)
     numFiles = len(filenames)
     enforce(numFiles > 0, "No valid PGM/PPM/PNG/JPG images to show. Terminating.")
     print("See 'glview --help' for usage instructions.")

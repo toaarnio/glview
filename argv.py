@@ -14,16 +14,18 @@ import sys, os, glob
 #
 ######################################################################################
 
-def filenames(patterns, extensions=None, sort=False):
+def filenames(patterns, extensions=None, sort=False, allowAllCaps=False):
     """
     Examples:
       filenames, basenames = argv.filenames(sys.argv[1:])
       filenames, basenames = argv.filenames(sys.argv[1:], [".ppm", ".png"], sort=True)
+      filenames, basenames = argv.filenames(sys.argv[1:], [".jpg"], allowAllCaps=True)
     """
     filenames = [glob.glob(filepattern) for filepattern in patterns]                # expand wildcards
     filenames = [item for sublist in filenames for item in sublist]                 # flatten nested lists
     filenames = [f for f in set(filenames) if os.path.exists(f)]                    # check file existence
     if extensions is not None:
+        extensions += [e.upper() for e in extensions] if allowAllCaps else []       # jpg => [jpg, JPG]
         filenames = [f for f in filenames if os.path.splitext(f)[1] in extensions]  # filter by extension
     filenames = sorted(filenames) if sort else filenames                            # sort if requested
     basenames = [os.path.splitext(f)[0] for f in filenames]                         # strip extensions
