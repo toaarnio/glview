@@ -26,15 +26,15 @@ def filenames(patterns, extensions=None, sort=False, allowAllCaps=False):
       filenames, basenames = argv.filenames(sys.argv[1:], [".ppm", ".png"], sort=True)
       filenames, basenames = argv.filenames(sys.argv[1:], [".jpg"], allowAllCaps=True)
     """
-    filenames = [glob.glob(filepattern) for filepattern in patterns]                # expand wildcards
-    filenames = [item for sublist in filenames for item in sublist]                 # flatten nested lists
-    filenames = [f for f in set(filenames) if os.path.exists(f)]                    # check file existence
+    fullnames = [glob.glob(filepattern) for filepattern in patterns]                # expand wildcards
+    fullnames = [item for sublist in fullnames for item in sublist]                 # flatten nested lists
+    fullnames = [f for f in set(fullnames) if os.path.exists(f)]                    # check file existence
     if extensions is not None:
         extensions += [e.upper() for e in extensions] if allowAllCaps else []       # jpg => [jpg, JPG]
-        filenames = [f for f in filenames if os.path.splitext(f)[1] in extensions]  # filter by extension
-    filenames = sorted(filenames) if sort else filenames                            # sort if requested
-    basenames = [os.path.splitext(f)[0] for f in filenames]                         # strip extensions
-    return filenames, basenames
+        fullnames = [f for f in fullnames if os.path.splitext(f)[1] in extensions]  # filter by extension
+    fullnames = sorted(fullnames) if sort else fullnames                            # sort if requested
+    basenames = [os.path.splitext(f)[0] for f in fullnames]                         # strip extensions
+    return fullnames, basenames
 
 def exists(argname):
     """
@@ -97,7 +97,7 @@ def intpair(argname, default=None):
         argidx = sys.argv.index(argname)
         val1 = int(sys.argv[argidx + 1])
         val2 = int(sys.argv[argidx + 2])
-        del sys.argv[argidx:argidx+3]
+        del sys.argv[argidx:argidx + 3]
         return (val1, val2)
     return default
 
@@ -110,7 +110,7 @@ def floatpair(argname, default=None):
         argidx = sys.argv.index(argname)
         val1 = float(sys.argv[argidx + 1])
         val2 = float(sys.argv[argidx + 2])
-        del sys.argv[argidx:argidx+3]
+        del sys.argv[argidx:argidx + 3]
         return (val1, val2)
     return default
 
@@ -163,7 +163,7 @@ def _string(argname, default=None):
     if argname in sys.argv:
         argidx = sys.argv.index(argname)
         argstr = sys.argv[argidx + 1]
-        del sys.argv[argidx:argidx+2]
+        del sys.argv[argidx:argidx + 2]
         return argstr
     return default
 
