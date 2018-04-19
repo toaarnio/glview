@@ -51,11 +51,11 @@ def main():
     use_raw = len(rawfiles) > 0
     use_raw = use_raw and not warn(use_raw and raw_bpp is None, "'--bpp N' not provided, ignoring all .RAW images.")
     use_raw = use_raw and not warn(use_raw and raw_width is None, "'--size M N' not provided, ignoring all .RAW images.")
-    extensions = [".ppm", ".png", ".jpg", ".pgm"]
+    extensions = [".pgm", ".ppm", ".pnm", ".png", ".jpg"]
     extensions += [".raw"] if use_raw else []
     filenames, _ = argv.filenames(filepatterns, extensions, sort=True, allowAllCaps=True)
     numFiles = len(filenames)
-    enforce(numFiles > 0, "No valid PGM/PPM/PNG/JPG/RAW images to show. Terminating.")
+    enforce(numFiles > 0, "No valid PGM/PPM/PNM/PNG/JPG/RAW images to show. Terminating.")
     print("See 'glview --help' for usage instructions.")
 
     pygame.display.init()  # pygame.audio causes interference, leave it disabled
