@@ -13,6 +13,7 @@ import time                    # built-in library
 import struct                  # built-in library
 import pygame                  # pip install pygame
 import numpy as np             # pip install numpy
+import piexif                  # pip install piexif
 import ModernGL                # pip install ModernGL
 import imgio                   # pip install imgio
 
@@ -265,6 +266,16 @@ def loadImage(filespec, raw_width, raw_height, raw_bpp):
     else:
         img = img.astype(np.float32) / maxval
         img = (img * 255).astype(np.uint8)
+    filetype = os.path.splitext(filespec)[-1]
+    if filetype in [".jpg", ".jpeg", ".JPG", ".JPEG"]:
+        exif_dict = piexif.load(filespec).pop("0th")
+        orientation = exif_dict.get(piexif.ImageIFD.Orientation)
+        if orientation == 3:        # 180
+            img = np.rot90(img, 2)
+        if orientation == 6:
+            img = np.rot90(img, 3)  # 90 CW
+        if orientation == 8:
+            img = np.rot90(img)     # 90 CCW
     return img
 
 def resize(numtiles, winsize, fullscreen):
