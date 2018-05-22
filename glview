@@ -41,7 +41,8 @@ def main():
         print("    mouse wheel         zoom image; synchronized if multiple tiles")
         print("    mouse left + move   pan image; synchronized if multiple tiles")
         print("    PageUp/PageDown     cycle through images on active tile")
-        print("    1/2/3/4             select active tile for PageUp/PageDown")
+        print("    r                   rotate active tile 90 degrees clockwise")
+        print("    1/2/3/4             select active tile for PageUp/PageDown/r")
         print("    s                   split window into 1/2/3/4 tiles")
         print("    f                   toggle fullscreen <-> windowed")
         print("    esc                 terminate")
@@ -77,6 +78,7 @@ def ui(ctx, prog, vao, textures, filenames, screensize, winsize, viewports, numt
     numFiles = len(filenames)
     colors = [(0.2, 0.0, 0.0), (0.0, 0.2, 0.0), (0.0, 0.0, 0.2), (0.2, 0.2, 0.0)]
     imgPerTile = [0, 0, 0, 0]
+    rotPerImg = [0] * numFiles
     activeTile = 0
     fullscreen = False
     dirty = True
@@ -108,6 +110,7 @@ def ui(ctx, prog, vao, textures, filenames, screensize, winsize, viewports, numt
             numberKeyDown = keyDown and pygame.K_1 <= event.key <= pygame.K_4
             toggleFullscreen = keyDown and event.key == pygame.K_f
             cycleNumTiles = keyDown and event.key == pygame.K_s
+            rotate90CW = keyDown and event.key == pygame.K_r
             wheelRollDown = mouseDown and event.button == 5
             wheelRollUp = mouseDown and event.button == 4
             leftDown = mouseDown and event.button == 1
@@ -146,6 +149,11 @@ def ui(ctx, prog, vao, textures, filenames, screensize, winsize, viewports, numt
                 numtiles = (numtiles % 4) + 1  # 1,2,3,4,1,2,3,4,...
                 viewports = resize(numtiles, winsize, fullscreen=fullscreen)
                 activeTile = min(activeTile, numtiles - 1)
+            if rotate90CW:
+                dirty = True
+                imgidx = imgPerTile[activeTile]
+                rotPerImg[imgidx] += 90
+                rotPerImg[imgidx] %= 360
             if resizeEvent:
                 dirty = True
                 winsize = prevWinsize = event.size
@@ -189,11 +197,14 @@ def ui(ctx, prog, vao, textures, filenames, screensize, winsize, viewports, numt
                     textures[imgidx] = createTexture(ctx, filenames[imgidx], raw_width, raw_height, raw_bpp)
                 texture = textures[imgidx]
                 texture.use()
+                orientation = rotPerImg[imgidx]
                 texw, texh = texture.width, texture.height
+                texw, texh = (texh, texw) if orientation in [90, 270] else (texw, texh)
                 vpx, vpy, vpw, vph = viewports[i]
                 ctx.viewport = viewports[i]
                 ctx.clear(*colors[i], viewport=viewports[i])
                 xscale, yscale = getAspectRatio(vpw, vph, texw, texh)
+                prog.uniforms['orientation'].value = orientation
                 prog.uniforms['aspect'].value = (xscale, yscale)
                 prog.uniforms['grayscale'].value = (texture.components == 1)
                 vao.render(ModernGL.TRIANGLE_STRIP)
@@ -209,6 +220,7 @@ def initGL():
     fshader = ctx.fragment_shader(open(os.path.join(shaderPath, 'texture.fs')).read())
     prog = ctx.program([vshader, fshader])
     prog.uniforms['scale'].value = 1.0
+    prog.uniforms['orientation'].value = 0
     prog.uniforms['mousepos'].value = (0.0, 0.0)
     vbo = ctx.buffer(struct.pack('8f', -1.0, -1.0, -1.0, 1.0, 1.0, -1.0, 1.0, 1.0))
     vao = ctx.simple_vertex_array(prog, vbo, ['vert'])
