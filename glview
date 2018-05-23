@@ -278,24 +278,28 @@ def loadImage(filespec, raw_width, raw_height, raw_bpp):
     else:
         img = img.astype(np.float32) / maxval
         img = (img * 255).astype(np.uint8)
-    basename, filetype = os.path.splitext(filespec)
-    for jpeg_ext in [".jpg", ".jpeg", ".JPG", ".JPEG"]:
-        jpeg_file = basename + jpeg_ext
-        if os.path.exists(jpeg_file):
-            img = rotateByExif(img, jpeg_file)
-            break
+    img = rotateByExif(img, filespec)
     return img
 
-def rotateByExif(img, jpeg_filespec):
-    exif_dict = piexif.load(jpeg_filespec).pop("0th")
-    orientation = exif_dict.get(piexif.ImageIFD.Orientation)
-    if orientation == 3:        # 180
-        img = np.rot90(img, 2)
-    if orientation == 6:
-        img = np.rot90(img, 3)  # 90 CW
-    if orientation == 8:
-        img = np.rot90(img)     # 90 CCW
+def rotateByExif(img, filespec):
+    orientation = findExifOrientation(filespec)
+    steps = {1: 0, 8: 1, 3: 2, 6: 3}[orientation]
+    img = np.rot90(img, steps)  # 0/90/180/270 CCW
     return img
+
+def findExifOrientation(filespec):
+    orientation = 1  # default = no rotation
+    basename, filetype = os.path.splitext(filespec)
+    for ext in [filetype, ".jpg", ".jpeg", ".JPG", ".JPEG"]:
+        exif_file = basename + ext
+        try:
+            exif_dict = piexif.load(exif_file)
+            exif_dict = exif_dict.pop("0th")
+            orientation = exif_dict.get(piexif.ImageIFD.Orientation)
+            break
+        except (FileNotFoundError, piexif._exceptions.InvalidImageDataError) as e:
+            pass
+    return orientation
 
 def resize(numtiles, winsize, fullscreen):
     windowType = (pygame.FULLSCREEN | pygame.HWSURFACE) if fullscreen else pygame.RESIZABLE
