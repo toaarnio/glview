@@ -47,6 +47,7 @@ def main():
         print("    s                   split window into 1/2/3/4 tiles")
         print("    w                   write current tile(s) to a PNG")
         print("    f                   toggle fullscreen <-> windowed")
+        print("    t                   toggle nearest <-> linear filtering")
         print("    q/esc               terminate")
         sys.exit(-1)
 
@@ -114,6 +115,7 @@ def ui(ctx, prog, vao, textures, filenames, screensize, winsize, viewports, numt
             cycleNumTiles = keyDown and event.key == pygame.K_s
             rotate90CW = keyDown and event.key == pygame.K_r
             writeTiles = keyDown and event.key == pygame.K_w
+            textureFilter = keyDown and event.key == pygame.K_t
             wheelRollDown = mouseDown and event.button == 5
             wheelRollUp = mouseDown and event.button == 4
             leftDown = mouseDown and event.button == 1
@@ -159,6 +161,11 @@ def ui(ctx, prog, vao, textures, filenames, screensize, winsize, viewports, numt
                 rotPerImg[imgidx] %= 360
             if writeTiles:
                 dirty = True
+            if textureFilter:
+                dirty = True
+                for texture in textures:
+                    isNearest = (texture.filter == ModernGL.NEAREST)
+                    texture.filter = ModernGL.LINEAR if isNearest else ModernGL.NEAREST
             if resizeEvent:
                 dirty = True
                 winsize = prevWinsize = event.size
