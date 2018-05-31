@@ -11,6 +11,7 @@ import sys                     # built-in library
 import os                      # built-in library
 import time                    # built-in library
 import struct                  # built-in library
+import datetime                # built-in library
 import pygame                  # pip install pygame
 import numpy as np             # pip install numpy
 import piexif                  # pip install piexif
@@ -44,8 +45,9 @@ def main():
         print("    r                   rotate active tile 90 degrees clockwise")
         print("    1/2/3/4             select active tile for PageUp/PageDown/r")
         print("    s                   split window into 1/2/3/4 tiles")
+        print("    w                   write current tile(s) to a PNG")
         print("    f                   toggle fullscreen <-> windowed")
-        print("    esc                 terminate")
+        print("    q/esc               terminate")
         sys.exit(-1)
 
     filepatterns = sys.argv[1:] or ["*"]
@@ -99,7 +101,7 @@ def ui(ctx, prog, vao, textures, filenames, screensize, winsize, viewports, numt
             mouseUp = event.type == pygame.MOUSEBUTTONUP
             left, mid, right = pygame.mouse.get_pressed()  # pylint: disable=unused-variable
             # get event detail
-            escDown = keyDown and event.key == pygame.K_ESCAPE
+            escDown = keyDown and event.key in (pygame.K_ESCAPE, pygame.K_q)
             delKey = keyDown and event.key == pygame.K_DELETE
             inputFocusGain = activeEvent and event.state == 2 and event.gain is True
             mouseFocusGain = activeEvent and event.state == 1 and event.gain is True
@@ -111,6 +113,7 @@ def ui(ctx, prog, vao, textures, filenames, screensize, winsize, viewports, numt
             toggleFullscreen = keyDown and event.key == pygame.K_f
             cycleNumTiles = keyDown and event.key == pygame.K_s
             rotate90CW = keyDown and event.key == pygame.K_r
+            writeTiles = keyDown and event.key == pygame.K_w
             wheelRollDown = mouseDown and event.button == 5
             wheelRollUp = mouseDown and event.button == 4
             leftDown = mouseDown and event.button == 1
@@ -154,6 +157,8 @@ def ui(ctx, prog, vao, textures, filenames, screensize, winsize, viewports, numt
                 imgidx = imgPerTile[activeTile]
                 rotPerImg[imgidx] += 90
                 rotPerImg[imgidx] %= 360
+            if writeTiles:
+                dirty = True
             if resizeEvent:
                 dirty = True
                 winsize = prevWinsize = event.size
@@ -211,6 +216,14 @@ def ui(ctx, prog, vao, textures, filenames, screensize, winsize, viewports, numt
                 caption = "%s | %d/%d: %s"%(caption, imgidx + 1, numFiles, filenames[imgidx])
             pygame.display.set_caption(caption)
             pygame.display.flip()
+            if writeTiles:
+                # must read pixels after the flip to get front buffer
+                pixels = ctx.screen.read(components=3)
+                pixels = np.frombuffer(pixels, dtype=np.uint8)
+                image = pixels.reshape(winsize[1], winsize[0], 3)
+                image = image[::-1]  # OpenGL Y-flip
+                timestamp = datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
+                imgio.imwrite("screenshot-{}.png".format(timestamp), image, maxval=255, verbose=True)
 
 def initGL():
     ctx = ModernGL.create_context()
