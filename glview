@@ -227,7 +227,7 @@ def ui(ctx, prog, vao, textures, filenames, screensize, winsize, viewports, numt
             pygame.display.flip()
             if writeTiles:
                 # must read pixels after the flip to get front buffer
-                pixels = ctx.screen.read(components=3)
+                pixels = ctx.screen.read(viewport=(0, 0, winsize[0], winsize[1]), components=3)
                 pixels = np.frombuffer(pixels, dtype=np.uint8)
                 image = pixels.reshape(winsize[1], winsize[0], 3)
                 image = image[::-1]  # OpenGL Y-flip
