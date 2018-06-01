@@ -15,7 +15,7 @@ import datetime                # built-in library
 import pygame                  # pip install pygame
 import numpy as np             # pip install numpy
 import piexif                  # pip install piexif
-import ModernGL                # pip install ModernGL
+import moderngl                # pip install moderngl
 import imgio                   # pip install imgio
 
 sys.path.append(os.path.join(os.path.dirname(os.path.realpath(__file__)), 'multiproc'))
@@ -73,7 +73,7 @@ def main():
     N = min(numFiles, 16)
     textures = [None] * numFiles
     print("Preloading the first %d / %d images, please wait..."%(N, numFiles))
-    textures[:N] = createTextures(ctx, filenames[:N], raw_width, raw_height, raw_bpp)
+    textures[:N] = loadTextures(ctx, filenames[:N], raw_width, raw_height, raw_bpp)
     ui(ctx, prog, vao, textures, filenames, screensize, winsize, viewports, numtiles, raw_width, raw_height, raw_bpp)
     pygame.quit()
 
@@ -163,9 +163,11 @@ def ui(ctx, prog, vao, textures, filenames, screensize, winsize, viewports, numt
                 dirty = True
             if textureFilter:
                 dirty = True
+                nearest = (moderngl.NEAREST, moderngl.NEAREST)
+                linear = (moderngl.LINEAR, moderngl.LINEAR)
                 for texture in textures:
-                    isNearest = (texture.filter == ModernGL.NEAREST)
-                    texture.filter = ModernGL.LINEAR if isNearest else ModernGL.NEAREST
+                    isNearest = (texture.filter == nearest)
+                    texture.filter = linear if isNearest else nearest
             if resizeEvent:
                 dirty = True
                 winsize = prevWinsize = event.size
@@ -186,27 +188,27 @@ def ui(ctx, prog, vao, textures, filenames, screensize, winsize, viewports, numt
             if wheelRollDown or wheelRollUp:
                 dirty = True
                 scaleFactor = 1.0 + 0.1 * wheelRollDown - 0.1 * wheelRollUp
-                prog.uniforms['scale'].value *= scaleFactor
+                prog['scale'].value *= scaleFactor
             if mouseMotion and left:
                 if 0 < np.linalg.norm(mouseRelPos) < 200:  # filter out pygame glitches & no-ops
                     dirty = True
                     imgidx = imgPerTile[activeTile]
                     imgw = textures[imgidx].width
                     imgh = textures[imgidx].height
-                    ooScale = 1.0 / prog.uniforms['scale'].value
-                    posX, posY = prog.uniforms['mousepos'].value
+                    ooScale = 1.0 / prog['scale'].value
+                    posX, posY = prog['mousepos'].value
                     posX += mouseRelPos[0] * 8.0 * ooScale / imgw
                     posY -= mouseRelPos[1] * 8.0 * ooScale / imgh
                     posX = np.clip(posX, -1.0, 1.0)
                     posY = np.clip(posY, -1.0, 1.0)
-                    prog.uniforms['mousepos'].value = (posX, posY)
+                    prog['mousepos'].value = (posX, posY)
         if dirty:
             dirty = False
             caption = "glview "
             for i in range(numtiles):
                 imgidx = imgPerTile[i]
                 if textures[imgidx] is None:
-                    textures[imgidx] = createTexture(ctx, filenames[imgidx], raw_width, raw_height, raw_bpp)
+                    textures[imgidx] = loadTexture(ctx, filenames[imgidx], raw_width, raw_height, raw_bpp)
                 texture = textures[imgidx]
                 texture.use()
                 orientation = rotPerImg[imgidx]
@@ -216,10 +218,10 @@ def ui(ctx, prog, vao, textures, filenames, screensize, winsize, viewports, numt
                 ctx.viewport = viewports[i]
                 ctx.clear(*colors[i], viewport=viewports[i])
                 xscale, yscale = getAspectRatio(vpw, vph, texw, texh)
-                prog.uniforms['orientation'].value = orientation
-                prog.uniforms['aspect'].value = (xscale, yscale)
-                prog.uniforms['grayscale'].value = (texture.components == 1)
-                vao.render(ModernGL.TRIANGLE_STRIP)
+                prog['orientation'].value = orientation
+                prog['aspect'].value = (xscale, yscale)
+                prog['grayscale'].value = (texture.components == 1)
+                vao.render(moderngl.TRIANGLE_STRIP)
                 caption = "%s | %d/%d: %s"%(caption, imgidx + 1, numFiles, filenames[imgidx])
             pygame.display.set_caption(caption)
             pygame.display.flip()
@@ -233,31 +235,25 @@ def ui(ctx, prog, vao, textures, filenames, screensize, winsize, viewports, numt
                 imgio.imwrite("screenshot-{}.png".format(timestamp), image, maxval=255, verbose=True)
 
 def initGL():
-    ctx = ModernGL.create_context()
-    ctx.enable(ModernGL.DEPTH_TEST)
+    ctx = moderngl.create_context()
+    ctx.enable(moderngl.DEPTH_TEST)
     shaderPath = os.path.dirname(os.path.realpath(__file__))
-    vshader = ctx.vertex_shader(open(os.path.join(shaderPath, 'panzoom.vs')).read())
-    fshader = ctx.fragment_shader(open(os.path.join(shaderPath, 'texture.fs')).read())
-    prog = ctx.program([vshader, fshader])
-    prog.uniforms['scale'].value = 1.0
-    prog.uniforms['orientation'].value = 0
-    prog.uniforms['mousepos'].value = (0.0, 0.0)
+    vshader = open(os.path.join(shaderPath, 'panzoom.vs')).read()
+    fshader = open(os.path.join(shaderPath, 'texture.fs')).read()
+    prog = ctx.program(vertex_shader=vshader, fragment_shader=fshader)
+    prog['scale'].value = 1.0
+    prog['orientation'].value = 0
+    prog['mousepos'].value = (0.0, 0.0)
     vbo = ctx.buffer(struct.pack('8f', -1.0, -1.0, -1.0, 1.0, 1.0, -1.0, 1.0, 1.0))
-    vao = ctx.simple_vertex_array(prog, vbo, ['vert'])
+    vao = ctx.simple_vertex_array(prog, vbo, 'vert')
     return ctx, prog, vao
 
-def createTexture(ctx, filename, raw_width, raw_height, raw_bpp):
+def loadTexture(ctx, filename, raw_width, raw_height, raw_bpp):
     img = loadImage(filename, raw_width, raw_height, raw_bpp)
-    h, w = img.shape[:2]
-    isFloat = img.itemsize >= 4
-    if img.ndim == 3:  # RGB
-        texture = ctx.texture((w, h), 3, img.flatten(), floats=isFloat)
-    if img.ndim == 2:  # grayscale
-        texture = ctx.texture((w, h), 1, img.flatten(), floats=isFloat)
-    texture.filter = ModernGL.NEAREST
+    texture = createTexture(ctx, img)
     return texture
 
-def createTextures(ctx, filenames, raw_width, raw_height, raw_bpp):
+def loadTextures(ctx, filenames, raw_width, raw_height, raw_bpp):
     t0 = time.time()
     textures = []
     totalSize = 0
@@ -270,13 +266,7 @@ def createTextures(ctx, filenames, raw_width, raw_height, raw_bpp):
             if img is None:
                 raise ValueError("Failed to load '%s'. Terminating."%(filegroup[idx]))
             else:
-                h, w = img.shape[:2]
-                isFloat = img.itemsize >= 4
-                if img.ndim == 3:  # RGB
-                    texture = ctx.texture((w, h), 3, img.flatten(), floats=isFloat)
-                if img.ndim == 2:  # grayscale
-                    texture = ctx.texture((w, h), 1, img.flatten(), floats=isFloat)
-                texture.filter = ModernGL.NEAREST
+                texture = createTexture(ctx, img)
                 textures.append(texture)
                 totalSize += img.nbytes
     elapsed = time.time() - t0
@@ -320,6 +310,15 @@ def findExifOrientation(filespec):
         except (FileNotFoundError, piexif._exceptions.InvalidImageDataError) as e:
             pass
     return 1  # default = no rotation
+
+def createTexture(ctx, img):
+    h, w = img.shape[:2]
+    isFloat = img.itemsize >= 4
+    dtype = 'f2' if isFloat else 'f1'
+    components = img.shape[2] if img.ndim == 3 else 1  # RGB/RGBA/grayscale
+    texture = ctx.texture((w, h), components, img.flatten(), dtype=dtype)
+    texture.filter = (moderngl.NEAREST, moderngl.NEAREST)
+    return texture
 
 def resize(numtiles, winsize, fullscreen):
     windowType = (pygame.FULLSCREEN | pygame.HWSURFACE) if fullscreen else pygame.RESIZABLE
