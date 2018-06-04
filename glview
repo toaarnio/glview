@@ -48,6 +48,7 @@ def main():
         print("    w                   write current tile(s) to a PNG")
         print("    f                   toggle fullscreen <-> windowed")
         print("    t                   toggle nearest <-> linear filtering")
+        print("    g                   toggle sRGB gamma correction on/off")
         print("    q/esc               terminate")
         sys.exit(-1)
 
@@ -84,6 +85,7 @@ def ui(ctx, prog, vao, textures, filenames, screensize, winsize, viewports, numt
     rotPerImg = [0] * numFiles
     activeTile = 0
     fullscreen = False
+    applyGamma = False
     dirty = True
     stop = False
     while not stop:
@@ -116,6 +118,7 @@ def ui(ctx, prog, vao, textures, filenames, screensize, winsize, viewports, numt
             rotate90CW = keyDown and event.key == pygame.K_r
             writeTiles = keyDown and event.key == pygame.K_w
             textureFilter = keyDown and event.key == pygame.K_t
+            switchGamma = keyDown and event.key == pygame.K_g
             wheelRollDown = mouseDown and event.button == 5
             wheelRollUp = mouseDown and event.button == 4
             leftDown = mouseDown and event.button == 1
@@ -168,6 +171,9 @@ def ui(ctx, prog, vao, textures, filenames, screensize, winsize, viewports, numt
                 for texture in textures:
                     isNearest = (texture.filter == nearest)
                     texture.filter = linear if isNearest else nearest
+            if switchGamma:
+                dirty = True
+                applyGamma = not applyGamma
             if resizeEvent:
                 dirty = True
                 winsize = prevWinsize = event.size
@@ -221,6 +227,7 @@ def ui(ctx, prog, vao, textures, filenames, screensize, winsize, viewports, numt
                 prog['orientation'].value = orientation
                 prog['aspect'].value = (xscale, yscale)
                 prog['grayscale'].value = (texture.components == 1)
+                prog['gamma'].value = applyGamma
                 vao.render(moderngl.TRIANGLE_STRIP)
                 caption = "%s | %d/%d: %s"%(caption, imgidx + 1, numFiles, filenames[imgidx])
             pygame.display.set_caption(caption)

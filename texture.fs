@@ -1,6 +1,7 @@
 #version 130
 
 uniform bool grayscale;
+uniform bool gamma;
 uniform int orientation;
 uniform sampler2D texture;
 
@@ -25,5 +26,8 @@ void main() {
     color = vec4(texture2D(texture, rotated).rrr, 1.0);
   } else {
     color = vec4(texture2D(texture, rotated).rgb, 1.0);
+  }
+  if (gamma) {
+    color = pow(color, vec4(1/2.2));
   }
 }
