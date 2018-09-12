@@ -12,6 +12,7 @@ import os                      # built-in library
 import time                    # built-in library
 import struct                  # built-in library
 import datetime                # built-in library
+import cv2                     # pip install opencv-python
 import pygame                  # pip install pygame
 import numpy as np             # pip install numpy
 import piexif                  # pip install piexif
@@ -30,7 +31,7 @@ def main():
     showHelp = argv.exists("--help")
     argv.exitIfAnyUnparsedOptions()
     if showHelp:
-        print("Usage: glview [options] [image.(pgm|ppm|pnm|png|jpg|insp|raw)] ...")
+        print("Usage: glview [options] [image.(pgm|ppm|pnm|png|jpg|insp|raw|mp4|insv)] ...")
         print()
         print("  options:")
         print("    --split 1|2|3|4     display images in N separate tiles")
@@ -57,11 +58,11 @@ def main():
     use_raw = len(rawfiles) > 0
     use_raw = use_raw and not warn(use_raw and raw_bpp is None, "'--bpp N' not provided, ignoring all .RAW images.")
     use_raw = use_raw and not warn(use_raw and raw_width is None, "'--size M N' not provided, ignoring all .RAW images.")
-    extensions = [".pgm", ".ppm", ".pnm", ".png", ".jpg", ".jpeg", ".insp"]
+    extensions = [".pgm", ".ppm", ".pnm", ".png", ".jpg", ".jpeg", ".insp", ".mp4", ".insv"]
     extensions += [".raw"] if use_raw else []
     filenames, _ = argv.filenames(filepatterns, extensions, sort=True, allowAllCaps=True)
     numFiles = len(filenames)
-    enforce(numFiles > 0, "No valid PGM/PPM/PNM/PNG/JPG/RAW images to show. Terminating.")
+    enforce(numFiles > 0, "No valid PGM/PPM/PNM/PNG/JPG/INSP/RAW images to show. Terminating.")
     print("See 'glview --help' for usage instructions.")
 
     pygame.display.init()  # pygame.audio causes interference, leave it disabled
@@ -79,6 +80,9 @@ def main():
     pygame.quit()
 
 def ui(ctx, prog, vao, textures, filenames, screensize, winsize, viewports, numtiles, raw_width, raw_height, raw_bpp):
+    clock = pygame.time.Clock()
+    pygame.time.set_timer(pygame.USEREVENT, int(1000/25.0))  # 25 fps
+    #pygame.time.set_timer(pygame.USEREVENT, int(1000/0.5))
     numFiles = len(filenames)
     colors = [(0.2, 0.0, 0.0), (0.0, 0.2, 0.0), (0.0, 0.0, 0.2), (0.2, 0.2, 0.0)]
     imgPerTile = [0, 0, 0, 0]
@@ -87,17 +91,23 @@ def ui(ctx, prog, vao, textures, filenames, screensize, winsize, viewports, numt
     filterNearest = (moderngl.NEAREST, moderngl.NEAREST)
     filterLinear = (moderngl.LINEAR_MIPMAP_LINEAR, moderngl.LINEAR)
     textureFilter = filterLinear
+    videoPlaying = True
+    videoCurrentFrame = 0
+    nextFrame = False
     fullscreen = False
     applyGamma = False
     dirty = True
     stop = False
+    tNow = time.time()
     while not stop:
         # process all pending events before redraw
         ev = pygame.event.wait()  # wait for first event
         events = [ev] + pygame.event.get()  # get all pending events
+        eventCauseList = []
         for event in events:
             # get event type & mouse state
             quitEvent = event.type == pygame.QUIT
+            clockEvent = event.type == pygame.USEREVENT
             resizeEvent = event.type == pygame.VIDEORESIZE
             exposeEvent = event.type == pygame.VIDEOEXPOSE
             activeEvent = event.type == pygame.ACTIVEEVENT
@@ -108,7 +118,7 @@ def ui(ctx, prog, vao, textures, filenames, screensize, winsize, viewports, numt
             left, mid, right = pygame.mouse.get_pressed()  # pylint: disable=unused-variable
             # get event detail
             escDown = keyDown and event.key in (pygame.K_ESCAPE, pygame.K_q)
-            delKey = keyDown and event.key == pygame.K_DELETE
+            delDown = keyDown and event.key == pygame.K_DELETE
             inputFocusGain = activeEvent and event.state == 2 and event.gain is True
             mouseFocusGain = activeEvent and event.state == 1 and event.gain is True
             inputFocusLoss = activeEvent and event.state == 2 and event.gain is False
@@ -116,6 +126,7 @@ def ui(ctx, prog, vao, textures, filenames, screensize, winsize, viewports, numt
             pageUpDown = keyDown and event.key in [pygame.K_PAGEUP, pygame.K_KP9]
             pageDownDown = keyDown and event.key in [pygame.K_PAGEDOWN, pygame.K_KP3]
             numberKeyDown = keyDown and pygame.K_1 <= event.key <= pygame.K_4
+            toggleVideoPause = keyDown and event.key == pygame.K_SPACE
             toggleFullscreen = keyDown and event.key == pygame.K_f
             cycleNumTiles = keyDown and event.key == pygame.K_s
             rotate90CW = keyDown and event.key == pygame.K_r
@@ -129,7 +140,11 @@ def ui(ctx, prog, vao, textures, filenames, screensize, winsize, viewports, numt
             mouseRelPos = pygame.mouse.get_rel()
             # take action based on mouse state & event
             stop = stop or quitEvent or escDown
-            if delKey and numtiles == 1:
+            nextFrame = nextFrame or clockEvent
+            if nextFrame:
+                dirty = True
+                eventCauseList += ["clock"]
+            if delDown and numtiles == 1:
                 imgidx = imgPerTile[activeTile]
                 filename = filenames[imgidx]
                 del textures[imgidx]
@@ -170,6 +185,9 @@ def ui(ctx, prog, vao, textures, filenames, screensize, winsize, viewports, numt
             if toggleTextureFilter:
                 dirty = True
                 textureFilter = filterLinear if textureFilter == filterNearest else filterNearest
+            if toggleVideoPause:
+                dirty = True
+                videoPlaying = not videoPlaying
             if switchGamma:
                 dirty = True
                 applyGamma = not applyGamma
@@ -178,7 +196,9 @@ def ui(ctx, prog, vao, textures, filenames, screensize, winsize, viewports, numt
                 winsize = prevWinsize = event.size
                 viewports = resize(numtiles, winsize, fullscreen=False)
             if pageUpDown or pageDownDown:
+                eventCauseList += ["pageup/down"]
                 dirty = True
+                nextFrame = True
                 incr = 1 if pageDownDown else -1 if pageUpDown else 0
                 imgidx = imgPerTile[activeTile]
                 imgidx = (imgidx + incr) % numFiles
@@ -198,8 +218,12 @@ def ui(ctx, prog, vao, textures, filenames, screensize, winsize, viewports, numt
                 if 0 < np.linalg.norm(mouseRelPos) < 200:  # filter out pygame glitches & no-ops
                     dirty = True
                     imgidx = imgPerTile[activeTile]
-                    imgw = textures[imgidx].width
-                    imgh = textures[imgidx].height
+                    if isinstance(textures[imgidx], tuple):
+                        texture = textures[imgidx][0]
+                    else:
+                        texture = textures[imgidx]
+                    imgw = texture.width
+                    imgh = texture.height
                     ooScale = 1.0 / prog['scale'].value
                     posX, posY = prog['mousepos'].value
                     posX += mouseRelPos[0] * 8.0 * ooScale / imgw
@@ -210,11 +234,37 @@ def ui(ctx, prog, vao, textures, filenames, screensize, winsize, viewports, numt
         if dirty:
             dirty = False
             caption = "glview "
+            decoded_frames = []
+            for img in textures:
+                if isinstance(img, tuple):
+                    video = img[1]
+                    if nextFrame and videoPlaying:
+                        t0 = time.time()
+                        currentFrame = video.get(cv2.CAP_PROP_POS_FRAMES)
+                        ret, frame = video.read()
+                        if ret is False:
+                            video.set(cv2.CAP_PROP_POS_FRAMES, 0)
+                            currentFrame = video.get(cv2.CAP_PROP_POS_FRAMES)
+                            ret, frame = video.read()
+                        decoded_frames.append(frame)
+                        elapsed = (time.time() - t0) * 1000
+                        print("Causes of this redraw cycle: ", eventCauseList, end="  ")
+                        print("img {}, frame {:.0f}: decoding took {:.0f} ms".format(img, currentFrame, elapsed))
+
             for i in range(numtiles):
                 imgidx = imgPerTile[i]
                 if textures[imgidx] is None:
                     textures[imgidx] = loadTexture(ctx, filenames[imgidx], raw_width, raw_height, raw_bpp)
-                texture = textures[imgidx]
+                if isinstance(textures[imgidx], tuple):
+                    rgb_flip = True  # videos are using BGR color order
+                    texture = textures[imgidx][0]
+                    if nextFrame and videoPlaying:
+                        video = textures[imgidx][1]
+                        frame = decoded_frames[imgidx]
+                        updateTexture(texture, frame)
+                else:
+                    rgb_flip = False
+                    texture = textures[imgidx]
                 texture.filter = textureFilter
                 texture.use()
                 orientation = rotPerImg[imgidx]
@@ -227,11 +277,13 @@ def ui(ctx, prog, vao, textures, filenames, screensize, winsize, viewports, numt
                 prog['orientation'].value = orientation
                 prog['aspect'].value = (xscale, yscale)
                 prog['grayscale'].value = (texture.components == 1)
+                prog['rgb_flip'].value = rgb_flip
                 prog['gamma'].value = applyGamma
                 vao.render(moderngl.TRIANGLE_STRIP)
                 caption = "%s | %d/%d: %s"%(caption, imgidx + 1, numFiles, filenames[imgidx])
             pygame.display.set_caption(caption)
             pygame.display.flip()
+            nextFrame = False
             if writeTiles:
                 # must read pixels after the flip to get front buffer
                 pixels = ctx.screen.read(viewport=(0, 0, winsize[0], winsize[1]), components=3)
@@ -257,7 +309,18 @@ def initGL():
 
 def loadTexture(ctx, filename, raw_width, raw_height, raw_bpp):
     img = loadImage(filename, raw_width, raw_height, raw_bpp)
-    texture = createTexture(ctx, img)
+    if img is not None:
+        texture = createTexture(ctx, img)
+    else:
+        if os.path.splitext(filename)[-1].lower() in [".mp4", ".insv"]:
+            print("Treating {} as a video stream.".format(filename))
+            cap = cv2.VideoCapture(filename)
+            print("{} frame rate = {}".format(filename, cap.get(cv2.CAP_PROP_FPS)))
+            ret, frame = cap.read()
+            texture = createTexture(ctx, frame)
+            textures.append((texture, cap))
+        else:
+            raise ValueError("Failed to load '%s'. Terminating."%(filename))
     return texture
 
 def loadTextures(ctx, filenames, raw_width, raw_height, raw_bpp):
@@ -271,7 +334,17 @@ def loadTextures(ctx, filenames, raw_width, raw_height, raw_bpp):
         images = multiproc.run(loadImage, args, raise_exceptions=False)
         for idx, img in enumerate(images):
             if img is None:
-                raise ValueError("Failed to load '%s'. Terminating."%(filegroup[idx]))
+                filespec = args[idx][0]
+                if os.path.splitext(filespec)[-1].lower() in [".mp4", ".insv"]:
+                    print("Treating {} as a video stream.".format(filespec))
+                    cap = cv2.VideoCapture(filespec)
+                    print("{} frame rate = {}".format(filespec, cap.get(cv2.CAP_PROP_FPS)))
+                    ret, frame = cap.read()
+                    texture = createTexture(ctx, frame)
+                    textures.append((texture, cap))
+                    totalSize += frame.nbytes
+                else:
+                    raise ValueError("Failed to load '%s'. Terminating."%(filegroup[idx]))
             else:
                 texture = createTexture(ctx, img)
                 textures.append(texture)
@@ -325,6 +398,11 @@ def createTexture(ctx, img):
     components = img.shape[2] if img.ndim == 3 else 1  # RGB/RGBA/grayscale
     texture = ctx.texture((w, h), components, img.flatten(), dtype=dtype)
     texture.filter = (moderngl.LINEAR_MIPMAP_LINEAR, moderngl.LINEAR)
+    texture.build_mipmaps()
+    return texture
+
+def updateTexture(texture, img):
+    texture.write(img.flatten())
     texture.build_mipmaps()
     return texture
 
