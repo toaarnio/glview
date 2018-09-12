@@ -1,3 +1,0 @@
-[submodule "multiproc"]
-	path = multiproc
-	url = https://github.com/toaarnio/pymultiproc.git

@@ -11,358 +11,223 @@ import sys                     # built-in library
 import os                      # built-in library
 import time                    # built-in library
 import struct                  # built-in library
-import datetime                # built-in library
-import pygame                  # pip install pygame
+import threading               # built-in library
 import numpy as np             # pip install numpy
-import piexif                  # pip install piexif
 import moderngl                # pip install moderngl
-import imgio                   # pip install imgio
+import psutil                  # pip install psutil
 
-sys.path.append(os.path.join(os.path.dirname(os.path.realpath(__file__)), 'multiproc'))
+import argv                    # local import
+import pygletui                # local import
+import imageprovider           # local import
 
-import argv                    # local import: argv.py
-import multiproc               # submodule import: multiproc.py
+IMAGE_TYPES = [".pgm", ".ppm", ".pnm", ".png", ".jpg", ".jpeg", ".insp"]
+VIDEO_TYPES = [".mp4", ".insv"]
+
 
 def main():
     numtiles = argv.intval("--split", default=1, accepted=[1, 2, 3, 4])
     raw_width, raw_height = argv.intpair("--size", default=(None, None))
     raw_bpp = argv.intval("--bpp", default=None, accepted=[8, 10, 12, 14, 16])
-    showHelp = argv.exists("--help")
+    url = argv.stringval("--url", default=None)
+    verbose = argv.exists("--verbose")
+    show_help = argv.exists("--help")
     argv.exitIfAnyUnparsedOptions()
-    if showHelp:
-        print("Usage: glview [options] [image.(pgm|ppm|pnm|png|jpg|insp|raw)] ...")
+    if show_help:
+        print("Usage: glview [options] [image.(pgm|ppm|pnm|png|jpg|insp|raw|mp4|insv)] ...")
         print()
         print("  options:")
         print("    --split 1|2|3|4     display images in N separate tiles")
         print("    --size W H          input image size in pixels (.RAW only)")
         print("    --bpp N             input image bits per pixel (.RAW only)")
+        print("    --verbose           print extra traces to the console")
         print("    --help              show this help message")
         print()
         print("  runtime:")
         print("    mouse wheel         zoom image; synchronized if multiple tiles")
         print("    mouse left + move   pan image; synchronized if multiple tiles")
-        print("    PageUp/PageDown     cycle through images on active tile")
+        print("    PageUp / PageDown   cycle through images on active tile")
         print("    r                   rotate active tile 90 degrees clockwise")
-        print("    1/2/3/4             select active tile for PageUp/PageDown/r")
         print("    s                   split window into 1/2/3/4 tiles")
+        print("    1 / 2 / 3 / 4       select active tile for PageUp/PageDown/r")
         print("    w                   write current tile(s) to a PNG")
         print("    f                   toggle fullscreen <-> windowed")
         print("    t                   toggle nearest <-> linear filtering")
         print("    g                   toggle sRGB gamma correction on/off")
-        print("    q/esc               terminate")
+        print("    q / esc / ctrl+c    terminate")
         sys.exit(-1)
 
-    filepatterns = sys.argv[1:] or ["*"]
+    filepatterns = sys.argv[1:] or url or ["*"]
     rawfiles, _ = argv.filenames(filepatterns, [".raw"], sort=True, allowAllCaps=True)
     use_raw = len(rawfiles) > 0
     use_raw = use_raw and not warn(use_raw and raw_bpp is None, "'--bpp N' not provided, ignoring all .RAW images.")
     use_raw = use_raw and not warn(use_raw and raw_width is None, "'--size M N' not provided, ignoring all .RAW images.")
-    extensions = [".pgm", ".ppm", ".pnm", ".png", ".jpg", ".jpeg", ".insp"]
+    extensions = IMAGE_TYPES  # TODO: add support for VIDEO_TYPES
     extensions += [".raw"] if use_raw else []
     filenames, _ = argv.filenames(filepatterns, extensions, sort=True, allowAllCaps=True)
-    numFiles = len(filenames)
-    enforce(numFiles > 0, "No valid PGM/PPM/PNM/PNG/JPG/RAW images to show. Terminating.")
+    filenames += [url] if url is not None else []
+    numfiles = len(filenames)
+    enforce(numfiles > 0, "No valid PGM/PPM/PNM/PNG/JPG/INSP/RAW images to show and no URL given. Terminating.")
     print("See 'glview --help' for usage instructions.")
 
-    pygame.display.init()  # pygame.audio causes interference, leave it disabled
-    pygame.key.set_repeat(100, 100)  # 10 keypresses per second
-    info = pygame.display.Info()
-    screensize = (info.current_w, info.current_h)
-    winsize = (info.current_w // 2, info.current_h // 2)
-    viewports = resize(numtiles, winsize, fullscreen=False)
-    ctx, prog, vao = initGL()
-    N = min(numFiles, 16)
-    textures = [None] * numFiles
-    print("Preloading the first %d / %d images, please wait..."%(N, numFiles))
-    textures[:N] = loadTextures(ctx, filenames[:N], raw_width, raw_height, raw_bpp)
-    ui(ctx, prog, vao, textures, filenames, screensize, winsize, viewports, numtiles, raw_width, raw_height, raw_bpp)
-    pygame.quit()
+    ui = pygletui.PygletUI(filenames, numtiles, verbose)
+    files = FileList(filenames, IMAGE_TYPES, VIDEO_TYPES, verbose)
+    loader = imageprovider.ImageProviderMT(files, verbose)
+    renderer = Renderer(ui, files, loader, verbose)
+    ui.start(renderer)
+    loader.start()
+    main_loop([ui, loader])
+    loader.stop()
+    ui.stop()
 
-def ui(ctx, prog, vao, textures, filenames, screensize, winsize, viewports, numtiles, raw_width, raw_height, raw_bpp):
-    numFiles = len(filenames)
-    colors = [(0.2, 0.0, 0.0), (0.0, 0.2, 0.0), (0.0, 0.0, 0.2), (0.2, 0.2, 0.0)]
-    imgPerTile = [0, 0, 0, 0]
-    rotPerImg = [0] * numFiles
-    activeTile = 0
-    filterNearest = (moderngl.NEAREST, moderngl.NEAREST)
-    filterLinear = (moderngl.LINEAR_MIPMAP_LINEAR, moderngl.LINEAR)
-    textureFilter = filterLinear
-    fullscreen = False
-    applyGamma = False
-    dirty = True
-    stop = False
-    while not stop:
-        # process all pending events before redraw
-        ev = pygame.event.wait()  # wait for first event
-        events = [ev] + pygame.event.get()  # get all pending events
-        for event in events:
-            # get event type & mouse state
-            quitEvent = event.type == pygame.QUIT
-            resizeEvent = event.type == pygame.VIDEORESIZE
-            exposeEvent = event.type == pygame.VIDEOEXPOSE
-            activeEvent = event.type == pygame.ACTIVEEVENT
-            keyDown = event.type == pygame.KEYDOWN
-            mouseDown = event.type == pygame.MOUSEBUTTONDOWN
-            mouseMotion = event.type == pygame.MOUSEMOTION
-            mouseUp = event.type == pygame.MOUSEBUTTONUP
-            left, mid, right = pygame.mouse.get_pressed()  # pylint: disable=unused-variable
-            # get event detail
-            escDown = keyDown and event.key in (pygame.K_ESCAPE, pygame.K_q)
-            delKey = keyDown and event.key == pygame.K_DELETE
-            inputFocusGain = activeEvent and event.state == 2 and event.gain is True
-            mouseFocusGain = activeEvent and event.state == 1 and event.gain is True
-            inputFocusLoss = activeEvent and event.state == 2 and event.gain is False
-            mouseFocusLoss = activeEvent and event.state == 1 and event.gain is False
-            pageUpDown = keyDown and event.key in [pygame.K_PAGEUP, pygame.K_KP9]
-            pageDownDown = keyDown and event.key in [pygame.K_PAGEDOWN, pygame.K_KP3]
-            numberKeyDown = keyDown and pygame.K_1 <= event.key <= pygame.K_4
-            toggleFullscreen = keyDown and event.key == pygame.K_f
-            cycleNumTiles = keyDown and event.key == pygame.K_s
-            rotate90CW = keyDown and event.key == pygame.K_r
-            writeTiles = keyDown and event.key == pygame.K_w
-            toggleTextureFilter = keyDown and event.key == pygame.K_t
-            switchGamma = keyDown and event.key == pygame.K_g
-            wheelRollDown = mouseDown and event.button == 5
-            wheelRollUp = mouseDown and event.button == 4
-            leftDown = mouseDown and event.button == 1
-            leftUp = mouseUp and event.button == 1
-            mouseRelPos = pygame.mouse.get_rel()
-            # take action based on mouse state & event
-            stop = stop or quitEvent or escDown
-            if delKey and numtiles == 1:
-                imgidx = imgPerTile[activeTile]
-                filename = filenames[imgidx]
-                del textures[imgidx]
-                del filenames[imgidx]
-                os.remove(filename)
-                print("Deleted %s."%(filename))
-                numFiles -= 1
-                enforce(numFiles >= 1, "No images to display. Terminating.")
-                imgidx = min(imgidx, numFiles - 1)
-                imgPerTile[activeTile] = imgidx
-                dirty = True
-            if numberKeyDown and numtiles > 1:
-                numberKey = event.key - pygame.K_1
-                activeTile = numberKey if numberKey < numtiles else activeTile
-            if toggleFullscreen:
-                dirty = True
-                if not fullscreen:
-                    prevWinsize = winsize
-                    winsize = screensize
-                    viewports = resize(numtiles, screensize, fullscreen=True)
-                    fullscreen = True
-                else:
-                    winsize = prevWinsize
-                    viewports = resize(numtiles, winsize, fullscreen=False)
-                    fullscreen = False
-            if cycleNumTiles:
-                dirty = True
-                numtiles = (numtiles % 4) + 1  # 1,2,3,4,1,2,3,4,...
-                viewports = resize(numtiles, winsize, fullscreen=fullscreen)
-                activeTile = min(activeTile, numtiles - 1)
-            if rotate90CW:
-                dirty = True
-                imgidx = imgPerTile[activeTile]
-                rotPerImg[imgidx] += 90
-                rotPerImg[imgidx] %= 360
-            if writeTiles:
-                dirty = True
-            if toggleTextureFilter:
-                dirty = True
-                textureFilter = filterLinear if textureFilter == filterNearest else filterNearest
-            if switchGamma:
-                dirty = True
-                applyGamma = not applyGamma
-            if resizeEvent:
-                dirty = True
-                winsize = prevWinsize = event.size
-                viewports = resize(numtiles, winsize, fullscreen=False)
-            if pageUpDown or pageDownDown:
-                dirty = True
-                incr = 1 if pageDownDown else -1 if pageUpDown else 0
-                imgidx = imgPerTile[activeTile]
-                imgidx = (imgidx + incr) % numFiles
-                imgPerTile[activeTile] = imgidx
-            if leftDown:  # switch to virtual mouse mode
-                pygame.mouse.set_visible(False)
-                pygame.event.set_grab(True)
-            if leftUp:  # switch back to normal mouse mode
-                pygame.mouse.set_visible(True)
-                pygame.event.set_grab(False)
-                pygame.mouse.set_pos((winsize[0] / 2, winsize[1] / 2))
-            if wheelRollDown or wheelRollUp:
-                dirty = True
-                scaleFactor = 1.0 + 0.1 * wheelRollDown - 0.1 * wheelRollUp
-                prog['scale'].value *= scaleFactor
-            if mouseMotion and left:
-                if 0 < np.linalg.norm(mouseRelPos) < 200:  # filter out pygame glitches & no-ops
-                    dirty = True
-                    imgidx = imgPerTile[activeTile]
-                    imgw = textures[imgidx].width
-                    imgh = textures[imgidx].height
-                    ooScale = 1.0 / prog['scale'].value
-                    posX, posY = prog['mousepos'].value
-                    posX += mouseRelPos[0] * 8.0 * ooScale / imgw
-                    posY -= mouseRelPos[1] * 8.0 * ooScale / imgh
-                    posX = np.clip(posX, -1.0, 1.0)
-                    posY = np.clip(posY, -1.0, 1.0)
-                    prog['mousepos'].value = (posX, posY)
-        if dirty:
-            dirty = False
-            caption = "glview "
-            for i in range(numtiles):
-                imgidx = imgPerTile[i]
-                if textures[imgidx] is None:
-                    textures[imgidx] = loadTexture(ctx, filenames[imgidx], raw_width, raw_height, raw_bpp)
-                texture = textures[imgidx]
-                texture.filter = textureFilter
+def main_loop(modules):
+    try:
+        while all([m.running for m in modules]):
+            time.sleep(0.1)
+    except (KeyboardInterrupt, SystemExit):
+        print("Ctrl+C pressed, terminating...")
+        # TODO: kill UIThread cleanly
+
+
+#######################################################################################
+# Classes / threads:
+#   UI - handle events, update state variables accordingly
+#   Renderer - render frames based on state variables (read-only) (GL mutex needed!)
+#   ImageProvider - load & decode still images into GL textures (GL mutex needed!)
+#   StreamProvider - load & decode video frames into GL textures (GL mutex needed!)
+
+
+class FileList(object):
+
+    def __init__(self, filespecs, image_types, video_types, verbose=False):
+        self.verbose = verbose
+        self.numfiles = len(filespecs)
+        self.filespecs = filespecs
+        self.extensions = [os.path.splitext(f)[1].lower() for f in filespecs]
+        self.is_rtsp = ["rtsp://" in f for f in filespecs]
+        self.is_image = [(ext in image_types) for ext in self.extensions]
+        self.is_video = [(ext in video_types) for ext in self.extensions]
+        self.is_video = [(v or r) for (v, r) in zip(self.is_video, self.is_rtsp)]
+
+
+class Renderer(object):
+
+    filter_nearest = (moderngl.NEAREST, moderngl.NEAREST)
+    filter_linear = (moderngl.LINEAR_MIPMAP_LINEAR, moderngl.LINEAR)
+    filters = { "LINEAR": filter_linear, "NEAREST": filter_nearest }
+    tile_debug_colors = [ 0xE0BBE4, 0x957DAD, 0xD291BC, 0xFEC8D8 ]  # pastel shades
+    tile_normal_colors = [ 0, 0, 0, 0 ]
+
+    def __init__(self, ui, files, loader, verbose=False):
+        self.thread_name = "RenderThread"
+        self.verbose = verbose
+        self.ui = ui                # <PygameUI> State variables controlled by user
+        self.loader = loader        # <ImageProvider> Still image loader
+        self.ctx = None             # <Context> OpenGL rendering context
+        self.prog = None            # <Program> image renderer with zoom & pan
+        self.vao = None             # <VertexArray> planar surface
+        self.texture_filter = None  # filter_nearest or filter_linear
+        self.tile_colors = self.tile_debug_colors if verbose else self.tile_normal_colors
+        self.textures = [None] * files.numfiles
+        self.running = None
+        self.render_thread = None
+
+    def init(self):
+        # OpenGL window must already exist and be owned by this thread
+        self._vprint("attaching to native OpenGL window...")
+        self.ctx = moderngl.create_context()
+        self.ctx.enable(moderngl.DEPTH_TEST)
+        self._vprint("compiling shaders...")
+        shaderPath = os.path.dirname(os.path.realpath(__file__))
+        vshader = open(os.path.join(shaderPath, 'panzoom.vs')).read()
+        fshader = open(os.path.join(shaderPath, 'texture.fs')).read()
+        self.prog = self.ctx.program(vertex_shader=vshader, fragment_shader=fshader)
+        self.prog['scale'].value = 1.0
+        self.prog['orientation'].value = 0
+        self.prog['mousepos'].value = (0.0, 0.0)
+        self.vbo = self.ctx.buffer(struct.pack('8f', -1.0, -1.0, -1.0, 1.0, 1.0, -1.0, 1.0, 1.0))
+        self.vao = self.ctx.simple_vertex_array(self.prog, self.vbo, 'vert')
+        self.tPrev = time.time()
+        _ = self.ctx.error  # clear the GL error flag (workaround for a bug that prevents interoperability with Pyglet)
+
+    def create_texture(self, img):
+        h, w = img.shape[:2]
+        isFloat = img.itemsize >= 4
+        dtype = 'f2' if isFloat else 'f1'
+        components = img.shape[2] if img.ndim == 3 else 1  # RGB/RGBA/grayscale
+        texture = self.ctx.texture((w, h), components, img.ravel(), dtype=dtype)
+        texture.build_mipmaps()
+        return texture
+
+    def update_texture(self, texture, img):
+        # TODO: take this into use
+        texture.write(img.ravel())
+        texture.build_mipmaps()
+        return texture
+
+    def load_texture(self, idx):
+        if self.textures[idx] is None:
+            img = self.loader.load_image(idx)
+            self.loader.release_image(idx)
+            self.textures[idx] = self.create_texture(img)
+        return self.textures[idx]
+
+    def redraw(self):
+        hex_to_rgb = lambda h: [h >> 16, (h >> 8) & 0xff, h & 0xff]
+        tile_colors = [hex_to_rgb(hexrgb) for hexrgb in self.tile_colors]
+        tile_colors = np.array(tile_colors) / 255.0
+        if True:
+            t0 = time.time()
+            for i in range(self.ui.numtiles):
+                imgidx = self.ui.imgPerTile[i]
+                texture = self.load_texture(imgidx)
+                texture.filter = self.filters[self.ui.texture_filter]
+                texture.swizzle = 'RGB1'
                 texture.use()
-                orientation = rotPerImg[imgidx]
+                orientation = self.ui.rotPerImg[imgidx]
                 texw, texh = texture.width, texture.height
                 texw, texh = (texh, texw) if orientation in [90, 270] else (texw, texh)
-                vpx, vpy, vpw, vph = viewports[i]
-                ctx.viewport = viewports[i]
-                ctx.clear(*colors[i], viewport=viewports[i])
-                xscale, yscale = getAspectRatio(vpw, vph, texw, texh)
-                prog['orientation'].value = orientation
-                prog['aspect'].value = (xscale, yscale)
-                prog['grayscale'].value = (texture.components == 1)
-                prog['gamma'].value = applyGamma
-                vao.render(moderngl.TRIANGLE_STRIP)
-                caption = "%s | %d/%d: %s"%(caption, imgidx + 1, numFiles, filenames[imgidx])
-            pygame.display.set_caption(caption)
-            pygame.display.flip()
-            if writeTiles:
-                # must read pixels after the flip to get front buffer
-                pixels = ctx.screen.read(viewport=(0, 0, winsize[0], winsize[1]), components=3)
-                pixels = np.frombuffer(pixels, dtype=np.uint8)
-                image = pixels.reshape(winsize[1], winsize[0], 3)
-                image = image[::-1]  # OpenGL Y-flip
-                timestamp = datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
-                imgio.imwrite("screenshot-{}.png".format(timestamp), image, maxval=255, verbose=True)
+                vpx, vpy, vpw, vph = self.ui.viewports[i]
+                self.ctx.viewport = self.ui.viewports[i]
+                self.ctx.clear(*tile_colors[i], viewport=self.ctx.viewport)
+                self.prog['mousepos'].value = self._get_mousepos(vpw, vph, texw, texh)
+                self.prog['orientation'].value = orientation
+                self.prog['aspect'].value = self._get_aspect_ratio(vpw, vph, texw, texh)
+                self.prog['scale'].value = self.ui.scale
+                self.prog['grayscale'].value = (texture.components == 1)
+                self.prog['gamma'].value = self.ui.gamma
+                self.vao.render(moderngl.TRIANGLE_STRIP)
+            self.ctx.finish()
+            elapsed = (time.time() - t0) * 1000
+            interval = (time.time() - self.tPrev) * 1000
+            self.tPrev = time.time()
+            #self._vprint("available physical memory: {:.1f}M".format(psutil.virtual_memory().available / 1024**2))
+            #self._vprint(f"rendering took {elapsed:.1f} ms, frame-to-frame interval was {interval:.1f} ms")
+        return elapsed
 
-def initGL():
-    ctx = moderngl.create_context()
-    ctx.enable(moderngl.DEPTH_TEST)
-    shaderPath = os.path.dirname(os.path.realpath(__file__))
-    vshader = open(os.path.join(shaderPath, 'panzoom.vs')).read()
-    fshader = open(os.path.join(shaderPath, 'texture.fs')).read()
-    prog = ctx.program(vertex_shader=vshader, fragment_shader=fshader)
-    prog['scale'].value = 1.0
-    prog['orientation'].value = 0
-    prog['mousepos'].value = (0.0, 0.0)
-    vbo = ctx.buffer(struct.pack('8f', -1.0, -1.0, -1.0, 1.0, 1.0, -1.0, 1.0, 1.0))
-    vao = ctx.simple_vertex_array(prog, vbo, 'vert')
-    return ctx, prog, vao
+    def _get_mousepos(self, tilew, tileh, imgw, imgh):
+        xscale, yscale = self._get_aspect_ratio(tilew, tileh, imgw, imgh)
+        screenX, screenY = self.ui.mousepos
+        imgX = np.clip(screenX / imgw, -1.0 * xscale, 1.0 * xscale)
+        imgY = np.clip(screenY / imgh, -1.0 * yscale, 1.0 * yscale)
+        screenX = imgX * imgw
+        screenY = imgY * imgh
+        self.ui.mousepos = (screenX, screenY)
+        return imgX, imgY
 
-def loadTexture(ctx, filename, raw_width, raw_height, raw_bpp):
-    img = loadImage(filename, raw_width, raw_height, raw_bpp)
-    texture = createTexture(ctx, img)
-    return texture
+    def _get_aspect_ratio(self, vpw, vph, texw, texh):
+        vpAspect = vpw / vph
+        texAspect = texw / texh
+        if texAspect > vpAspect:
+            # image wider than window => squeeze y => black top & bottom
+            xscale, yscale = (1.0, vpAspect / texAspect)
+        else:
+            # image narrower than window => squeeze x => black sides
+            xscale, yscale = (texAspect / vpAspect, 1.0)
+        return xscale, yscale
 
-def loadTextures(ctx, filenames, raw_width, raw_height, raw_bpp):
-    t0 = time.time()
-    textures = []
-    totalSize = 0
-    n = 100
-    filegroups = [filenames[i*n:i*n+n] for i, _ in enumerate(filenames[::n])]
-    for filegroup in filegroups:
-        args = [(filename, raw_width, raw_height, raw_bpp) for filename in filegroup]
-        images = multiproc.run(loadImage, args, raise_exceptions=False)
-        for idx, img in enumerate(images):
-            if img is None:
-                raise ValueError("Failed to load '%s'. Terminating."%(filegroup[idx]))
-            else:
-                texture = createTexture(ctx, img)
-                textures.append(texture)
-                totalSize += img.nbytes
-    elapsed = time.time() - t0
-    totalSize = totalSize / 1024**2
-    bandwidth = totalSize / elapsed
-    print("Copied %d MB of image data from disk to OpenGL in %.1f seconds (%d MB/sec)."%(totalSize, elapsed, bandwidth))
-    return textures
-
-def loadImage(filespec, raw_width, raw_height, raw_bpp):
-    # This function is run in a separate process, so we can't access
-    # the GL context here. Otherwise we could upload the texture as
-    # soon as it's loaded, rather than having to memcpy it across the
-    # process boundary.
-    img, maxval = imgio.imread(filespec, raw_width, raw_height, raw_bpp, verbose=True)
-    if img.ndim == 3:  # RGB
-        img = img[:, :, :3]  # scrap alpha channel, if any
-    if maxval == 255:
-        img = img.astype(np.uint8)
-    else:
-        img = img.astype(np.float32) / maxval
-        img = (img * 255).astype(np.uint8)
-    img = rotateByExif(img, filespec)
-    return img
-
-def rotateByExif(img, filespec):
-    orientation = findExifOrientation(filespec)
-    steps = {1: 0, 8: 1, 3: 2, 6: 3}[orientation]
-    img = np.rot90(img, steps)  # 0/90/180/270 CCW
-    return img
-
-def findExifOrientation(filespec):
-    basename, filetype = os.path.splitext(filespec)
-    for ext in [filetype, ".jpg", ".jpeg", ".JPG", ".JPEG"]:
-        exif_file = basename + ext
-        try:
-            exif_dict = piexif.load(exif_file)
-            exif_dict = exif_dict.pop("0th")
-            orientation = exif_dict.get(piexif.ImageIFD.Orientation)
-            if orientation is not None:
-                return orientation
-        except (FileNotFoundError, piexif._exceptions.InvalidImageDataError) as e:
-            pass
-    return 1  # default = no rotation
-
-def createTexture(ctx, img):
-    h, w = img.shape[:2]
-    isFloat = img.itemsize >= 4
-    dtype = 'f2' if isFloat else 'f1'
-    components = img.shape[2] if img.ndim == 3 else 1  # RGB/RGBA/grayscale
-    texture = ctx.texture((w, h), components, img.flatten(), dtype=dtype)
-    texture.filter = (moderngl.LINEAR_MIPMAP_LINEAR, moderngl.LINEAR)
-    texture.build_mipmaps()
-    return texture
-
-def resize(numtiles, winsize, fullscreen):
-    windowType = (pygame.FULLSCREEN | pygame.HWSURFACE) if fullscreen else pygame.RESIZABLE
-    pygame.display.set_mode(winsize, pygame.OPENGL | pygame.DOUBLEBUF | windowType)
-    w, h = winsize
-    viewports = {}
-    if numtiles == 1:
-        vpw, vph = (w, h)
-        viewports[0] = (0, 0, w, h)
-    elif numtiles == 2:
-        vpw, vph = (w // 2, h)
-        viewports[0] = (0,   0, vpw, vph)
-        viewports[1] = (vpw, 0, vpw, vph)
-    elif numtiles == 3:
-        vpw, vph = (w // 3, h)
-        viewports[0] = (0,       0, vpw, vph)
-        viewports[1] = (vpw,     0, vpw, vph)
-        viewports[2] = (2 * vpw, 0, vpw, vph)
-    elif numtiles == 4:
-        vpw, vph = (w // 2, h // 2)
-        viewports[0] = (0,   vph, vpw, vph)  # bottom left => top left
-        viewports[1] = (vpw, vph, vpw, vph)  # bottom right => top right
-        viewports[2] = (0,   0,   vpw, vph)  # top left => bottom left
-        viewports[3] = (vpw, 0,   vpw, vph)  # top right => bottom right
-    return viewports
-
-def getAspectRatio(vpw, vph, texw, texh):
-    vpAspect = vpw / vph
-    texAspect = texw / texh
-    if texAspect > vpAspect:
-        # image wider than window => squeeze y => black top & bottom
-        xscale, yscale = (1.0, vpAspect / texAspect)
-    else:
-        # image narrower than window => squeeze x => black sides
-        xscale, yscale = (texAspect / vpAspect, 1.0)
-    return xscale, yscale
+    def _vprint(self, message):
+        if self.verbose:
+            print(f"[{self.__class__.__name__}/{threading.current_thread().name}] {message}")
 
 def enforce(expression, messageIfFalse):
     if not expression:
@@ -373,6 +238,7 @@ def warn(expression, messageIfTrue):
     if expression:
         print(messageIfTrue)
     return expression
+
 
 if __name__ == "__main__":
     main()

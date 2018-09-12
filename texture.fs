@@ -1,5 +1,6 @@
 #version 130
 
+uniform bool debug;
 uniform bool grayscale;
 uniform bool gamma;
 uniform int orientation;
@@ -22,12 +23,9 @@ void main() {
       rotated = vec2(1.0 - flipped.y, flipped.x);
       break;
   }
-  if (grayscale) {
-    color = vec4(texture2D(texture, rotated).rrr, 1.0);
-  } else {
-    color = vec4(texture2D(texture, rotated).rgb, 1.0);
-  }
-  if (gamma) {
-    color = pow(color, vec4(1/2.2));
-  }
+
+  color = texture2D(texture, rotated);
+  color.rgb = grayscale ? color.rrr : color.rgb;
+  color.rgb = gamma ? pow(color.rgb, vec3(1/2.2)) : color.rgb;
+  color.r = debug ? color.r + 0.5 : color.r;
 }
