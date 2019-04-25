@@ -159,7 +159,7 @@ class PygletUI(object):
             if symbol == keys.C and modifiers == keys.MOD_CTRL:
                 self.running = False
                 self.event_loop.has_exit = True
-            if modifiers == 0:  # TODO: ESC, F, S not working reliably in full-screen mode?!
+            if modifiers in [0, keys.MOD_CAPSLOCK]:
                 if symbol in [keys.ESCAPE, keys.Q]:
                     self.running = False
                     self.event_loop.has_exit = True
