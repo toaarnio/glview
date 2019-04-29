@@ -46,7 +46,7 @@ class ImageProviderMT(object):
             t0 = time.time()
             nbytes = 0
             for i, filespec in enumerate(self.files.filespecs):
-                time.sleep(0.001)
+                time.sleep(0.01)
                 if self.images[i] is None and self.files.is_image[i] and self.running:
                     # read image, drop alpha channel, convert to fp16 if maxval > 255
                     img, maxval = imgio.imread(filespec, verbose=True)
@@ -57,6 +57,8 @@ class ImageProviderMT(object):
                         img = img.astype(np.float32, copy=False)
                     self.images[i] = img
                     nbytes += img.nbytes
+                if not self.running:
+                    break
             if nbytes > 1e6:
                 elapsed = time.time() - t0
                 nbytes = nbytes / 1024**2
