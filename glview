@@ -151,9 +151,15 @@ class Renderer(object):
         _ = self.ctx.error  # clear the GL error flag (workaround for a bug that prevents interoperability with Pyglet)
 
     def create_texture(self, img):
+        # ModernGL texture dtypes:
+        #   'f1': fp8 internal format, u8 input
+        #   'f2': fp16 internal format, fp16 input
+        #   'f4': fp32 internal format, fp32 input
+        #   'u1': u8 internal format, u8 input
+        #   'u2': u16 internal format, u16 input
+        #   'u4': u32 internal format, u32 input
         h, w = img.shape[:2]
-        isFloat = img.itemsize >= 4
-        dtype = 'f2' if isFloat else 'f1'
+        dtype = f"f{img.itemsize}"  # u8 => 'f1', fp16 => 'f2', fp32 => 'f4'
         components = img.shape[2] if img.ndim == 3 else 1  # RGB/RGBA/grayscale
         texture = self.ctx.texture((w, h), components, img.ravel(), dtype=dtype)
         texture.build_mipmaps()

@@ -47,28 +47,31 @@ class ImageProviderMT(object):
         self.images[index] = "RELEASED"
 
     def _image_loader(self):
-        self._vprint("total physical memory: {:.1f}M".format(psutil.virtual_memory().total / 1024**2))
-        self._vprint("available physical memory: {:.1f}M".format(psutil.virtual_memory().available / 1024**2))
+        ram_total = psutil.virtual_memory().total / 1024**2
+        ram_before = psutil.virtual_memory().available / 1024**2
         while self.running:
             t0 = time.time()
             nbytes = 0
             for i, filespec in enumerate(self.files.filespecs):
                 time.sleep(0.001)
                 if self.images[i] is None and self.files.is_image[i] and self.running:
-                    # read image, drop alpha channel, rescale to uint8
+                    # read image, drop alpha channel, convert to fp16 if maxval > 255
                     img, maxval = imgio.imread(filespec, verbose=True)
                     img.shape = img.shape[:2] + (-1,)  # {2D, 3D} => 3D
                     img = img[:, :, :3]  # scrap alpha channel, if any
-                    img = (img / maxval * 255 + 0.5) if maxval != 255 else img
-                    img = img.astype(np.uint8, copy=False)
+                    if maxval > 255:  # rescale to fp16 or keep as uint8
+                        img = img / maxval
+                        img = img.astype(np.float32, copy=False)
                     self.images[i] = img
                     nbytes += img.nbytes
-                    self._vprint("available physical memory: {:.1f}M".format(psutil.virtual_memory().available / 1024**2))
             if nbytes > 1e6:
                 elapsed = time.time() - t0
                 nbytes = nbytes / 1024**2
                 bandwidth = nbytes / elapsed
-                print("[ImageProvider] copied {:.0f} MB of image data from disk to RAM in {:.1f} seconds ({:.1f} MB/sec).".format(nbytes, elapsed, bandwidth))
+                ram_after = psutil.virtual_memory().available / 1024**2
+                consumed = ram_before - ram_after
+                print(f"[ImageProvider] loaded {nbytes:.0f} MB of image data in {elapsed:.1f} seconds ({bandwidth:.1f} MB/sec).")
+                print(f"[ImageProvider] consumed {consumed:.0f} MB of system RAM, {ram_after:.0f}/{ram_total:.0f} MB remaining.")
 
     def _try(self, func):
         try:
@@ -82,6 +85,6 @@ class ImageProviderMT(object):
             else:
                 print(f"[{self.__class__.__name__}/{threading.current_thread().name}] {type(e).__name__}: {e}")
 
-    def _vprint(self, message):
+    def _vprint(self, message, **kwargs):
         if self.verbose:
-            print(f"[{self.__class__.__name__}/{threading.current_thread().name}] {message}")
+            print(f"[{self.__class__.__name__}/{threading.current_thread().name}] {message}", **kwargs)
