@@ -10,18 +10,27 @@
 import sys                     # built-in library
 import os                      # built-in library
 import time                    # built-in library
-import struct                  # built-in library
-import threading               # built-in library
-import numpy as np             # pip install numpy
-import moderngl                # pip install moderngl
-import psutil                  # pip install psutil
 
 import argv                    # local import
 import pygletui                # local import
+import glrenderer              # local import
 import imageprovider           # local import
 
 IMAGE_TYPES = [".pgm", ".ppm", ".pnm", ".png", ".jpg", ".jpeg", ".insp"]
 VIDEO_TYPES = [".mp4", ".insv"]
+
+
+class FileList(object):
+
+    def __init__(self, filespecs, image_types, video_types, verbose=False):
+        self.verbose = verbose
+        self.numfiles = len(filespecs)
+        self.filespecs = filespecs
+        self.extensions = [os.path.splitext(f)[1].lower() for f in filespecs]
+        self.is_rtsp = ["rtsp://" in f for f in filespecs]
+        self.is_image = [(ext in image_types) for ext in self.extensions]
+        self.is_video = [(ext in video_types) for ext in self.extensions]
+        self.is_video = [(v or r) for (v, r) in zip(self.is_video, self.is_rtsp)]
 
 
 def main():
@@ -73,12 +82,13 @@ def main():
     ui = pygletui.PygletUI(filenames, numtiles, verbose)
     files = FileList(filenames, IMAGE_TYPES, VIDEO_TYPES, verbose)
     loader = imageprovider.ImageProviderMT(files, verbose)
-    renderer = Renderer(ui, files, loader, verbose)
+    renderer = glrenderer.GLRenderer(ui, files, loader, verbose)
     ui.start(renderer)
     loader.start()
     main_loop([ui, loader])
     loader.stop()
     ui.stop()
+
 
 def main_loop(modules):
     try:
@@ -89,158 +99,11 @@ def main_loop(modules):
         # TODO: kill UIThread cleanly
 
 
-#######################################################################################
-# Classes / threads:
-#   UI - handle events, update state variables accordingly
-#   Renderer - render frames based on state variables (read-only) (GL mutex needed!)
-#   ImageProvider - load & decode still images into GL textures (GL mutex needed!)
-#   StreamProvider - load & decode video frames into GL textures (GL mutex needed!)
-
-
-class FileList(object):
-
-    def __init__(self, filespecs, image_types, video_types, verbose=False):
-        self.verbose = verbose
-        self.numfiles = len(filespecs)
-        self.filespecs = filespecs
-        self.extensions = [os.path.splitext(f)[1].lower() for f in filespecs]
-        self.is_rtsp = ["rtsp://" in f for f in filespecs]
-        self.is_image = [(ext in image_types) for ext in self.extensions]
-        self.is_video = [(ext in video_types) for ext in self.extensions]
-        self.is_video = [(v or r) for (v, r) in zip(self.is_video, self.is_rtsp)]
-
-
-class Renderer(object):
-
-    filter_nearest = (moderngl.NEAREST, moderngl.NEAREST)
-    filter_linear = (moderngl.LINEAR_MIPMAP_LINEAR, moderngl.LINEAR)
-    filters = { "LINEAR": filter_linear, "NEAREST": filter_nearest }
-    tile_debug_colors = [ 0xE0BBE4, 0x957DAD, 0xD291BC, 0xFEC8D8 ]  # pastel shades
-    tile_normal_colors = [ 0, 0, 0, 0 ]
-
-    def __init__(self, ui, files, loader, verbose=False):
-        self.thread_name = "RenderThread"
-        self.verbose = verbose
-        self.ui = ui                # <PygameUI> State variables controlled by user
-        self.loader = loader        # <ImageProvider> Still image loader
-        self.ctx = None             # <Context> OpenGL rendering context
-        self.prog = None            # <Program> image renderer with zoom & pan
-        self.vao = None             # <VertexArray> planar surface
-        self.texture_filter = None  # filter_nearest or filter_linear
-        self.tile_colors = self.tile_debug_colors if verbose else self.tile_normal_colors
-        self.textures = [None] * files.numfiles
-        self.running = None
-        self.render_thread = None
-
-    def init(self):
-        # OpenGL window must already exist and be owned by this thread
-        self._vprint("attaching to native OpenGL window...")
-        self.ctx = moderngl.create_context()
-        self.ctx.enable(moderngl.DEPTH_TEST)
-        self._vprint("compiling shaders...")
-        shaderPath = os.path.dirname(os.path.realpath(__file__))
-        vshader = open(os.path.join(shaderPath, 'panzoom.vs')).read()
-        fshader = open(os.path.join(shaderPath, 'texture.fs')).read()
-        self.prog = self.ctx.program(vertex_shader=vshader, fragment_shader=fshader)
-        self.prog['scale'].value = 1.0
-        self.prog['orientation'].value = 0
-        self.prog['mousepos'].value = (0.0, 0.0)
-        self.vbo = self.ctx.buffer(struct.pack('8f', -1.0, -1.0, -1.0, 1.0, 1.0, -1.0, 1.0, 1.0))
-        self.vao = self.ctx.simple_vertex_array(self.prog, self.vbo, 'vert')
-        self.tPrev = time.time()
-        _ = self.ctx.error  # clear the GL error flag (workaround for a bug that prevents interoperability with Pyglet)
-
-    def create_texture(self, img):
-        # ModernGL texture dtypes:
-        #   'f1': fp8 internal format, u8 input
-        #   'f2': fp16 internal format, fp16 input
-        #   'f4': fp32 internal format, fp32 input
-        #   'u1': u8 internal format, u8 input
-        #   'u2': u16 internal format, u16 input
-        #   'u4': u32 internal format, u32 input
-        h, w = img.shape[:2]
-        dtype = f"f{img.itemsize}"  # u8 => 'f1', fp16 => 'f2', fp32 => 'f4'
-        components = img.shape[2] if img.ndim == 3 else 1  # RGB/RGBA/grayscale
-        texture = self.ctx.texture((w, h), components, img.ravel(), dtype=dtype)
-        texture.build_mipmaps()
-        return texture
-
-    def update_texture(self, texture, img):
-        # TODO: take this into use
-        texture.write(img.ravel())
-        texture.build_mipmaps()
-        return texture
-
-    def load_texture(self, idx):
-        if self.textures[idx] is None:
-            img = self.loader.load_image(idx)
-            self.loader.release_image(idx)
-            self.textures[idx] = self.create_texture(img)
-        return self.textures[idx]
-
-    def redraw(self):
-        hex_to_rgb = lambda h: [h >> 16, (h >> 8) & 0xff, h & 0xff]
-        tile_colors = [hex_to_rgb(hexrgb) for hexrgb in self.tile_colors]
-        tile_colors = np.array(tile_colors) / 255.0
-        if True:
-            t0 = time.time()
-            for i in range(self.ui.numtiles):
-                imgidx = self.ui.imgPerTile[i]
-                texture = self.load_texture(imgidx)
-                texture.filter = self.filters[self.ui.texture_filter]
-                texture.swizzle = 'RGB1'
-                texture.use()
-                orientation = self.ui.rotPerImg[imgidx]
-                texw, texh = texture.width, texture.height
-                texw, texh = (texh, texw) if orientation in [90, 270] else (texw, texh)
-                vpx, vpy, vpw, vph = self.ui.viewports[i]
-                self.ctx.viewport = self.ui.viewports[i]
-                self.ctx.clear(*tile_colors[i], viewport=self.ctx.viewport)
-                self.prog['mousepos'].value = self._get_mousepos(vpw, vph, texw, texh)
-                self.prog['orientation'].value = orientation
-                self.prog['aspect'].value = self._get_aspect_ratio(vpw, vph, texw, texh)
-                self.prog['scale'].value = self.ui.scale
-                self.prog['grayscale'].value = (texture.components == 1)
-                self.prog['gamma'].value = self.ui.gamma
-                self.prog['gain'].value = self.ui.gain
-                self.vao.render(moderngl.TRIANGLE_STRIP)
-            self.ctx.finish()
-            elapsed = (time.time() - t0) * 1000
-            interval = (time.time() - self.tPrev) * 1000
-            self.tPrev = time.time()
-            #self._vprint("available physical memory: {:.1f}M".format(psutil.virtual_memory().available / 1024**2))
-            #self._vprint(f"rendering took {elapsed:.1f} ms, frame-to-frame interval was {interval:.1f} ms")
-        return elapsed
-
-    def _get_mousepos(self, tilew, tileh, imgw, imgh):
-        xscale, yscale = self._get_aspect_ratio(tilew, tileh, imgw, imgh)
-        screenX, screenY = self.ui.mousepos
-        imgX = np.clip(screenX / imgw, -1.0 * xscale, 1.0 * xscale)
-        imgY = np.clip(screenY / imgh, -1.0 * yscale, 1.0 * yscale)
-        screenX = imgX * imgw
-        screenY = imgY * imgh
-        self.ui.mousepos = (screenX, screenY)
-        return imgX, imgY
-
-    def _get_aspect_ratio(self, vpw, vph, texw, texh):
-        vpAspect = vpw / vph
-        texAspect = texw / texh
-        if texAspect > vpAspect:
-            # image wider than window => squeeze y => black top & bottom
-            xscale, yscale = (1.0, vpAspect / texAspect)
-        else:
-            # image narrower than window => squeeze x => black sides
-            xscale, yscale = (texAspect / vpAspect, 1.0)
-        return xscale, yscale
-
-    def _vprint(self, message):
-        if self.verbose:
-            print(f"[{self.__class__.__name__}/{threading.current_thread().name}] {message}")
-
 def enforce(expression, messageIfFalse):
     if not expression:
         print(messageIfFalse)
         sys.exit(-1)
+
 
 def warn(expression, messageIfTrue):
     if expression:

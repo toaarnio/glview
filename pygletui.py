@@ -1,10 +1,6 @@
-#!/usr/bin/python3 -B
-
-import os                      # built-in library
-import time                    # built-in library
 import threading               # built-in library
 import pyglet                  # pip install pyglet
-import numpy as np             # pip install numpy
+
 
 class PygletUI(object):
 

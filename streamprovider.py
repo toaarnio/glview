@@ -1,14 +1,6 @@
 import time                    # built-in library
-import numpy as np             # pip install numpy
-import psutil                  # pip install psutil
 import cv2                     # pip install opencv-python
 
-
-#######################################################################################
-#
-# StreamProvider
-#
-#######################################################################################
 
 class StreamProvider(object):
     def __init__(self, files, verbose=False):

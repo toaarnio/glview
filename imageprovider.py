@@ -1,16 +1,9 @@
 import time                    # built-in library
 import threading               # built-in library
-import multiprocessing         # built-in library
 import numpy as np             # pip install numpy
 import psutil                  # pip install psutil
 import imgio                   # pip install imgio
 
-
-#######################################################################################
-#
-# ImageProviderMT -- ImageProvider running in a separate thread
-#
-#######################################################################################
 
 class ImageProviderMT(object):
 
