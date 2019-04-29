@@ -53,6 +53,7 @@ def main():
         print("    f                   toggle fullscreen <-> windowed")
         print("    t                   toggle nearest <-> linear filtering")
         print("    g                   toggle sRGB gamma correction on/off")
+        print("    b                   increase brightness by 1/2/4/8/16x")
         print("    q / esc / ctrl+c    terminate")
         sys.exit(-1)
 
@@ -195,6 +196,7 @@ class Renderer(object):
                 self.prog['scale'].value = self.ui.scale
                 self.prog['grayscale'].value = (texture.components == 1)
                 self.prog['gamma'].value = self.ui.gamma
+                self.prog['gain'].value = self.ui.gain
                 self.vao.render(moderngl.TRIANGLE_STRIP)
             self.ctx.finish()
             elapsed = (time.time() - t0) * 1000

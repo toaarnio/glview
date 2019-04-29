@@ -30,6 +30,7 @@ class PygletUI(object):
         self.imgPerTile = [0, 0, 0, 0]
         self.rotPerImg = [0] * self.numfiles
         self.gamma = False
+        self.gain = 1.0
 
 
     def start(self, renderer):
@@ -170,6 +171,8 @@ class PygletUI(object):
                     self.window.set_mouse_visible(not self.fullscreen)
                 if symbol == keys.G:
                     self.gamma = not self.gamma
+                if symbol == keys.B:
+                    self.gain = {1:2, 2:4, 4:8, 8:16, 16:1}[self.gain]
                 if symbol == keys.T:
                     self.texture_filter = "LINEAR" if self.texture_filter == "NEAREST" else "NEAREST"
                 if symbol == keys.S:
