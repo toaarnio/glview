@@ -119,13 +119,11 @@ class PygletUI(object):
         @self.window.event
         def on_mouse_press(x, y, button, modifiers):
             if button == pyglet.window.mouse.LEFT:
-                self.window.set_exclusive_mouse(True)
                 self.window.set_mouse_visible(False)
 
         @self.window.event
         def on_mouse_release(x, y, button, modifiers):
             if button == pyglet.window.mouse.LEFT:
-                self.window.set_exclusive_mouse(False)
                 self.window.set_mouse_visible(True)
 
         @self.window.event
@@ -162,7 +160,6 @@ class PygletUI(object):
                 if symbol == keys.F:
                     self.fullscreen = not self.fullscreen
                     self.window.set_fullscreen(self.fullscreen)
-                    self.window.set_exclusive_mouse(self.fullscreen)
                     self.window.set_mouse_visible(not self.fullscreen)
                 if symbol == keys.G:
                     self.gamma = not self.gamma
