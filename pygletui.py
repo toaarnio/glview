@@ -65,7 +65,6 @@ class PygletUI(object):
         self.viewports = self._retile(self.numtiles, self.winsize)
         self.window = pyglet.window.Window(*self.winsize, resizable=True, vsync=False)
         self.window.set_caption(self._caption())
-        self.initial_winsize = self.winsize
         self._setup_events()
         self._vprint("Pyglet & native OpenGL initialized")
 
@@ -113,11 +112,9 @@ class PygletUI(object):
 
         @self.window.event
         def on_resize(width, height):
-            # workaround for redundant resize events caused by the X Window System
-            if width != self.initial_winsize[0] and height != self.initial_winsize[1]:
-                self.winsize = (width, height)
-                self.viewports = self._retile(self.numtiles, self.winsize)
-                self.window.dispatch_event("on_draw")
+            self.winsize = (width, height)
+            self.viewports = self._retile(self.numtiles, self.winsize)
+            self.window.dispatch_event("on_draw")
 
         @self.window.event
         def on_mouse_press(x, y, button, modifiers):
@@ -153,10 +150,12 @@ class PygletUI(object):
         @self.window.event
         def on_key_press(symbol, modifiers):
             keys = pyglet.window.key
+            disallowed_keys = keys.MOD_CTRL | keys.MOD_ALT
+            self._vprint(f"on_key_press({keys.symbol_string(symbol)}, modifiers={keys.modifiers_string(modifiers)})")
             if symbol == keys.C and modifiers == keys.MOD_CTRL:
                 self.running = False
                 self.event_loop.has_exit = True
-            if modifiers in [0, keys.MOD_CAPSLOCK]:
+            if (modifiers & disallowed_keys) == 0:  # ignore NumLock, ScrollLock, CapsLock, Shift
                 if symbol in [keys.ESCAPE, keys.Q]:
                     self.running = False
                     self.event_loop.has_exit = True
