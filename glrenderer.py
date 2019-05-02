@@ -62,6 +62,10 @@ class GLRenderer(object):
         texture.build_mipmaps()
         return texture
 
+    def create_empty_texture(self):
+        texture = self.ctx.texture((32, 32), 1, np.zeros((32, 32), dtype=np.uint8), dtype='f1')
+        return texture
+
     def update_texture(self, texture, img):
         # TODO: take this into use
         texture.write(img.ravel())
@@ -72,7 +76,10 @@ class GLRenderer(object):
         if self.textures[idx] is None:
             img = self.loader.load_image(idx)
             self.loader.release_image(idx)
-            self.textures[idx] = self.create_texture(img)
+            if isinstance(img, str) and img == "INVALID":
+                self.textures[idx] = self.create_empty_texture()
+            else:
+                self.textures[idx] = self.create_texture(img)
         return self.textures[idx]
 
     def redraw(self):

@@ -49,14 +49,20 @@ class ImageProviderMT(object):
                 time.sleep(0.01)
                 if self.images[i] is None and self.files.is_image[i] and self.running:
                     # read image, drop alpha channel, convert to fp16 if maxval > 255
-                    img, maxval = imgio.imread(filespec, verbose=True)
-                    img.shape = img.shape[:2] + (-1,)  # {2D, 3D} => 3D
-                    img = img[:, :, :3]  # scrap alpha channel, if any
-                    if maxval > 255:  # rescale to fp16 or keep as uint8
-                        img = img / maxval
-                        img = img.astype(np.float32, copy=False)
-                    self.images[i] = img
-                    nbytes += img.nbytes
+                    # if loading fails, mark the slot as "INVALID" and keep going
+                    try:
+                        img, maxval = imgio.imread(filespec, verbose=True)
+                        img.shape = img.shape[:2] + (-1,)  # {2D, 3D} => 3D
+                        img = img[:, :, :3]  # scrap alpha channel, if any
+                        if maxval > 255:  # rescale to fp16 or keep as uint8
+                            img = img / maxval
+                            img = img.astype(np.float32, copy=False)
+                        self.images[i] = img
+                        nbytes += img.nbytes
+                    except imgio.ImageIOError as e:
+                        print("")  # just print a newline
+                        self._vprint(e)
+                        self.images[i] = "INVALID"
                 if not self.running:
                     break
             if nbytes > 1e6:
