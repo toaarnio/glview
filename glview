@@ -16,7 +16,7 @@ import pygletui                # local import
 import glrenderer              # local import
 import imageprovider           # local import
 
-IMAGE_TYPES = [".pgm", ".ppm", ".pnm", ".png", ".jpg", ".jpeg", ".insp"]
+IMAGE_TYPES = [".pgm", ".ppm", ".pnm", ".png", ".jpg", ".jpeg", ".tif", ".tiff", ".insp"]
 VIDEO_TYPES = [".mp4", ".insv"]
 
 

@@ -60,7 +60,7 @@ class ImageProviderMT(object):
                         self.images[i] = img
                         nbytes += img.nbytes
                     except imgio.ImageIOError as e:
-                        print("")  # just print a newline
+                        print(f"\n{e}")
                         self._vprint(e)
                         self.images[i] = "INVALID"
                 if not self.running:
