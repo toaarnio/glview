@@ -3,7 +3,7 @@
 uniform bool debug;
 uniform bool grayscale;
 uniform bool gamma;
-uniform int gain;
+uniform float ev;
 uniform int orientation;
 uniform sampler2D texture;
 
@@ -25,7 +25,7 @@ void main() {
       break;
   }
 
-  color = texture2D(texture, rotated) * gain;
+  color = texture2D(texture, rotated) * exp(ev);  // exp(x) == 2^x
   color.rgb = grayscale ? color.rrr : color.rgb;
   color.rgb = gamma ? pow(color.rgb, vec3(1/2.2)) : color.rgb;
   color.r = debug ? color.r + 0.5 : color.r;

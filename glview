@@ -62,7 +62,7 @@ def main():
         print("    f                   toggle fullscreen <-> windowed")
         print("    t                   toggle nearest <-> linear filtering")
         print("    g                   toggle sRGB gamma correction on/off")
-        print("    b                   increase brightness by 1/2/4/8/16x")
+        print("    b                   increase brightness in 0.5 EV steps")
         print("    q / esc / ctrl+c    terminate")
         sys.exit(-1)
 

@@ -1,3 +1,4 @@
+import os                      # built-in library
 import threading               # built-in library
 import pyglet                  # pip install pyglet
 
@@ -26,7 +27,7 @@ class PygletUI(object):
         self.imgPerTile = [0, 0, 0, 0]
         self.rotPerImg = [0] * self.numfiles
         self.gamma = False
-        self.gain = 1.0
+        self.ev = 0
 
 
     def start(self, renderer):
@@ -71,10 +72,11 @@ class PygletUI(object):
 
     def _caption(self):
         fps = pyglet.clock.get_fps()
-        caption = f"glview [{fps:.1f} fps]"
+        caption = f"glview [{self.ev:+1.1f}EV | {fps:.1f} fps]"
         for tileidx in range(self.numtiles):
             imgidx = self.imgPerTile[tileidx]
-            caption = "{} | {}".format(caption, self.filenames[imgidx])
+            basename = os.path.basename(self.filenames[imgidx])
+            caption = f"{caption} | {basename}"
         return caption
 
 
@@ -164,7 +166,9 @@ class PygletUI(object):
                 if symbol == keys.G:
                     self.gamma = not self.gamma
                 if symbol == keys.B:
-                    self.gain = {1:2, 2:4, 4:8, 8:16, 16:1}[self.gain]
+                    ev = (self.ev * 2) + 4
+                    ev = (ev + 1) % 9  # [0, 8] ==> [-2, +2] EV in 0.5-EV steps
+                    self.ev = (ev - 4) / 2
                 if symbol == keys.T:
                     self.texture_filter = "LINEAR" if self.texture_filter == "NEAREST" else "NEAREST"
                 if symbol == keys.S:
@@ -183,6 +187,7 @@ class PygletUI(object):
         @self.window.event
         def on_text_motion(motion):  # handle PageUp / PageDown
             keys = pyglet.window.key
+            self._vprint(f"on_text_motion({keys.symbol_string(motion)})")
             if motion in [keys.MOTION_NEXT_PAGE, keys.MOTION_PREVIOUS_PAGE]:
                 incr = 1 if motion == keys.MOTION_NEXT_PAGE else -1
                 imgidx = self.imgPerTile[self.tileidx]

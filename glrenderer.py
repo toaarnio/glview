@@ -106,7 +106,7 @@ class GLRenderer(object):
                 self.prog['scale'].value = self.ui.scale
                 self.prog['grayscale'].value = (texture.components == 1)
                 self.prog['gamma'].value = self.ui.gamma
-                self.prog['gain'].value = self.ui.gain
+                self.prog['ev'].value = self.ui.ev
                 self.vao.render(moderngl.TRIANGLE_STRIP)
             self.ctx.finish()
             elapsed = (time.time() - t0) * 1000
