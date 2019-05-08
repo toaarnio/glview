@@ -77,6 +77,7 @@ def main():
     filenames += [url] if url is not None else []
     numfiles = len(filenames)
     enforce(numfiles > 0, "No valid PGM/PPM/PNM/PNG/JPG/INSP/RAW images to show and no URL given. Terminating.")
+    enforce(not use_raw, "Bayer RAW is not yet supported. Terminating.")
     print("See 'glview --help' for usage instructions.")
 
     ui = pygletui.PygletUI(filenames, numtiles, verbose)
