@@ -16,7 +16,7 @@ import pygletui                # local import
 import glrenderer              # local import
 import imageprovider           # local import
 
-IMAGE_TYPES = [".pgm", ".ppm", ".pnm", ".png", ".jpg", ".jpeg", ".tif", ".tiff", ".insp"]
+IMAGE_TYPES = [".pgm", ".ppm", ".pnm", ".pfm", ".png", ".jpg", ".jpeg", ".tif", ".tiff", ".insp"]
 VIDEO_TYPES = [".mp4", ".insv"]
 
 
@@ -27,8 +27,8 @@ class FileList(object):
         self.numfiles = len(filespecs)
         self.filespecs = filespecs
         self.extensions = [os.path.splitext(f)[1].lower() for f in filespecs]
+        self.is_url = ["://" in f for f in filespecs]
         self.is_rtsp = ["rtsp://" in f for f in filespecs]
-        self.is_image = [(ext in image_types) for ext in self.extensions]
         self.is_video = [(ext in video_types) for ext in self.extensions]
         self.is_video = [(v or r) for (v, r) in zip(self.is_video, self.is_rtsp)]
 
@@ -48,6 +48,7 @@ def main():
         print("    --split 1|2|3|4     display images in N separate tiles")
         print("    --size W H          input image size in pixels (.RAW only)")
         print("    --bpp N             input image bits per pixel (.RAW only)")
+        print("    --url <address>     load image from the given web address")
         print("    --verbose           print extra traces to the console")
         print("    --help              show this help message")
         print()
@@ -64,6 +65,10 @@ def main():
         print("    g                   toggle sRGB gamma correction on/off")
         print("    b                   increase brightness in 0.5 EV steps")
         print("    q / esc / ctrl+c    terminate")
+        print()
+        print("  supported file types:")
+        print("   ", '\n    '.join(IMAGE_TYPES))
+        print()
         sys.exit(-1)
 
     filepatterns = sys.argv[1:] or url or ["*"]
@@ -76,9 +81,9 @@ def main():
     filenames, _ = argv.filenames(filepatterns, extensions, sort=True, allowAllCaps=True)
     filenames += [url] if url is not None else []
     numfiles = len(filenames)
-    enforce(numfiles > 0, "No valid PGM/PPM/PNM/PNG/JPG/INSP/RAW images to show and no URL given. Terminating.")
+    enforce(numfiles > 0, "No valid images to show. Terminating.")
     enforce(not use_raw, "Bayer RAW is not yet supported. Terminating.")
-    print("See 'glview --help' for usage instructions.")
+    print("See 'glview --help' for command-line options and keyboard commands.")
 
     ui = pygletui.PygletUI(filenames, numtiles, verbose)
     files = FileList(filenames, IMAGE_TYPES, VIDEO_TYPES, verbose)

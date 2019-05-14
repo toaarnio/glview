@@ -1,5 +1,8 @@
+import os                      # built-in library
 import time                    # built-in library
 import threading               # built-in library
+import urllib.request          # built-in library
+import tempfile                # built-in library
 import numpy as np             # pip install numpy
 import psutil                  # pip install psutil
 import imgio                   # pip install imgio
@@ -28,7 +31,7 @@ class ImageProviderMT(object):
         self._vprint(f"{self.thread_name} killed")
 
     def load_image(self, index):
-        if not self.files.is_image[index]:
+        if self.files.is_video[index]:
             raise RuntimeError("File {} is not an image.".format(self.files.filespecs[index]))
         while self.images[index] is None:
             time.sleep(0.01)
@@ -47,16 +50,24 @@ class ImageProviderMT(object):
             nbytes = 0
             for i, filespec in enumerate(self.files.filespecs):
                 time.sleep(0.01)
-                if self.images[i] is None and self.files.is_image[i] and self.running:
-                    # read image, drop alpha channel, convert to fp16 if maxval > 255
+                if self.running and self.images[i] is None and not self.files.is_video[i]:
+                    # read image, drop alpha channel, convert to fp32 if maxval != 255;
                     # if loading fails, mark the slot as "INVALID" and keep going
                     try:
-                        img, maxval = imgio.imread(filespec, verbose=True)
+                        if not self.files.is_url[i]:
+                            img, maxval = imgio.imread(filespec, verbose=True)
+                        else:
+                            data = urllib.request.urlopen(filespec).read()
+                            basename = os.path.basename(filespec)
+                            with tempfile.NamedTemporaryFile(suffix=f"_{basename}") as fp:
+                                fp.write(data)
+                                img, maxval = imgio.imread(fp.name, verbose=True)
                         img.shape = img.shape[:2] + (-1,)  # {2D, 3D} => 3D
                         img = img[:, :, :3]  # scrap alpha channel, if any
-                        if maxval > 255:  # rescale to fp16 or keep as uint8
-                            img = img / maxval
+                        if maxval != 255:  # if not uint8, convert to fp32
                             img = img.astype(np.float32, copy=False)
+                            norm = max(maxval, np.max(img))
+                            img = img / norm
                         self.images[i] = img
                         nbytes += img.nbytes
                     except imgio.ImageIOError as e:
