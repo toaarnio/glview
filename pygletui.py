@@ -1,6 +1,8 @@
 import os                      # built-in library
 import threading               # built-in library
+import pprint                  # built-in library
 import pyglet                  # pip install pyglet
+import piexif                  # pip install piexif
 
 
 class PygletUI(object):
@@ -104,6 +106,20 @@ class PygletUI(object):
         return viewports
 
 
+    def _print_exif(self, filespec):
+        try:
+            exif_all = piexif.load(filespec)
+            exif_tags = { tag: name for name, tag in piexif.ExifIFD.__dict__.items() if type(tag) == int }
+            image_tags = { tag: name for name, tag in piexif.ImageIFD.__dict__.items() if type(tag) == int }
+            exif_dict = { exif_tags[name]: val for name, val in exif_all.pop("Exif").items() }
+            image_dict = { image_tags[name]: val for name, val in exif_all.pop("0th").items() }
+            merged_dict = { **exif_dict, **image_dict }
+            print(f"EXIF data for {filespec}:")
+            pprint.pprint(merged_dict)
+        except piexif._exceptions.InvalidImageDataError as e:
+            print(f"Failed to extract EXIF metadata from {filespec}: {e}")
+
+
     def _setup_events(self):
         self._vprint("setting up Pyglet window event handlers...")
 
@@ -156,33 +172,38 @@ class PygletUI(object):
                 self.running = False
                 self.event_loop.has_exit = True
             if (modifiers & disallowed_keys) == 0:  # ignore NumLock, ScrollLock, CapsLock, Shift
-                if symbol in [keys.ESCAPE, keys.Q]:
+                if symbol in [keys.ESCAPE, keys.Q]:  # exit
                     self.running = False
                     self.event_loop.has_exit = True
-                if symbol == keys.F:
+                if symbol == keys.F:  # fullscreen
                     self.fullscreen = not self.fullscreen
                     self.window.set_fullscreen(self.fullscreen)
                     self.window.set_mouse_visible(not self.fullscreen)
-                if symbol == keys.G:
+                if symbol == keys.G:  # gamma
                     self.gamma = not self.gamma
-                if symbol == keys.B:
+                if symbol == keys.B:  # brightness
                     ev = (self.ev * 2) + 4
                     ev = (ev + 1) % 9  # [0, 8] ==> [-2, +2] EV in 0.5-EV steps
                     self.ev = (ev - 4) / 2
-                if symbol == keys.T:
+                if symbol == keys.T:  # texture filtering
                     self.texture_filter = "LINEAR" if self.texture_filter == "NEAREST" else "NEAREST"
-                if symbol == keys.S:
+                if symbol == keys.S:  # split
                     self.numtiles = (self.numtiles % 4) + 1
                     self.tileidx = min(self.tileidx, self.numtiles - 1)
                     self.viewports = self._retile(self.numtiles, self.winsize)
                     self.window.set_caption(self._caption())
-                if symbol == keys.R:
+                if symbol == keys.R:  # rotate
                     imgidx = self.imgPerTile[self.tileidx]
                     self.rotPerImg[imgidx] += 90
                     self.rotPerImg[imgidx] %= 360
-                if symbol in [keys._1, keys._2, keys._3, keys._4]:
+                if symbol == keys.I:  # image info
+                    imgidx = self.imgPerTile[self.tileidx]
+                    filespec = self.filenames[imgidx]
+                    self._print_exif(filespec)
+                if symbol in [keys._1, keys._2, keys._3, keys._4]:  # select tile 1/2/3/4
                     tileidx = symbol - keys._1
                     self.tileidx = tileidx if tileidx < self.numtiles else self.tileidx
+
 
         @self.window.event
         def on_text_motion(motion):  # handle PageUp / PageDown

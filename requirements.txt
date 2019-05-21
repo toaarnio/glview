@@ -5,3 +5,4 @@ psutil>=5.6.1
 opencv-python>=4.0.1
 imgio>=0.4.3
 moderngl>=5.5.0
+piexif>=1.1.2
