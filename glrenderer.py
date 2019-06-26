@@ -20,12 +20,12 @@ class GLRenderer(object):
         self.verbose = verbose
         self.ui = ui                # <PygletUI> State variables controlled by user
         self.loader = loader        # <ImageProvider> Still image loader
+        self.files = files          # <FileList> Image files + metadata
         self.ctx = None             # <Context> OpenGL rendering context
         self.prog = None            # <Program> image renderer with zoom & pan
         self.vao = None             # <VertexArray> planar surface
         self.texture_filter = None  # filter_nearest or filter_linear
         self.tile_colors = self.tile_debug_colors if verbose else self.tile_normal_colors
-        self.textures = [None] * files.numfiles
         self.running = None
         self.render_thread = None
 
@@ -73,14 +73,14 @@ class GLRenderer(object):
         return texture
 
     def load_texture(self, idx):
-        if self.textures[idx] is None:
+        if self.files.textures[idx] is None:
             img = self.loader.load_image(idx)
             self.loader.release_image(idx)
             if isinstance(img, str) and img == "INVALID":
-                self.textures[idx] = self.create_empty_texture()
+                self.files.textures[idx] = self.create_empty_texture()
             else:
-                self.textures[idx] = self.create_texture(img)
-        return self.textures[idx]
+                self.files.textures[idx] = self.create_texture(img)
+        return self.files.textures[idx]
 
     def redraw(self):
         hex_to_rgb = lambda h: [h >> 16, (h >> 8) & 0xff, h & 0xff]
@@ -94,7 +94,7 @@ class GLRenderer(object):
                 texture.filter = self.filters[self.ui.texture_filter]
                 texture.swizzle = 'RGB1'
                 texture.use()
-                orientation = self.ui.rotPerImg[imgidx]
+                orientation = self.files.orientations[imgidx]
                 texw, texh = texture.width, texture.height
                 texw, texh = (texh, texw) if orientation in [90, 270] else (texw, texh)
                 vpx, vpy, vpw, vph = self.ui.viewports[i]

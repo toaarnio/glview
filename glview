@@ -10,11 +10,13 @@
 import sys                     # built-in library
 import os                      # built-in library
 import time                    # built-in library
+import threading               # built-in library
 
 import argv                    # local import
 import pygletui                # local import
 import glrenderer              # local import
 import imageprovider           # local import
+
 
 IMAGE_TYPES = [".pgm", ".ppm", ".pnm", ".pfm", ".png", ".jpg", ".jpeg", ".tif", ".tiff", ".insp"]
 VIDEO_TYPES = [".mp4", ".insv"]
@@ -22,14 +24,39 @@ VIDEO_TYPES = [".mp4", ".insv"]
 
 class FileList(object):
 
-    def __init__(self, filespecs, image_types, video_types, verbose=False):
+    def __init__(self, filespecs, verbose=False):
+        self.mutex = threading.Lock()
         self.verbose = verbose
-        self.numfiles = len(filespecs)
         self.filespecs = filespecs
-        self.extensions = [os.path.splitext(f)[1].lower() for f in filespecs]
-        self.is_url = ["://" in f for f in filespecs]
-        self.is_rtsp = ["rtsp://" in f for f in filespecs]
-        self.is_video = [(ext in video_types) for ext in self.extensions]
+        self.numfiles = len(filespecs)
+        self.orientations = [0] * self.numfiles
+        self.images = [None] * self.numfiles
+        self.textures = [None] * self.numfiles
+        self.extensions = [None] * self.numfiles
+        self.is_url = [None] * self.numfiles
+        self.is_rtsp = [None] * self.numfiles
+        self.is_video = [None] * self.numfiles
+        self._update()
+
+    def remove(self, idx):
+        with self.mutex:
+            try:
+                filespec = self.filespecs.pop(idx)
+                self.orientations.pop(idx)
+                self.textures.pop(idx)
+                self.images.pop(idx)
+                self._update()
+                print(f"[{self.__class__.__name__}/{threading.current_thread().name}] Deleting {filespec}...")
+                os.remove(filespec)
+            except IndexError:
+                pass
+
+    def _update(self):
+        self.numfiles = len(self.filespecs)
+        self.extensions = [os.path.splitext(f)[1].lower() for f in self.filespecs]
+        self.is_url = ["://" in f for f in self.filespecs]
+        self.is_rtsp = ["rtsp://" in f for f in self.filespecs]
+        self.is_video = [(ext in VIDEO_TYPES) for ext in self.extensions]
         self.is_video = [(v or r) for (v, r) in zip(self.is_video, self.is_rtsp)]
 
 
@@ -64,6 +91,7 @@ def main():
         print("    t                   toggle nearest <-> linear filtering")
         print("    g                   toggle sRGB gamma correction on/off")
         print("    b                   increase brightness in 0.5 EV steps")
+        print("    i                   print image information (EXIF)")
         print("    q / esc / ctrl+c    terminate")
         print()
         print("  supported file types:")
@@ -85,8 +113,8 @@ def main():
     enforce(not use_raw, "Bayer RAW is not yet supported. Terminating.")
     print("See 'glview --help' for command-line options and keyboard commands.")
 
-    ui = pygletui.PygletUI(filenames, numtiles, verbose)
-    files = FileList(filenames, IMAGE_TYPES, VIDEO_TYPES, verbose)
+    files = FileList(filenames, verbose)
+    ui = pygletui.PygletUI(files, numtiles, verbose)
     loader = imageprovider.ImageProviderMT(files, verbose)
     renderer = glrenderer.GLRenderer(ui, files, loader, verbose)
     ui.start(renderer)

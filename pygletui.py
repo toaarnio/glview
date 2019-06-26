@@ -7,11 +7,10 @@ import piexif                  # pip install piexif
 
 class PygletUI(object):
 
-    def __init__(self, filenames, numtiles, verbose=False):
+    def __init__(self, files, numtiles, verbose=False):
         self.thread_name = "UIThread"
         self.verbose = verbose
-        self.filenames = filenames
-        self.numfiles = len(filenames)
+        self.files = files
         self.numtiles = numtiles
         self.running = None
         self.window = None
@@ -27,7 +26,6 @@ class PygletUI(object):
         self.event_loop = None
         self.texture_filter = "LINEAR"
         self.imgPerTile = [0, 0, 0, 0]
-        self.rotPerImg = [0] * self.numfiles
         self.gamma = False
         self.ev = 0
 
@@ -77,7 +75,7 @@ class PygletUI(object):
         caption = f"glview [{self.ev:+1.1f}EV | {fps:.1f} fps]"
         for tileidx in range(self.numtiles):
             imgidx = self.imgPerTile[tileidx]
-            basename = os.path.basename(self.filenames[imgidx])
+            basename = os.path.basename(self.files.filespecs[imgidx])
             caption = f"{caption} | {basename}"
         return caption
 
@@ -194,12 +192,22 @@ class PygletUI(object):
                     self.window.set_caption(self._caption())
                 if symbol == keys.R:  # rotate
                     imgidx = self.imgPerTile[self.tileidx]
-                    self.rotPerImg[imgidx] += 90
-                    self.rotPerImg[imgidx] %= 360
+                    self.files.orientations[imgidx] += 90
+                    self.files.orientations[imgidx] %= 360
                 if symbol == keys.I:  # image info
                     imgidx = self.imgPerTile[self.tileidx]
-                    filespec = self.filenames[imgidx]
+                    filespec = self.files.filespecs[imgidx]
                     self._print_exif(filespec)
+                if symbol == keys.D:  # delete file, but not in split-screen mode
+                    if self.numtiles == 1:
+                        imgidx = self.imgPerTile[self.tileidx]
+                        self.files.remove(imgidx)
+                        if self.files.numfiles == 0:
+                            self.running = False
+                            self.event_loop.has_exit = True
+                        else:
+                            self.imgPerTile[self.tileidx] = (imgidx - 1) % self.files.numfiles
+                            self.window.set_caption(self._caption())
                 if symbol in [keys._1, keys._2, keys._3, keys._4]:  # select tile 1/2/3/4
                     tileidx = symbol - keys._1
                     self.tileidx = tileidx if tileidx < self.numtiles else self.tileidx
@@ -212,7 +220,7 @@ class PygletUI(object):
             if motion in [keys.MOTION_NEXT_PAGE, keys.MOTION_PREVIOUS_PAGE]:
                 incr = 1 if motion == keys.MOTION_NEXT_PAGE else -1
                 imgidx = self.imgPerTile[self.tileidx]
-                imgidx = (imgidx + incr) % self.numfiles
+                imgidx = (imgidx + incr) % self.files.numfiles
                 self.imgPerTile[self.tileidx] = imgidx
                 self.window.set_caption(self._caption())
 

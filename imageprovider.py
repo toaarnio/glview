@@ -14,7 +14,6 @@ class ImageProviderMT(object):
         self.thread_name = "ImageProviderThread"
         self.verbose = verbose
         self.files = files
-        self.images = [None] * self.files.numfiles
         self.loader_thread = None
         self.running = False
 
@@ -33,49 +32,38 @@ class ImageProviderMT(object):
     def load_image(self, index):
         if self.files.is_video[index]:
             raise RuntimeError("File {} is not an image.".format(self.files.filespecs[index]))
-        while self.images[index] is None:
+        while self.files.images[index] is None:
             time.sleep(0.01)
             if not self.running:
                 raise RuntimeError("ImageProvider terminated, cannot load images anymore.")
-        return self.images[index]
+        return self.files.images[index]
 
     def release_image(self, index):
-        self.images[index] = "RELEASED"
+        self.files.images[index] = "RELEASED"
 
     def _image_loader(self):
         ram_total = psutil.virtual_memory().total / 1024**2
         ram_before = psutil.virtual_memory().available / 1024**2
-        while self.running:
-            t0 = time.time()
+        ram_limit = 0.50 * ram_before  # use max 50% of available RAM
+        while self.running:  # loop until program termination
+            idx = 0
             nbytes = 0
-            for i, filespec in enumerate(self.files.filespecs):
-                time.sleep(0.01)
-                if self.running and self.images[i] is None and not self.files.is_video[i]:
-                    # read image, drop alpha channel, convert to fp32 if maxval != 255;
-                    # if loading fails, mark the slot as "INVALID" and keep going
-                    try:
-                        if not self.files.is_url[i]:
-                            img, maxval = imgio.imread(filespec, verbose=True)
-                        else:
-                            data = urllib.request.urlopen(filespec).read()
-                            basename = os.path.basename(filespec)
-                            with tempfile.NamedTemporaryFile(suffix=f"_{basename}") as fp:
-                                fp.write(data)
-                                img, maxval = imgio.imread(fp.name, verbose=True)
-                        img.shape = img.shape[:2] + (-1,)  # {2D, 3D} => 3D
-                        img = img[:, :, :3]  # scrap alpha channel, if any
-                        if maxval != 255:  # if not uint8, convert to fp32
-                            img = img.astype(np.float32, copy=False)
-                            norm = max(maxval, np.max(img))
-                            img = img / norm
-                        self.images[i] = img
-                        nbytes += img.nbytes
-                    except imgio.ImageIOError as e:
-                        print(f"\n{e}")
-                        self._vprint(e)
-                        self.images[i] = "INVALID"
-                if not self.running:
+            t0 = time.time()
+            while self.running:  # load all files
+                ram_available = psutil.virtual_memory().available / 1024**2
+                if ram_available < ram_limit:
+                    time.sleep(0.1)
                     break
+                with self.files.mutex:  # avoid race conditions
+                    if idx < self.files.numfiles:
+                        if self.files.images[idx] is None and not self.files.is_video[idx]:
+                            img = self._load_single(idx)
+                            self.files.images[idx] = img
+                            nbytes += img.nbytes if type(img) == np.ndarray else 0
+                    else:
+                        break
+                time.sleep(0.01)  # yield some CPU time to the UI thread
+                idx += 1
             if nbytes > 1e6:
                 elapsed = time.time() - t0
                 nbytes = nbytes / 1024**2
@@ -84,6 +72,34 @@ class ImageProviderMT(object):
                 consumed = ram_before - ram_after
                 print(f"[ImageProvider] loaded {nbytes:.0f} MB of image data in {elapsed:.1f} seconds ({bandwidth:.1f} MB/sec).")
                 print(f"[ImageProvider] consumed {consumed:.0f} MB of system RAM, {ram_after:.0f}/{ram_total:.0f} MB remaining.")
+            time.sleep(0.1)
+
+    def _load_single(self, idx):
+        """
+        Read image, drop alpha channel, convert to fp32 if maxval != 255;
+        if loading fails, mark the slot as "INVALID" and keep going.
+        """
+        try:
+            filespec = self.files.filespecs[idx]
+            if not self.files.is_url[idx]:
+                img, maxval = imgio.imread(filespec, verbose=True)
+            else:
+                data = urllib.request.urlopen(filespec).read()
+                basename = os.path.basename(filespec)
+                with tempfile.NamedTemporaryFile(suffix=f"_{basename}") as fp:
+                    fp.write(data)
+                    img, maxval = imgio.imread(fp.name, verbose=True)
+            img = np.atleast_3d(img)  # {2D, 3D} => 3D
+            img = img[:, :, :3]  # scrap alpha channel, if any
+            if maxval != 255:  # if not uint8, convert to fp32
+                img = img.astype(np.float32, copy=False)
+                norm = max(maxval, np.max(img))
+                img = img / norm
+            return img
+        except imgio.ImageIOError as e:
+            print(f"\n{e}")
+            self._vprint(e)
+            return "INVALID"
 
     def _try(self, func):
         try:
