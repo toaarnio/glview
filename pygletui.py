@@ -35,6 +35,7 @@ class PygletUI(object):
         self.renderer = renderer
         self.running = True
         self.ui_thread = threading.Thread(target=lambda: self._try(self._pyglet_runner), name=self.thread_name)
+        self.ui_thread.daemon = True  # terminate when main process ends
         self.ui_thread.start()
 
 

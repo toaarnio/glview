@@ -17,17 +17,21 @@ class ImageProviderMT(object):
         self.loader_thread = None
         self.running = False
 
+
     def start(self):
         self._vprint(f"spawning {self.thread_name}...")
         self.running = True
         self.loader_thread = threading.Thread(target=lambda: self._try(self._image_loader), name=self.thread_name)
+        self.loader_thread.daemon = True  # terminate when main process ends
         self.loader_thread.start()
+
 
     def stop(self):
         self._vprint(f"killing {self.thread_name}...")
         self.running = False
         self.loader_thread.join()
         self._vprint(f"{self.thread_name} killed")
+
 
     def load_image(self, index):
         if self.files.is_video[index]:
@@ -38,8 +42,10 @@ class ImageProviderMT(object):
                 raise RuntimeError("ImageProvider terminated, cannot load images anymore.")
         return self.files.images[index]
 
+
     def release_image(self, index):
         self.files.images[index] = "RELEASED"
+
 
     def _image_loader(self):
         ram_total = psutil.virtual_memory().total / 1024**2
@@ -74,6 +80,7 @@ class ImageProviderMT(object):
                 print(f"[ImageProvider] consumed {consumed:.0f} MB of system RAM, {ram_after:.0f}/{ram_total:.0f} MB remaining.")
             time.sleep(0.1)
 
+
     def _load_single(self, idx):
         """
         Read image, drop alpha channel, convert to fp32 if maxval != 255;
@@ -101,6 +108,7 @@ class ImageProviderMT(object):
             self._vprint(e)
             return "INVALID"
 
+
     def _try(self, func):
         try:
             func()
@@ -112,6 +120,7 @@ class ImageProviderMT(object):
                 traceback.print_exc()
             else:
                 print(f"[{self.__class__.__name__}/{threading.current_thread().name}] {type(e).__name__}: {e}")
+
 
     def _vprint(self, message, **kwargs):
         if self.verbose:

@@ -130,7 +130,7 @@ def main_loop(modules):
             time.sleep(0.1)
     except (KeyboardInterrupt, SystemExit):
         print("Ctrl+C pressed, terminating...")
-        # TODO: kill UIThread cleanly
+        sys.exit(-1)
 
 
 def enforce(expression, messageIfFalse):
