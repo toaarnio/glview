@@ -62,7 +62,6 @@ class GLRenderer(object):
         dtype = f"f{img.itemsize}"  # uint8 => 'f1', float16 => 'f2', float32 => 'f4'
         components = img.shape[2] if img.ndim == 3 else 1  # RGB/RGBA/grayscale
         texture = self.ctx.texture((w, h), components, img.ravel(), dtype=dtype)
-        texture.build_mipmaps()
         return texture
 
     def create_empty_texture(self):
@@ -83,6 +82,8 @@ class GLRenderer(object):
                 self.files.textures[idx] = self.create_empty_texture()
             else:
                 self.files.textures[idx] = self.create_texture(img)
+        if self.ui.texture_filter != "NEAREST":
+            self.files.textures[idx].build_mipmaps()
         return self.files.textures[idx]
 
     def redraw(self):

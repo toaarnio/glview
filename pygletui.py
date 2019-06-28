@@ -24,7 +24,7 @@ class PygletUI(object):
         self.fullscreen = False
         self.ui_thread = None
         self.event_loop = None
-        self.texture_filter = "LINEAR"
+        self.texture_filter = "NEAREST"
         self.imgPerTile = [0, 0, 0, 0]
         self.gamma = False
         self.ev = 0
