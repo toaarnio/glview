@@ -11,6 +11,7 @@ import sys                     # built-in library
 import os                      # built-in library
 import time                    # built-in library
 import threading               # built-in library
+import psutil                  # pip install psutil
 
 import argv                    # local import
 import pygletui                # local import
@@ -126,11 +127,18 @@ def main():
 
 def main_loop(modules):
     try:
+        ram_minimum = 1024  # exit if available RAM drops below 1 GB
         while all([m.running for m in modules]):
+            ram_available = psutil.virtual_memory().available / 1024**2
+            if ram_available < ram_minimum:
+                print("Error: Out of memory. Try loading fewer images next time.")
+                break
             time.sleep(0.1)
     except (KeyboardInterrupt, SystemExit):
         print("Ctrl+C pressed, terminating...")
         sys.exit(-1)
+    finally:
+        sys.exit()
 
 
 def enforce(expression, messageIfFalse):

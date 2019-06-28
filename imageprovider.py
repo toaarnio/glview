@@ -50,16 +50,11 @@ class ImageProviderMT(object):
     def _image_loader(self):
         ram_total = psutil.virtual_memory().total / 1024**2
         ram_before = psutil.virtual_memory().available / 1024**2
-        ram_limit = 0.50 * ram_before  # use max 50% of available RAM
         while self.running:  # loop until program termination
             idx = 0
             nbytes = 0
             t0 = time.time()
             while self.running:  # load all files
-                ram_available = psutil.virtual_memory().available / 1024**2
-                if ram_available < ram_limit:
-                    time.sleep(0.1)
-                    break
                 with self.files.mutex:  # avoid race conditions
                     if idx < self.files.numfiles:
                         if self.files.images[idx] is None and not self.files.is_video[idx]:
