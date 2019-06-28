@@ -98,10 +98,10 @@ class ImageProviderMT(object):
                     img, maxval = imgio.imread(fp.name, verbose=True)
             img = np.atleast_3d(img)  # {2D, 3D} => 3D
             img = img[:, :, :3]  # scrap alpha channel, if any
-            if maxval != 255:  # if not uint8, convert to fp32
-                img = img.astype(np.float32, copy=False)
+            if maxval != 255:  # if not uint8, convert to fp16 (due to ModernGL limitations)
                 norm = max(maxval, np.max(img))
-                img = img / norm
+                img = img.astype(np.float32) / norm
+                img = img.astype(np.float16)
             return img
         except imgio.ImageIOError as e:
             print(f"\n{e}")

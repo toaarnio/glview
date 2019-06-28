@@ -48,15 +48,18 @@ class GLRenderer(object):
         _ = self.ctx.error  # clear the GL error flag (workaround for a bug that prevents interoperability with Pyglet)
 
     def create_texture(self, img):
-        # ModernGL texture dtypes:
-        #   'f1': fp8 internal format, u8 input
-        #   'f2': fp16 internal format, fp16 input
-        #   'f4': fp32 internal format, fp32 input
-        #   'u1': u8 internal format, u8 input
-        #   'u2': u16 internal format, u16 input
-        #   'u4': u32 internal format, u32 input
+        # ModernGL texture dtypes that actually work:
+        #   'f1': fixed-point [0, 1] internal format (GL_RGB8), uint8 input
+        #   'f2': fixed-point [0, 1] internal format (GL_RGB16F), float16 input in [0, 1]
+        #   'f4': fixed-point [0, 1] internal format (GL_RGB32F), float32 input in [0, 1]
+        #
+        # dtypes yielding constant zero in fragment shader (as of ModernGL 5.5.2):
+        #   'u1': integer [0, 255] internal format (GL_RGB8UI), uint8 input
+        #   'u2': integer [0, 65535] internal format (GL_RGB16UI), uint16 input
+        #   'u4': integer [0, 2^32-1] internal format (GL_RGB32UI), uint32 input
+        #
         h, w = img.shape[:2]
-        dtype = f"f{img.itemsize}"  # u8 => 'f1', fp16 => 'f2', fp32 => 'f4'
+        dtype = f"f{img.itemsize}"  # uint8 => 'f1', float16 => 'f2', float32 => 'f4'
         components = img.shape[2] if img.ndim == 3 else 1  # RGB/RGBA/grayscale
         texture = self.ctx.texture((w, h), components, img.ravel(), dtype=dtype)
         texture.build_mipmaps()
