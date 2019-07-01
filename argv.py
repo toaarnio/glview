@@ -136,8 +136,7 @@ def floatstring(argname, default=None, accepted=None):
         except ValueError:
             if _isValid(argname, argstr, accepted):
                 return argstr
-            else:
-                sys.exit(-1)
+            sys.exit(-1)
     else:
         return default
 

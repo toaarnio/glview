@@ -5,7 +5,7 @@ import pyglet                  # pip install pyglet
 import piexif                  # pip install piexif
 
 
-class PygletUI(object):
+class PygletUI:
 
     def __init__(self, files, numtiles, verbose=False):
         self.thread_name = "UIThread"
@@ -24,6 +24,7 @@ class PygletUI(object):
         self.fullscreen = False
         self.ui_thread = None
         self.event_loop = None
+        self.renderer = None
         self.texture_filter = "NEAREST"
         self.imgPerTile = [0, 0, 0, 0]
         self.gamma = False
@@ -108,14 +109,14 @@ class PygletUI(object):
     def _print_exif(self, filespec):
         try:
             exif_all = piexif.load(filespec)
-            exif_tags = {tag: name for name, tag in piexif.ExifIFD.__dict__.items() if type(tag) == int}
-            image_tags = {tag: name for name, tag in piexif.ImageIFD.__dict__.items() if type(tag) == int}
+            exif_tags = {tag: name for name, tag in piexif.ExifIFD.__dict__.items() if isinstance(tag, int)}
+            image_tags = {tag: name for name, tag in piexif.ImageIFD.__dict__.items() if isinstance(tag, int)}
             exif_dict = {exif_tags[name]: val for name, val in exif_all.pop("Exif").items()}
             image_dict = {image_tags[name]: val for name, val in exif_all.pop("0th").items()}
             merged_dict = {**exif_dict, **image_dict}
             print(f"EXIF data for {filespec}:")
             pprint.pprint(merged_dict)
-        except piexif._exceptions.InvalidImageDataError as e:
+        except piexif.InvalidImageDataError as e:
             print(f"Failed to extract EXIF metadata from {filespec}: {e}")
 
 
@@ -229,7 +230,7 @@ class PygletUI(object):
     def _try(self, func):
         try:
             func()
-        except Exception as e:
+        except Exception as e:  # pylint: disable=broad-except
             self.running = False
             self.event_loop.has_exit = True
             if self.verbose:

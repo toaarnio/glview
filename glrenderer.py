@@ -3,11 +3,10 @@ import time                    # built-in library
 import struct                  # built-in library
 import threading               # built-in library
 import numpy as np             # pip install numpy
-import psutil                  # pip install psutil
 import moderngl                # pip install moderngl
 
 
-class GLRenderer(object):
+class GLRenderer:
 
     filter_nearest = (moderngl.NEAREST, moderngl.NEAREST)
     filter_linear = (moderngl.LINEAR_MIPMAP_LINEAR, moderngl.LINEAR)
@@ -23,11 +22,13 @@ class GLRenderer(object):
         self.files = files          # <FileList> Image files + metadata
         self.ctx = None             # <Context> OpenGL rendering context
         self.prog = None            # <Program> image renderer with zoom & pan
-        self.vao = None             # <VertexArray> planar surface
-        self.texture_filter = None  # filter_nearest or filter_linear
-        self.tile_colors = self.tile_debug_colors if verbose else self.tile_normal_colors
+        self.vbo = None             # <Buffer> xy vertex coords for 2D rectangle
+        self.vao = None             # <VertexArray> 2D rectangle vertices + shader
+        self.texture_filter = None  # filter_nearest' or filter_linear
         self.running = None
         self.render_thread = None
+        self.tPrev = None
+        self.tile_colors = self.tile_debug_colors if verbose else self.tile_normal_colors
 
     def init(self):
         # OpenGL window must already exist and be owned by this thread

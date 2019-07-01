@@ -8,7 +8,7 @@ import psutil                  # pip install psutil
 import imgio                   # pip install imgio
 
 
-class ImageProviderMT(object):
+class ImageProviderMT:
 
 
     def __init__(self, files, verbose=False):
@@ -59,7 +59,7 @@ class ImageProviderMT(object):
                         if self.files.images[idx] is None:
                             img = self._load_single(idx)
                             self.files.images[idx] = img
-                            nbytes += img.nbytes if type(img) == np.ndarray else 0
+                            nbytes += img.nbytes if isinstance(img, np.ndarray) else 0
                     else:
                         break
                 time.sleep(0.01)  # yield some CPU time to the UI thread
@@ -106,7 +106,7 @@ class ImageProviderMT(object):
     def _try(self, func):
         try:
             func()
-        except Exception as e:
+        except Exception as e:  # pylint: disable=broad-except
             self.running = False
             if self.verbose:
                 import traceback
