@@ -20,23 +20,18 @@ import imageprovider           # local import
 
 
 IMAGE_TYPES = [".pgm", ".ppm", ".pnm", ".pfm", ".png", ".jpg", ".jpeg", ".tif", ".tiff", ".insp"]
-VIDEO_TYPES = [".mp4", ".insv"]
 
 
-class FileList(object):
+class FileList:
 
-    def __init__(self, filespecs, verbose=False):
+    def __init__(self, filespecs):
         self.mutex = threading.Lock()
-        self.verbose = verbose
         self.filespecs = filespecs
         self.numfiles = len(filespecs)
         self.orientations = [0] * self.numfiles
         self.images = [None] * self.numfiles
         self.textures = [None] * self.numfiles
-        self.extensions = [None] * self.numfiles
         self.is_url = [None] * self.numfiles
-        self.is_rtsp = [None] * self.numfiles
-        self.is_video = [None] * self.numfiles
         self._update()
 
     def remove(self, idx):
@@ -54,28 +49,20 @@ class FileList(object):
 
     def _update(self):
         self.numfiles = len(self.filespecs)
-        self.extensions = [os.path.splitext(f)[1].lower() for f in self.filespecs]
         self.is_url = ["://" in f for f in self.filespecs]
-        self.is_rtsp = ["rtsp://" in f for f in self.filespecs]
-        self.is_video = [(ext in VIDEO_TYPES) for ext in self.extensions]
-        self.is_video = [(v or r) for (v, r) in zip(self.is_video, self.is_rtsp)]
 
 
 def main():
     numtiles = argv.intval("--split", default=1, accepted=[1, 2, 3, 4])
-    raw_width, raw_height = argv.intpair("--size", default=(None, None))
-    raw_bpp = argv.intval("--bpp", default=None, accepted=[8, 10, 12, 14, 16])
     url = argv.stringval("--url", default=None)
     verbose = argv.exists("--verbose")
     show_help = argv.exists("--help")
     argv.exitIfAnyUnparsedOptions()
     if show_help:
-        print("Usage: glview [options] [image.(pgm|ppm|pnm|png|jpg|insp|raw|mp4|insv)] ...")
+        print("Usage: glview [options] [image.(pgm|ppm|pnm|png|jpg|..)] ...")
         print()
         print("  options:")
         print("    --split 1|2|3|4     display images in N separate tiles")
-        print("    --size W H          input image size in pixels (.RAW only)")
-        print("    --bpp N             input image bits per pixel (.RAW only)")
         print("    --url <address>     load image from the given web address")
         print("    --verbose           print extra traces to the console")
         print("    --help              show this help message")
@@ -103,19 +90,12 @@ def main():
         print("See 'glview --help' for command-line options and keyboard commands.")
 
     filepatterns = sys.argv[1:] or url or ["*"]
-    rawfiles, _ = argv.filenames(filepatterns, [".raw"], sort=True, allowAllCaps=True)
-    use_raw = len(rawfiles) > 0
-    use_raw = use_raw and not warn(use_raw and not raw_bpp, "'--bpp N' not provided, ignoring all .RAW images.")
-    use_raw = use_raw and not warn(use_raw and not raw_width, "'--size M N' not provided, ignoring all .RAW images.")
-    extensions = IMAGE_TYPES  # TODO: add support for VIDEO_TYPES
-    extensions += [".raw"] if use_raw else []
-    filenames, _ = argv.filenames(filepatterns, extensions, sort=True, allowAllCaps=True)
+    filenames, _ = argv.filenames(filepatterns, IMAGE_TYPES, sort=True, allowAllCaps=True)
     filenames += [url] if url is not None else []
     numfiles = len(filenames)
     enforce(numfiles > 0, "No valid images to show. Terminating.")
-    enforce(not use_raw, "Bayer RAW is not yet supported. Terminating.")
 
-    files = FileList(filenames, verbose)
+    files = FileList(filenames)
     ui = pygletui.PygletUI(files, numtiles, verbose)
     loader = imageprovider.ImageProviderMT(files, verbose)
     renderer = glrenderer.GLRenderer(ui, files, loader, verbose)

@@ -35,8 +35,6 @@ class ImageProviderMT(object):
 
 
     def load_image(self, index):
-        if self.files.is_video[index]:
-            raise RuntimeError("File {} is not an image.".format(self.files.filespecs[index]))
         while self.files.images[index] is None:
             time.sleep(0.01)
             if not self.running:
@@ -58,7 +56,7 @@ class ImageProviderMT(object):
             while self.running:  # load all files
                 with self.files.mutex:  # avoid race conditions
                     if idx < self.files.numfiles:
-                        if self.files.images[idx] is None and not self.files.is_video[idx]:
+                        if self.files.images[idx] is None:
                             img = self._load_single(idx)
                             self.files.images[idx] = img
                             nbytes += img.nbytes if type(img) == np.ndarray else 0
