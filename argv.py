@@ -19,6 +19,7 @@ import unittest                   # standard library
 #
 ######################################################################################
 
+
 def filenames(patterns, extensions=None, sort=False, allowAllCaps=False):
     """
     Examples:
@@ -36,6 +37,7 @@ def filenames(patterns, extensions=None, sort=False, allowAllCaps=False):
     basenames = [os.path.splitext(f)[0] for f in fullnames]                         # strip extensions
     return fullnames, basenames
 
+
 def exists(argname):
     """
     Example:
@@ -47,6 +49,7 @@ def exists(argname):
         return True
     return False
 
+
 def intval(argname, default=None, accepted=None, condition=None):
     """
     Example:
@@ -55,12 +58,13 @@ def intval(argname, default=None, accepted=None, condition=None):
     argstr = _string(argname)
     useDefault = argstr is None
     if not useDefault:
-        errmsg = "Invalid value for '%s': '%s' does not represent an integer."%(argname, argstr)
+        errmsg = f"Invalid value for '{argname}': '{argstr}' does not represent an integer."
         _enforce(_isInt(argstr), errmsg)
         argval = int(argstr, 0)  # hex values must have the "0x" prefix for this to work
         if not _isValid(argname, argval, accepted, condition):
             sys.exit(-1)
     return default if useDefault else argval
+
 
 def floatval(argname, default=None, accepted=None, condition=None):
     """
@@ -70,11 +74,12 @@ def floatval(argname, default=None, accepted=None, condition=None):
     argstr = _string(argname)
     useDefault = argstr is None
     if not useDefault:
-        errmsg = "Invalid value for '%s': '%s' does not represent a number."%(argname, argstr)
+        errmsg = f"Invalid value for '{argname}': '{argstr}' does not represent a number."
         _enforce(_isFloat(argstr), errmsg)
         if not _isValid(argname, float(argstr), accepted, condition):
             sys.exit(-1)
     return default if useDefault else float(argstr)
+
 
 def stringval(argname, default=None, accepted=None, condition=None):
     """
@@ -87,6 +92,7 @@ def stringval(argname, default=None, accepted=None, condition=None):
         if not _isValid(argname, argstr, accepted, condition):
             sys.exit(-1)
     return default if useDefault else argstr
+
 
 def intpair(argname, default=None):
     """
@@ -101,6 +107,7 @@ def intpair(argname, default=None):
         return (val1, val2)
     return default
 
+
 def floatpair(argname, default=None):
     """
     Example:
@@ -113,6 +120,7 @@ def floatpair(argname, default=None):
         del sys.argv[argidx:argidx + 3]
         return (val1, val2)
     return default
+
 
 def floatstring(argname, default=None, accepted=None):
     """
@@ -133,6 +141,7 @@ def floatstring(argname, default=None, accepted=None):
     else:
         return default
 
+
 def exitIfAnyUnparsedOptions():
     """
     Example:
@@ -143,8 +152,9 @@ def exitIfAnyUnparsedOptions():
     isOptionArg = ["--" in arg for arg in sys.argv]
     if any(isOptionArg):
         argname = sys.argv[isOptionArg.index(True)]
-        print("Unrecognized command-line option: %s"%(argname))
+        print(f"Unrecognized command-line option: {argname}")
         sys.exit(-1)
+
 
 ######################################################################################
 #
@@ -158,6 +168,7 @@ def _enforce(expression, errorMessageIfFalse):
         print(errorMessageIfFalse)
         sys.exit(-1)
 
+
 def _string(argname, default=None):
     """ Parses arguments of the form '--argname string', returns the string. """
     if argname in sys.argv:
@@ -167,6 +178,7 @@ def _string(argname, default=None):
         return argstr
     return default
 
+
 def _isInt(argstr):
     """ Returns True if and only if the given string represents an integer. """
     try:
@@ -174,6 +186,7 @@ def _isInt(argstr):
         return True
     except (ValueError, TypeError):
         return False
+
 
 def _isFloat(argstr):
     """ Returns True if and only if the given string represents a float. """
@@ -183,18 +196,20 @@ def _isFloat(argstr):
     except ValueError:
         return False
 
+
 def _isValid(argname, arg, validArgs=None, condition=None):
     """ Checks that 'arg' is in validArgs and satisfies the given condition. """
     if validArgs is not None:
         if arg not in validArgs:
-            print("Invalid value for '%s': '%s' is not in the set %s."%(argname, arg, validArgs))
+            print(f"Invalid value for '{argname}': '{arg}' is not in the set {validArgs}.")
             return False
     if condition is not None:
-        validator = eval("lambda v: %s"%(condition))  # pylint: disable=eval-used
+        validator = eval("lambda v: {condition}")  # pylint: disable=eval-used
         if validator(arg) is not True:
-            print("Invalid value for '%s': '%s' does not satisfy '%s'."%(argname, arg, condition))
+            print(f"Invalid value for '{argname}': '{arg}' does not satisfy '{condition}'.")
             return False
     return True
+
 
 ######################################################################################
 #
@@ -256,10 +271,12 @@ class _Tests(unittest.TestCase):
         self.assertRaises(SystemExit, lambda: stringval("--str2", condition="len(v) > 4"))
         exitIfAnyUnparsedOptions()
 
+
 def __main():
     print("--" * 35)
     suite = unittest.TestLoader().loadTestsFromTestCase(_Tests)
     unittest.TextTestRunner(verbosity=0).run(suite)
+
 
 if __name__ == "__main__":
     __main()

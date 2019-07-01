@@ -10,6 +10,7 @@ import imgio                   # pip install imgio
 
 class ImageProviderMT(object):
 
+
     def __init__(self, files, verbose=False):
         self.thread_name = "ImageProviderThread"
         self.verbose = verbose
@@ -71,8 +72,8 @@ class ImageProviderMT(object):
                 bandwidth = nbytes / elapsed
                 ram_after = psutil.virtual_memory().available / 1024**2
                 consumed = ram_before - ram_after
-                print(f"[ImageProvider] loaded {nbytes:.0f} MB of image data in {elapsed:.1f} seconds ({bandwidth:.1f} MB/sec).")
-                print(f"[ImageProvider] consumed {consumed:.0f} MB of system RAM, {ram_after:.0f}/{ram_total:.0f} MB remaining.")
+                self._print(f"loaded {nbytes:.0f} MB of image data in {elapsed:.1f} seconds ({bandwidth:.1f} MB/sec).")
+                self._print(f"consumed {consumed:.0f} MB of system RAM, {ram_after:.0f}/{ram_total:.0f} MB remaining.")
             time.sleep(0.1)
 
 
@@ -114,9 +115,16 @@ class ImageProviderMT(object):
                 self._vprint(f"exception in {func.__name__}():")
                 traceback.print_exc()
             else:
-                print(f"[{self.__class__.__name__}/{threading.current_thread().name}] {type(e).__name__}: {e}")
+                self._print(f"{type(e).__name__}: {e}")
+
+
+    def _print(self, message, **kwargs):
+        verbose, self.verbose = self.verbose, True
+        self._vprint(message, **kwargs)
+        self.verbose = verbose
 
 
     def _vprint(self, message, **kwargs):
         if self.verbose:
-            print(f"[{self.__class__.__name__}/{threading.current_thread().name}] {message}", **kwargs)
+            prefix = f"[{self.__class__.__name__}/{threading.current_thread().name}]"
+            print(f"{prefix} {message}", **kwargs)

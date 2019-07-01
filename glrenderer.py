@@ -11,9 +11,9 @@ class GLRenderer(object):
 
     filter_nearest = (moderngl.NEAREST, moderngl.NEAREST)
     filter_linear = (moderngl.LINEAR_MIPMAP_LINEAR, moderngl.LINEAR)
-    filters = { "LINEAR": filter_linear, "NEAREST": filter_nearest }
-    tile_debug_colors = [ 0xE0BBE4, 0x957DAD, 0xD291BC, 0xFEC8D8 ]  # pastel shades
-    tile_normal_colors = [ 0, 0, 0, 0 ]
+    filters = {"LINEAR": filter_linear, "NEAREST": filter_nearest}
+    tile_debug_colors = [0xE0BBE4, 0x957DAD, 0xD291BC, 0xFEC8D8]  # pastel shades
+    tile_normal_colors = [0, 0, 0, 0]
 
     def __init__(self, ui, files, loader, verbose=False):
         self.thread_name = "RenderThread"
@@ -116,8 +116,7 @@ class GLRenderer(object):
             elapsed = (time.time() - t0) * 1000
             interval = (time.time() - self.tPrev) * 1000
             self.tPrev = time.time()
-            #self._vprint("available physical memory: {:.1f}M".format(psutil.virtual_memory().available / 1024**2))
-            #self._vprint(f"rendering took {elapsed:.1f} ms, frame-to-frame interval was {interval:.1f} ms")
+            self._vprint(f"rendering took {elapsed:.1f} ms, frame-to-frame interval was {interval:.1f} ms")
         return elapsed
 
     def _get_mousepos(self, tilew, tileh, imgw, imgh):

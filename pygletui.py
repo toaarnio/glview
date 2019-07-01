@@ -108,11 +108,11 @@ class PygletUI(object):
     def _print_exif(self, filespec):
         try:
             exif_all = piexif.load(filespec)
-            exif_tags = { tag: name for name, tag in piexif.ExifIFD.__dict__.items() if type(tag) == int }
-            image_tags = { tag: name for name, tag in piexif.ImageIFD.__dict__.items() if type(tag) == int }
-            exif_dict = { exif_tags[name]: val for name, val in exif_all.pop("Exif").items() }
-            image_dict = { image_tags[name]: val for name, val in exif_all.pop("0th").items() }
-            merged_dict = { **exif_dict, **image_dict }
+            exif_tags = {tag: name for name, tag in piexif.ExifIFD.__dict__.items() if type(tag) == int}
+            image_tags = {tag: name for name, tag in piexif.ImageIFD.__dict__.items() if type(tag) == int}
+            exif_dict = {exif_tags[name]: val for name, val in exif_all.pop("Exif").items()}
+            image_dict = {image_tags[name]: val for name, val in exif_all.pop("0th").items()}
+            merged_dict = {**exif_dict, **image_dict}
             print(f"EXIF data for {filespec}:")
             pprint.pprint(merged_dict)
         except piexif._exceptions.InvalidImageDataError as e:
