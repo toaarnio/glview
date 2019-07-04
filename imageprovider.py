@@ -5,6 +5,7 @@ import urllib.request          # built-in library
 import tempfile                # built-in library
 import numpy as np             # pip install numpy
 import psutil                  # pip install psutil
+import imsize                  # pip install imsize
 import imgio                   # pip install imgio
 
 
@@ -17,7 +18,7 @@ class ImageProviderMT:
         self.files = files
         self.loader_thread = None
         self.running = False
-
+        self.estimate_size()
 
     def start(self):
         self._vprint(f"spawning {self.thread_name}...")
@@ -32,6 +33,21 @@ class ImageProviderMT:
         self.running = False
         self.loader_thread.join()
         self._vprint(f"{self.thread_name} killed")
+
+
+    def estimate_size(self):
+        size_on_disk = 0
+        size_in_mem = 0
+        if len(self.files.filespecs) > 100:
+            print(f"Scanning images & estimating memory consumption...")
+        for filespec in self.files.filespecs:
+            if "://" not in filespec:
+                info = imsize.read(filespec)
+                size_on_disk += info.filesize
+                size_in_mem += info.nbytes
+        size_on_disk /= 1024 ** 2
+        size_in_mem /= 1024 ** 2
+        print(f"Found {self.files.numfiles} images, consuming {size_on_disk:.0f} MB on disk, {size_in_mem:.0f} MB in memory.")
 
 
     def load_image(self, index):
