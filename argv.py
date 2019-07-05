@@ -203,7 +203,7 @@ def _isValid(argname, arg, validArgs=None, condition=None):
             print(f"Invalid value for '{argname}': '{arg}' is not in the set {validArgs}.")
             return False
     if condition is not None:
-        validator = eval("lambda v: {condition}")  # pylint: disable=eval-used
+        validator = eval(f"lambda v: {condition}")  # pylint: disable=eval-used
         if validator(arg) is not True:
             print(f"Invalid value for '{argname}': '{arg}' does not satisfy '{condition}'.")
             return False
