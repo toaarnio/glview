@@ -55,6 +55,7 @@ class FileList:
 def main():
     numtiles = argv.intval("--split", default=1, accepted=[1, 2, 3, 4])
     url = argv.stringval("--url", default=None)
+    smooth = argv.exists("--filter")
     verbose = argv.exists("--verbose")
     show_help = argv.exists("--help")
     argv.exitIfAnyUnparsedOptions()
@@ -64,6 +65,7 @@ def main():
         print("  options:")
         print("    --split 1|2|3|4     display images in N separate tiles")
         print("    --url <address>     load image from the given web address")
+        print("    --filter            use linear filtering; default = nearest")
         print("    --verbose           print extra traces to the console")
         print("    --help              show this help message")
         print()
@@ -99,6 +101,7 @@ def main():
     ui = pygletui.PygletUI(files, numtiles, verbose)
     loader = imageprovider.ImageProviderMT(files, verbose)
     renderer = glrenderer.GLRenderer(ui, files, loader, verbose)
+    ui.texture_filter = "LINEAR" if smooth else "NEAREST"
     ui.start(renderer)
     loader.start()
     main_loop([ui, loader])
