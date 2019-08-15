@@ -200,7 +200,7 @@ class PygletUI:
                     imgidx = self.imgPerTile[self.tileidx]
                     filespec = self.files.filespecs[imgidx]
                     self._print_exif(filespec)
-                if symbol == keys.D:  # delete file, but not in split-screen mode
+                if symbol == keys.DELETE:  # delete file, but not in split-screen mode
                     if self.numtiles == 1:
                         imgidx = self.imgPerTile[self.tileidx]
                         self.files.remove(imgidx)
