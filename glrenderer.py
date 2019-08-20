@@ -44,7 +44,7 @@ class GLRenderer:
         self.prog['orientation'].value = 0
         self.prog['mousepos'].value = (0.0, 0.0)
         self.vbo = self.ctx.buffer(struct.pack('8f', -1.0, -1.0, -1.0, 1.0, 1.0, -1.0, 1.0, 1.0))
-        self.vao = self.ctx.simple_vertex_array(self.prog, self.vbo, 'vert')
+        self.vao = self.ctx.vertex_array(self.prog, [(self.vbo, "2f", "vert")])
         self.tPrev = time.time()
         _ = self.ctx.error  # clear the GL error flag (workaround for a bug that prevents interoperability with Pyglet)
 
