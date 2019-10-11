@@ -105,7 +105,7 @@ class GLRenderer:
                 vpx, vpy, vpw, vph = self.ui.viewports[i]
                 self.ctx.viewport = self.ui.viewports[i]
                 self.ctx.clear(*tile_colors[i], viewport=self.ctx.viewport)
-                self.prog['mousepos'].value = self._get_mousepos(vpw, vph, texw, texh)
+                self.prog['mousepos'].value = tuple(self.ui.mousepos)
                 self.prog['orientation'].value = orientation
                 self.prog['aspect'].value = self._get_aspect_ratio(vpw, vph, texw, texh)
                 self.prog['scale'].value = self.ui.scale
@@ -119,16 +119,6 @@ class GLRenderer:
             self.tPrev = time.time()
             self._vprint(f"rendering took {elapsed:.1f} ms, frame-to-frame interval was {interval:.1f} ms")
         return elapsed
-
-    def _get_mousepos(self, tilew, tileh, imgw, imgh):
-        xscale, yscale = self._get_aspect_ratio(tilew, tileh, imgw, imgh)
-        screenX, screenY = self.ui.mousepos
-        imgX = np.clip(screenX / imgw, -1.0 * xscale, 1.0 * xscale)
-        imgY = np.clip(screenY / imgh, -1.0 * yscale, 1.0 * yscale)
-        screenX = imgX * imgw
-        screenY = imgY * imgh
-        self.ui.mousepos = (screenX, screenY)
-        return imgX, imgY
 
     def _get_aspect_ratio(self, vpw, vph, texw, texh):
         vpAspect = vpw / vph

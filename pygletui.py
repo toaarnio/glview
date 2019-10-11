@@ -3,6 +3,8 @@ import threading               # built-in library
 import pprint                  # built-in library
 import pyglet                  # pip install pyglet
 import piexif                  # pip install piexif
+import numpy as np             # pip install numpy
+import imsize                  # pip install imsize
 
 
 class PygletUI:
@@ -18,8 +20,9 @@ class PygletUI:
         self.winsize = None
         self.tileidx = 0
         self.scale = 1.0
-        self.mousepos = (0, 0)
+        self.mousepos = np.zeros(2)  # always scaled & clipped to [0, 1] x [0, 1]
         self.mouse_speed = 4.0
+        self.mouse_canvas_width = 1000
         self.viewports = None
         self.fullscreen = False
         self.ui_thread = None
@@ -147,11 +150,11 @@ class PygletUI:
         @self.window.event
         def on_mouse_drag(x, y, dx, dy, buttons, modifiers):
             if buttons & pyglet.window.mouse.LEFT:
-                screenX, screenY = self.mousepos
-                ooScale = 1.0 / self.scale
-                screenX += dx * self.mouse_speed * ooScale
-                screenY += dy * self.mouse_speed * ooScale
-                self.mousepos = (screenX, screenY)
+                dxdy = np.array((dx, dy))
+                dxdy = dxdy * self.mouse_speed
+                dxdy = dxdy / self.scale
+                dxdy = dxdy / self.mouse_canvas_width
+                self.mousepos = np.clip(self.mousepos + dxdy, -1.0, 1.0)
 
         @self.window.event
         def on_mouse_scroll(x, y, scroll_x, scroll_y):
@@ -199,6 +202,8 @@ class PygletUI:
                 if symbol == keys.I:  # image info
                     imgidx = self.imgPerTile[self.tileidx]
                     filespec = self.files.filespecs[imgidx]
+                    fileinfo = imsize.read(filespec)
+                    print(fileinfo)
                     self._print_exif(filespec)
                 if symbol == keys.DELETE:  # delete file, but not in split-screen mode
                     if self.numtiles == 1:
