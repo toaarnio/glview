@@ -51,10 +51,6 @@ class ImageProviderMT:
 
 
     def load_image(self, index):
-        while self.files.images[index] is None:
-            time.sleep(0.01)
-            if not self.running:
-                raise RuntimeError("ImageProvider terminated, cannot load images anymore.")
         return self.files.images[index]
 
 
@@ -72,7 +68,7 @@ class ImageProviderMT:
             while self.running:  # load all files
                 with self.files.mutex:  # avoid race conditions
                     if idx < self.files.numfiles:
-                        if self.files.images[idx] is None:
+                        if isinstance(self.files.images[idx], str) and self.files.images[idx] == "PENDING":
                             img = self._load_single(idx)
                             self.files.images[idx] = img
                             nbytes += img.nbytes if isinstance(img, np.ndarray) else 0

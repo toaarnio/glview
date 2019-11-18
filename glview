@@ -29,8 +29,8 @@ class FileList:
         self.filespecs = filespecs
         self.numfiles = len(filespecs)
         self.orientations = [0] * self.numfiles
-        self.images = [None] * self.numfiles
-        self.textures = [None] * self.numfiles
+        self.images = ["PENDING"] * self.numfiles  # PENDING | RELEASED | INVALID
+        self.textures = [None] * self.numfiles     # None | <Texture>
         self.is_url = [None] * self.numfiles
         self._update()
 

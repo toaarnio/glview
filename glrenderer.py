@@ -65,9 +65,9 @@ class GLRenderer:
         texture = self.ctx.texture((w, h), components, img.ravel(), dtype=dtype)
         return texture
 
-    def create_empty_texture(self):
-        texture = self.ctx.texture((32, 32), 1, np.zeros((32, 32), dtype=np.uint8), dtype='f1')
-        return texture
+    def create_dummy_texture(self):
+        dummy = self.ctx.texture((32, 32), 3, np.random.random((32, 32, 3)).astype(np.float32), dtype='f4')
+        return dummy
 
     def update_texture(self, texture, img):
         # TODO: take this into use
@@ -76,16 +76,20 @@ class GLRenderer:
         return texture
 
     def load_texture(self, idx):
-        if self.files.textures[idx] is None:
-            img = self.loader.load_image(idx)
+        img = self.loader.load_image(idx)
+        assert isinstance(img, np.ndarray) or isinstance(img, str)
+        if isinstance(img, np.ndarray):  # success
+            texture = self.create_texture(img)
+            self.files.textures[idx] = texture
             self.loader.release_image(idx)
-            if isinstance(img, str) and img == "INVALID":
-                self.files.textures[idx] = self.create_empty_texture()
-            else:
-                self.files.textures[idx] = self.create_texture(img)
+        else:  # PENDING | INVALID | RELEASED
+            texture = self.files.textures[idx]
+            if texture is None:
+                texture = self.create_dummy_texture()
+                self.files.textures[idx] = texture
         if self.ui.texture_filter != "NEAREST":
-            self.files.textures[idx].build_mipmaps()
-        return self.files.textures[idx]
+            texture.build_mipmaps()
+        return texture
 
     def redraw(self):
         hex_to_rgb = lambda h: [h >> 16, (h >> 8) & 0xff, h & 0xff]
