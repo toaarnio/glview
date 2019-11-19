@@ -82,7 +82,7 @@ class PygletUI:
         for tileidx in range(self.numtiles):
             imgidx = self.imgPerTile[tileidx]
             basename = os.path.basename(self.files.filespecs[imgidx])
-            caption = f"{caption} | {basename}"
+            caption = f"{caption} | {basename} [{imgidx+1}/{self.files.numfiles}]"
         return caption
 
 
