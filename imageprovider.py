@@ -68,7 +68,7 @@ class ImageProviderMT:
             t0 = time.time()
             while self.running:  # load all files
                 ram_current = psutil.virtual_memory().available / 1024**2
-                if ram_current < 512:  # less than 512 MB remaining => stop loading
+                if ram_current < 2048:  # less than 2 GB remaining => stop loading
                     if not waiting_for_ram:
                         self._print(f"WARNING: Only {ram_current:.0f} MB of RAM remaining. Free up some memory to load more images.")
                         waiting_for_ram = True  # display the warning only once
