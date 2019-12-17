@@ -53,6 +53,7 @@ class FileList:
 
 
 def main():
+    fullscreen = argv.exists("--fullscreen")
     numtiles = argv.intval("--split", default=1, accepted=[1, 2, 3, 4])
     url = argv.stringval("--url", default=None)
     smooth = argv.exists("--filter")
@@ -63,6 +64,7 @@ def main():
         print("Usage: glview [options] [image.(pgm|ppm|pnm|png|jpg|..)] ...")
         print()
         print("  options:")
+        print("    --fullscreen        start in full-screen mode; default = windowed")
         print("    --split 1|2|3|4     display images in N separate tiles")
         print("    --url <address>     load image from the given web address")
         print("    --filter            use linear filtering; default = nearest")
@@ -98,7 +100,7 @@ def main():
     enforce(numfiles > 0, "No valid images to show. Terminating.")
 
     files = FileList(filenames)
-    ui = pygletui.PygletUI(files, numtiles, verbose)
+    ui = pygletui.PygletUI(files, fullscreen, numtiles, verbose)
     loader = imageprovider.ImageProviderMT(files, verbose)
     renderer = glrenderer.GLRenderer(ui, files, loader, verbose)
     ui.texture_filter = "LINEAR" if smooth else "NEAREST"

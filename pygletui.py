@@ -9,10 +9,11 @@ import imsize                  # pip install imsize
 
 class PygletUI:
 
-    def __init__(self, files, numtiles, verbose=False):
+    def __init__(self, files, fullscreen, numtiles, verbose=False):
         self.thread_name = "UIThread"
         self.verbose = verbose
         self.files = files
+        self.fullscreen = fullscreen
         self.numtiles = numtiles
         self.running = None
         self.window = None
@@ -24,12 +25,11 @@ class PygletUI:
         self.mouse_speed = 4.0
         self.mouse_canvas_width = 1000
         self.viewports = None
-        self.fullscreen = False
         self.ui_thread = None
         self.event_loop = None
         self.renderer = None
         self.texture_filter = "NEAREST"
-        self.imgPerTile = [0, 0, 0, 0]
+        self.imgPerTile = [0, 1, 2, 3]
         self.gamma = False
         self.ev = 0
 
@@ -72,6 +72,8 @@ class PygletUI:
         self.viewports = self._retile(self.numtiles, self.winsize)
         self.window = pyglet.window.Window(*self.winsize, resizable=True, vsync=False)
         self.window.set_caption(self._caption())
+        self.window.set_fullscreen(self.fullscreen)
+        self.window.set_mouse_visible(not self.fullscreen)
         self._setup_events()
         self._vprint("Pyglet & native OpenGL initialized")
 
