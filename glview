@@ -75,6 +75,7 @@ def main():
         print("    mouse wheel         zoom image; synchronized if multiple tiles")
         print("    mouse left + move   pan image; synchronized if multiple tiles")
         print("    PageUp / PageDown   cycle through images on active tile")
+        print("    left / right arrow  cycle through images on all tiles")
         print("    r                   rotate active tile 90 degrees clockwise")
         print("    s                   split window into 1/2/3/4 tiles")
         print("    1 / 2 / 3 / 4       select active tile for PageUp/PageDown/r")

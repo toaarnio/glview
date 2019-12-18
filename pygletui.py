@@ -233,6 +233,14 @@ class PygletUI:
                 imgidx = (imgidx + incr) % self.files.numfiles
                 self.imgPerTile[self.tileidx] = imgidx
                 self.window.set_caption(self._caption())
+            if motion in [keys.MOTION_LEFT, keys.MOTION_RIGHT]:
+                incr = 1 if motion == keys.MOTION_RIGHT else -1
+                incr *= self.numtiles
+                for i in range(self.numtiles):
+                    imgidx = self.imgPerTile[i]
+                    imgidx = (imgidx + incr) % self.files.numfiles
+                    self.imgPerTile[i] = imgidx
+                    self.window.set_caption(self._caption())
 
 
     def _try(self, func):
