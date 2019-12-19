@@ -7,6 +7,7 @@ import moderngl                # pip install moderngl
 
 
 class GLRenderer:
+    # pylint: disable=too-many-instance-attributes
 
     filter_nearest = (moderngl.NEAREST, moderngl.NEAREST)
     filter_linear = (moderngl.LINEAR_MIPMAP_LINEAR, moderngl.LINEAR)
@@ -27,7 +28,7 @@ class GLRenderer:
         self.texture_filter = None  # filter_nearest' or filter_linear
         self.running = None
         self.render_thread = None
-        self.tPrev = None
+        self.tprev = None
         self.tile_colors = self.tile_debug_colors if verbose else self.tile_normal_colors
 
     def init(self):
@@ -36,19 +37,52 @@ class GLRenderer:
         self.ctx = moderngl.create_context()
         self.ctx.enable(moderngl.DEPTH_TEST)
         self._vprint("compiling shaders...")
-        shaderPath = os.path.dirname(os.path.realpath(__file__))
-        vshader = open(os.path.join(shaderPath, 'panzoom.vs')).read()
-        fshader = open(os.path.join(shaderPath, 'texture.fs')).read()
+        shader_path = os.path.dirname(os.path.realpath(__file__))
+        vshader = open(os.path.join(shader_path, 'panzoom.vs')).read()
+        fshader = open(os.path.join(shader_path, 'texture.fs')).read()
         self.prog = self.ctx.program(vertex_shader=vshader, fragment_shader=fshader)
         self.prog['scale'].value = 1.0
         self.prog['orientation'].value = 0
         self.prog['mousepos'].value = (0.0, 0.0)
         self.vbo = self.ctx.buffer(struct.pack('8f', -1.0, -1.0, -1.0, 1.0, 1.0, -1.0, 1.0, 1.0))
         self.vao = self.ctx.vertex_array(self.prog, [(self.vbo, "2f", "vert")])
-        self.tPrev = time.time()
+        self.tprev = time.time()
         _ = self.ctx.error  # clear the GL error flag (workaround for a bug that prevents interoperability with Pyglet)
 
-    def create_texture(self, img):
+    def redraw(self):
+        # pylint: disable=too-many-locals
+        t0 = time.time()
+        hex_to_rgb = lambda h: [h >> 16, (h >> 8) & 0xff, h & 0xff]
+        tile_colors = [hex_to_rgb(hexrgb) for hexrgb in self.tile_colors]
+        tile_colors = np.array(tile_colors) / 255.0
+        for i in range(self.ui.numtiles):
+            imgidx = self.ui.img_per_tile[i]
+            texture = self._load_texture(imgidx)
+            texture.filter = self.filters[self.ui.texture_filter]
+            texture.swizzle = 'RGB1'
+            texture.use()
+            orientation = self.files.orientations[imgidx]
+            texw, texh = texture.width, texture.height
+            texw, texh = (texh, texw) if orientation in [90, 270] else (texw, texh)
+            _vpx, _vpy, vpw, vph = self.ui.viewports[i]
+            self.ctx.viewport = self.ui.viewports[i]
+            self.ctx.clear(*tile_colors[i], viewport=self.ctx.viewport)
+            self.prog['mousepos'].value = tuple(self.ui.mousepos)
+            self.prog['orientation'].value = orientation
+            self.prog['aspect'].value = self._get_aspect_ratio(vpw, vph, texw, texh)
+            self.prog['scale'].value = self.ui.scale
+            self.prog['grayscale'].value = (texture.components == 1)
+            self.prog['gamma'].value = self.ui.gamma
+            self.prog['ev'].value = self.ui.ev
+            self.vao.render(moderngl.TRIANGLE_STRIP)
+        self.ctx.finish()
+        elapsed = (time.time() - t0) * 1000
+        interval = (time.time() - self.tprev) * 1000
+        self.tprev = time.time()
+        self._vprint(f"rendering took {elapsed:.1f} ms, frame-to-frame interval was {interval:.1f} ms")
+        return elapsed
+
+    def _create_texture(self, img):
         # ModernGL texture dtypes that actually work:
         #   'f1': fixed-point [0, 1] internal format (GL_RGB8), uint8 input
         #   'f2': fixed-point [0, 1] internal format (GL_RGB16F), float16 input in [0, 1]
@@ -65,74 +99,43 @@ class GLRenderer:
         texture = self.ctx.texture((w, h), components, img.ravel(), dtype=dtype)
         return texture
 
-    def create_dummy_texture(self):
+    def _create_dummy_texture(self):
         dummy = self.ctx.texture((32, 32), 3, np.random.random((32, 32, 3)).astype(np.float32), dtype='f4')
         return dummy
 
-    def update_texture(self, texture, img):
+    def _update_texture(self, texture, img):
+        # pylint: disable=no-self-use
         # TODO: take this into use
         texture.write(img.ravel())
         texture.build_mipmaps()
         return texture
 
-    def load_texture(self, idx):
+    def _load_texture(self, idx):
         img = self.loader.load_image(idx)
-        assert isinstance(img, np.ndarray) or isinstance(img, str)
+        assert isinstance(img, (np.ndarray, str))
         if isinstance(img, np.ndarray):  # success
-            texture = self.create_texture(img)
+            texture = self._create_texture(img)
             self.files.textures[idx] = texture
             self.loader.release_image(idx)
         else:  # PENDING | INVALID | RELEASED
             texture = self.files.textures[idx]
             if texture is None:
-                texture = self.create_dummy_texture()
+                texture = self._create_dummy_texture()
                 self.files.textures[idx] = texture
         if self.ui.texture_filter != "NEAREST":
             texture.build_mipmaps()
         return texture
 
-    def redraw(self):
-        hex_to_rgb = lambda h: [h >> 16, (h >> 8) & 0xff, h & 0xff]
-        tile_colors = [hex_to_rgb(hexrgb) for hexrgb in self.tile_colors]
-        tile_colors = np.array(tile_colors) / 255.0
-        if True:
-            t0 = time.time()
-            for i in range(self.ui.numtiles):
-                imgidx = self.ui.imgPerTile[i]
-                texture = self.load_texture(imgidx)
-                texture.filter = self.filters[self.ui.texture_filter]
-                texture.swizzle = 'RGB1'
-                texture.use()
-                orientation = self.files.orientations[imgidx]
-                texw, texh = texture.width, texture.height
-                texw, texh = (texh, texw) if orientation in [90, 270] else (texw, texh)
-                vpx, vpy, vpw, vph = self.ui.viewports[i]
-                self.ctx.viewport = self.ui.viewports[i]
-                self.ctx.clear(*tile_colors[i], viewport=self.ctx.viewport)
-                self.prog['mousepos'].value = tuple(self.ui.mousepos)
-                self.prog['orientation'].value = orientation
-                self.prog['aspect'].value = self._get_aspect_ratio(vpw, vph, texw, texh)
-                self.prog['scale'].value = self.ui.scale
-                self.prog['grayscale'].value = (texture.components == 1)
-                self.prog['gamma'].value = self.ui.gamma
-                self.prog['ev'].value = self.ui.ev
-                self.vao.render(moderngl.TRIANGLE_STRIP)
-            self.ctx.finish()
-            elapsed = (time.time() - t0) * 1000
-            interval = (time.time() - self.tPrev) * 1000
-            self.tPrev = time.time()
-            self._vprint(f"rendering took {elapsed:.1f} ms, frame-to-frame interval was {interval:.1f} ms")
-        return elapsed
-
     def _get_aspect_ratio(self, vpw, vph, texw, texh):
-        vpAspect = vpw / vph
-        texAspect = texw / texh
-        if texAspect > vpAspect:
+        # pylint: disable=no-self-use
+        viewport_aspect = vpw / vph
+        texture_aspect = texw / texh
+        if texture_aspect > viewport_aspect:
             # image wider than window => squeeze y => black top & bottom
-            xscale, yscale = (1.0, vpAspect / texAspect)
+            xscale, yscale = (1.0, viewport_aspect / texture_aspect)
         else:
             # image narrower than window => squeeze x => black sides
-            xscale, yscale = (texAspect / vpAspect, 1.0)
+            xscale, yscale = (texture_aspect / viewport_aspect, 1.0)
         return xscale, yscale
 
     def _vprint(self, message):

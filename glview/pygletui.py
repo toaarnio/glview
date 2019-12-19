@@ -1,6 +1,7 @@
 import os                      # built-in library
 import threading               # built-in library
 import pprint                  # built-in library
+import traceback               # built-in library
 import pyglet                  # pip install pyglet
 import piexif                  # pip install piexif
 import numpy as np             # pip install numpy
@@ -8,6 +9,7 @@ import imsize                  # pip install imsize
 
 
 class PygletUI:
+    # pylint: disable=too-many-instance-attributes
 
     def __init__(self, files, fullscreen, numtiles, verbose=False):
         self.thread_name = "UIThread"
@@ -29,7 +31,7 @@ class PygletUI:
         self.event_loop = None
         self.renderer = None
         self.texture_filter = "NEAREST"
-        self.imgPerTile = [0, 1, 2, 3]
+        self.img_per_tile = [0, 1, 2, 3]
         self.gamma = False
         self.ev = 0
 
@@ -77,12 +79,14 @@ class PygletUI:
         fps = pyglet.clock.get_fps()
         caption = f"glview [{self.ev:+1.1f}EV | {fps:.1f} fps]"
         for tileidx in range(self.numtiles):
-            imgidx = self.imgPerTile[tileidx]
+            imgidx = self.img_per_tile[tileidx]
             basename = os.path.basename(self.files.filespecs[imgidx])
             caption = f"{caption} | {basename} [{imgidx+1}/{self.files.numfiles}]"
         return caption
 
     def _retile(self, numtiles, winsize):
+        # pylint: disable=bad-whitespace
+        # pylint: disable=no-self-use
         w, h = winsize
         viewports = {}
         if numtiles == 1:
@@ -106,6 +110,7 @@ class PygletUI:
         return viewports
 
     def _print_exif(self, filespec):
+        # pylint: disable=no-self-use
         try:
             exif_all = piexif.load(filespec)
             exif_tags = {tag: name for name, tag in piexif.ExifIFD.__dict__.items() if isinstance(tag, int)}
@@ -119,6 +124,8 @@ class PygletUI:
             print(f"Failed to extract EXIF metadata from {filespec}: {e}")
 
     def _setup_events(self):
+        # pylint: disable=too-many-statements
+        # pylint: disable=unused-variable
         self._vprint("setting up Pyglet window event handlers...")
 
         @self.window.event
@@ -133,17 +140,17 @@ class PygletUI:
             self.window.dispatch_event("on_draw")
 
         @self.window.event
-        def on_mouse_press(x, y, button, modifiers):
+        def on_mouse_press(_x, _y, button, _modifiers):
             if button == pyglet.window.mouse.LEFT:
                 self.window.set_mouse_visible(False)
 
         @self.window.event
-        def on_mouse_release(x, y, button, modifiers):
+        def on_mouse_release(_x, _y, button, _modifiers):
             if button == pyglet.window.mouse.LEFT:
                 self.window.set_mouse_visible(True)
 
         @self.window.event
-        def on_mouse_drag(x, y, dx, dy, buttons, modifiers):
+        def on_mouse_drag(_x, _y, dx, dy, buttons, _modifiers):
             if buttons & pyglet.window.mouse.LEFT:
                 dxdy = np.array((dx, dy))
                 dxdy = dxdy * self.mouse_speed
@@ -152,9 +159,9 @@ class PygletUI:
                 self.mousepos = np.clip(self.mousepos + dxdy, -1.0, 1.0)
 
         @self.window.event
-        def on_mouse_scroll(x, y, scroll_x, scroll_y):
-            scaleFactor = 1.0 + 0.1 * scroll_y
-            self.scale *= scaleFactor
+        def on_mouse_scroll(_x, _y, _scroll_x, scroll_y):
+            scale_factor = 1.0 + 0.1 * scroll_y
+            self.scale *= scale_factor
 
         @self.window.event
         def on_close():
@@ -163,6 +170,8 @@ class PygletUI:
 
         @self.window.event
         def on_key_press(symbol, modifiers):
+            # pylint: disable=too-many-branches
+            # pylint: disable=too-many-statements
             keys = pyglet.window.key
             disallowed_keys = keys.MOD_CTRL | keys.MOD_ALT
             self._vprint(f"on_key_press({keys.symbol_string(symbol)}, modifiers={keys.modifiers_string(modifiers)})")
@@ -191,26 +200,27 @@ class PygletUI:
                     self.viewports = self._retile(self.numtiles, self.winsize)
                     self.window.set_caption(self._caption())
                 if symbol == keys.R:  # rotate
-                    imgidx = self.imgPerTile[self.tileidx]
+                    imgidx = self.img_per_tile[self.tileidx]
                     self.files.orientations[imgidx] += 90
                     self.files.orientations[imgidx] %= 360
                 if symbol == keys.I:  # image info
-                    imgidx = self.imgPerTile[self.tileidx]
+                    imgidx = self.img_per_tile[self.tileidx]
                     filespec = self.files.filespecs[imgidx]
                     fileinfo = imsize.read(filespec)
                     print(fileinfo)
                     self._print_exif(filespec)
                 if symbol == keys.DELETE:  # delete file, but not in split-screen mode
                     if self.numtiles == 1:
-                        imgidx = self.imgPerTile[self.tileidx]
+                        imgidx = self.img_per_tile[self.tileidx]
                         self.files.remove(imgidx)
                         if self.files.numfiles == 0:
                             self.running = False
                             self.event_loop.has_exit = True
                         else:
-                            self.imgPerTile[self.tileidx] = (imgidx - 1) % self.files.numfiles
+                            self.img_per_tile[self.tileidx] = (imgidx - 1) % self.files.numfiles
                             self.window.set_caption(self._caption())
-                if symbol in [keys._1, keys._2, keys._3, keys._4]:  # select tile 1/2/3/4
+                # pylint: disable=protected-access
+                if symbol in [keys._1, keys._2, keys._3, keys._4]:
                     tileidx = symbol - keys._1
                     self.tileidx = tileidx if tileidx < self.numtiles else self.tileidx
 
@@ -220,17 +230,17 @@ class PygletUI:
             self._vprint(f"on_text_motion({keys.symbol_string(motion)})")
             if motion in [keys.MOTION_NEXT_PAGE, keys.MOTION_PREVIOUS_PAGE]:
                 incr = 1 if motion == keys.MOTION_NEXT_PAGE else -1
-                imgidx = self.imgPerTile[self.tileidx]
+                imgidx = self.img_per_tile[self.tileidx]
                 imgidx = (imgidx + incr) % self.files.numfiles
-                self.imgPerTile[self.tileidx] = imgidx
+                self.img_per_tile[self.tileidx] = imgidx
                 self.window.set_caption(self._caption())
             if motion in [keys.MOTION_LEFT, keys.MOTION_RIGHT]:
                 incr = 1 if motion == keys.MOTION_RIGHT else -1
                 incr *= self.numtiles
                 for i in range(self.numtiles):
-                    imgidx = self.imgPerTile[i]
+                    imgidx = self.img_per_tile[i]
                     imgidx = (imgidx + incr) % self.files.numfiles
-                    self.imgPerTile[i] = imgidx
+                    self.img_per_tile[i] = imgidx
                     self.window.set_caption(self._caption())
 
     def _try(self, func):
@@ -240,7 +250,6 @@ class PygletUI:
             self.running = False
             self.event_loop.has_exit = True
             if self.verbose:
-                import traceback
                 self._vprint(f"exception in {func.__name__}():")
                 traceback.print_exc()
             else:

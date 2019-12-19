@@ -3,6 +3,7 @@ import time                    # built-in library
 import threading               # built-in library
 import urllib.request          # built-in library
 import tempfile                # built-in library
+import traceback               # built-in library
 import numpy as np             # pip install numpy
 import psutil                  # pip install psutil
 import imsize                  # pip install imsize
@@ -101,9 +102,9 @@ class ImageProviderMT:
             else:
                 data = urllib.request.urlopen(filespec).read()
                 basename = os.path.basename(filespec)
-                with tempfile.NamedTemporaryFile(suffix=f"_{basename}") as fp:
-                    fp.write(data)
-                    img, maxval = imgio.imread(fp.name, verbose=True)
+                with tempfile.NamedTemporaryFile(suffix=f"_{basename}") as tmpfile:
+                    tmpfile.write(data)
+                    img, maxval = imgio.imread(tmpfile.name, verbose=True)
             img = np.atleast_3d(img)  # {2D, 3D} => 3D
             img = img[:, :, :3]  # scrap alpha channel, if any
             if maxval != 255:  # if not uint8, convert to fp16 (due to ModernGL limitations)
@@ -122,7 +123,6 @@ class ImageProviderMT:
         except Exception as e:  # pylint: disable=broad-except
             self.running = False
             if self.verbose:
-                import traceback
                 self._vprint(f"exception in {func.__name__}():")
                 traceback.print_exc()
             else:

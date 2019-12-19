@@ -31,6 +31,7 @@ IMAGE_TYPES = [".pgm", ".ppm", ".pnm", ".pfm", ".png", ".jpg", ".jpeg", ".tif", 
 
 
 class FileList:
+    # pylint: disable=too-few-public-methods
 
     def __init__(self, filespecs):
         self.mutex = threading.Lock()
@@ -61,6 +62,7 @@ class FileList:
 
 
 def main():
+    # pylint: disable=too-many-statements
     fullscreen = argv.exists("--fullscreen")
     numtiles = argv.intval("--split", default=1, accepted=[1, 2, 3, 4])
     url = argv.stringval("--url", default=None)
