@@ -11,7 +11,6 @@ import imgio                   # pip install imgio
 
 class ImageProviderMT:
 
-
     def __init__(self, files, verbose=False):
         self.thread_name = "ImageProviderThread"
         self.verbose = verbose
@@ -27,13 +26,11 @@ class ImageProviderMT:
         self.loader_thread.daemon = True  # terminate when main process ends
         self.loader_thread.start()
 
-
     def stop(self):
         self._vprint(f"killing {self.thread_name}...")
         self.running = False
         self.loader_thread.join()
         self._vprint(f"{self.thread_name} killed")
-
 
     def estimate_size(self):
         size_on_disk = 0
@@ -49,14 +46,11 @@ class ImageProviderMT:
         size_in_mem /= 1024 ** 2
         print(f"Found {self.files.numfiles} images, consuming {size_on_disk:.0f} MB on disk, {size_in_mem:.0f} MB in memory.")
 
-
     def load_image(self, index):
         return self.files.images[index]
 
-
     def release_image(self, index):
         self.files.images[index] = "RELEASED"
-
 
     def _image_loader(self):
         waiting_for_ram = False
@@ -95,7 +89,6 @@ class ImageProviderMT:
                 self._print(f"consumed {consumed:.0f} MB of system RAM, {ram_after:.0f}/{ram_total:.0f} MB remaining.")
             time.sleep(0.1)
 
-
     def _load_single(self, idx):
         """
         Read image, drop alpha channel, convert to fp32 if maxval != 255;
@@ -123,7 +116,6 @@ class ImageProviderMT:
             self._vprint(e)
             return "INVALID"
 
-
     def _try(self, func):
         try:
             func()
@@ -136,12 +128,10 @@ class ImageProviderMT:
             else:
                 self._print(f"{type(e).__name__}: {e}")
 
-
     def _print(self, message, **kwargs):
         verbose, self.verbose = self.verbose, True
         self._vprint(message, **kwargs)
         self.verbose = verbose
-
 
     def _vprint(self, message, **kwargs):
         if self.verbose:

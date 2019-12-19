@@ -33,7 +33,6 @@ class PygletUI:
         self.gamma = False
         self.ev = 0
 
-
     def start(self, renderer):
         self._vprint(f"spawning {self.thread_name}...")
         self.renderer = renderer
@@ -42,14 +41,12 @@ class PygletUI:
         self.ui_thread.daemon = True  # terminate when main process ends
         self.ui_thread.start()
 
-
     def stop(self):
         self._vprint(f"killing {self.thread_name}...")
         self.running = False
         self.event_loop.has_exit = True
         self.ui_thread.join()
         self._vprint(f"{self.thread_name} killed")
-
 
     def _pyglet_runner(self):
         self._init_pyglet()
@@ -59,7 +56,6 @@ class PygletUI:
         self.event_loop = pyglet.app.EventLoop()
         self.event_loop.run()
         self._vprint("Pyglet event loop stopped")
-
 
     def _init_pyglet(self):
         self._vprint("initializing Pyglet & native OpenGL...")
@@ -77,7 +73,6 @@ class PygletUI:
         self._setup_events()
         self._vprint("Pyglet & native OpenGL initialized")
 
-
     def _caption(self):
         fps = pyglet.clock.get_fps()
         caption = f"glview [{self.ev:+1.1f}EV | {fps:.1f} fps]"
@@ -86,7 +81,6 @@ class PygletUI:
             basename = os.path.basename(self.files.filespecs[imgidx])
             caption = f"{caption} | {basename} [{imgidx+1}/{self.files.numfiles}]"
         return caption
-
 
     def _retile(self, numtiles, winsize):
         w, h = winsize
@@ -111,7 +105,6 @@ class PygletUI:
             viewports[3] = (vpw, 0,   vpw, vph)  # top right => bottom right
         return viewports
 
-
     def _print_exif(self, filespec):
         try:
             exif_all = piexif.load(filespec)
@@ -124,7 +117,6 @@ class PygletUI:
             pprint.pprint(merged_dict)
         except piexif.InvalidImageDataError as e:
             print(f"Failed to extract EXIF metadata from {filespec}: {e}")
-
 
     def _setup_events(self):
         self._vprint("setting up Pyglet window event handlers...")
@@ -222,7 +214,6 @@ class PygletUI:
                     tileidx = symbol - keys._1
                     self.tileidx = tileidx if tileidx < self.numtiles else self.tileidx
 
-
         @self.window.event
         def on_text_motion(motion):  # handle PageUp / PageDown
             keys = pyglet.window.key
@@ -242,7 +233,6 @@ class PygletUI:
                     self.imgPerTile[i] = imgidx
                     self.window.set_caption(self._caption())
 
-
     def _try(self, func):
         try:
             func()
@@ -255,7 +245,6 @@ class PygletUI:
                 traceback.print_exc()
             else:
                 print(f"[{self.__class__.__name__}/{threading.current_thread().name}] {type(e).__name__}: {e}")
-
 
     def _vprint(self, message):
         if self.verbose:

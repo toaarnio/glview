@@ -13,10 +13,18 @@ import time                    # built-in library
 import threading               # built-in library
 import psutil                  # pip install psutil
 
-import argv                    # local import
-import pygletui                # local import
-import glrenderer              # local import
-import imageprovider           # local import
+try:
+    # package mode
+    from glview import argv           # local import
+    from glview import pygletui       # local import
+    from glview import glrenderer     # local import
+    from glview import imageprovider  # local import
+except ImportError:
+    # stand-alone mode
+    import argv                    # local import
+    import pygletui                # local import
+    import glrenderer              # local import
+    import imageprovider           # local import
 
 
 IMAGE_TYPES = [".pgm", ".ppm", ".pnm", ".pfm", ".png", ".jpg", ".jpeg", ".tif", ".tiff", ".insp"]
