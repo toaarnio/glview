@@ -1,11 +1,8 @@
 #!/usr/bin/python3 -B
 
-# pylint: disable=missing-docstring
-# pylint: disable=invalid-name
-# pylint: disable=c-extension-no-member
-# pylint: disable=wrong-import-position
-# pylint: disable=no-member
-# pylint: disable=bad-whitespace
+"""
+The 'glview' command-line application.
+"""
 
 import sys                     # built-in library
 import os                      # built-in library
@@ -31,9 +28,15 @@ IMAGE_TYPES = [".pgm", ".ppm", ".pnm", ".pfm", ".png", ".jpg", ".jpeg", ".tif", 
 
 
 class FileList:
+    """ An indexed container for images and their source filenames. """
+
     # pylint: disable=too-few-public-methods
 
     def __init__(self, filespecs):
+        """
+        Create a new FileList with the given list of filenames. Files can only
+        be removed from the list, not added or reordered.
+        """
         self.mutex = threading.Lock()
         self.filespecs = filespecs
         self.numfiles = len(filespecs)
@@ -44,6 +47,7 @@ class FileList:
         self._update()
 
     def remove(self, idx):
+        """ Removes the given image from this FileList. """
         with self.mutex:
             try:
                 filespec = self.filespecs.pop(idx)
@@ -62,6 +66,7 @@ class FileList:
 
 
 def main():
+    """ Parse command-line arguments and run the application. """
     # pylint: disable=too-many-statements
     fullscreen = argv.exists("--fullscreen")
     numtiles = argv.intval("--split", default=1, accepted=[1, 2, 3, 4])
@@ -111,10 +116,12 @@ def main():
     enforce(numfiles > 0, "No valid images to show. Terminating.")
 
     files = FileList(filenames)
-    ui = pygletui.PygletUI(files, fullscreen, numtiles, verbose)
-    loader = imageprovider.ImageProviderMT(files, verbose)
+    ui = pygletui.PygletUI(files, verbose)
+    loader = imageprovider.ImageProvider(files, verbose)
     renderer = glrenderer.GLRenderer(ui, files, loader, verbose)
     ui.texture_filter = "LINEAR" if smooth else "NEAREST"
+    ui.fullscreen = fullscreen
+    ui.numtiles = numtiles
     ui.start(renderer)
     loader.start()
     main_loop([ui, loader])
@@ -123,6 +130,7 @@ def main():
 
 
 def main_loop(modules):
+    """ Keep the application running until exit request or out of memory. """
     try:
         ram_minimum = 512  # exit if available RAM drops below 512 MB
         while all([m.running for m in modules]):
@@ -138,15 +146,17 @@ def main_loop(modules):
         sys.exit()
 
 
-def enforce(expression, messageIfFalse):
+def enforce(expression, message_if_false):
+    """ Display the given error message and exit if 'expression' is False. """
     if not expression:
-        print(messageIfFalse)
+        print(message_if_false)
         sys.exit(-1)
 
 
-def warn(expression, messageIfTrue):
+def warn(expression, message_if_true):
+    """ Display the given warning message if 'expression' is True. """
     if expression:
-        print(messageIfTrue)
+        print(message_if_true)
     return expression
 
 

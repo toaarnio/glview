@@ -1,3 +1,5 @@
+""" A tiled image renderer with zoom & pan support based on OpenGL. """
+
 import os                      # built-in library
 import time                    # built-in library
 import struct                  # built-in library
@@ -7,6 +9,8 @@ import moderngl                # pip install moderngl
 
 
 class GLRenderer:
+    """ A tiled image renderer with zoom & pan support based on OpenGL. """
+
     # pylint: disable=too-many-instance-attributes
 
     filter_nearest = (moderngl.NEAREST, moderngl.NEAREST)
@@ -16,6 +20,10 @@ class GLRenderer:
     tile_normal_colors = [0, 0, 0, 0]
 
     def __init__(self, ui, files, loader, verbose=False):
+        """
+        Create a new GLRenderer with the given (hardcoded) PygletUI, FileList, and
+        ImageProvider instances.
+        """
         self.thread_name = "RenderThread"
         self.verbose = verbose
         self.ui = ui                # <PygletUI> State variables controlled by user
@@ -32,6 +40,7 @@ class GLRenderer:
         self.tile_colors = self.tile_debug_colors if verbose else self.tile_normal_colors
 
     def init(self):
+        """ Initialize an OpenGL context and attach it to an existing window. """
         # OpenGL window must already exist and be owned by this thread
         self._vprint("attaching to native OpenGL window...")
         self.ctx = moderngl.create_context()
@@ -50,6 +59,7 @@ class GLRenderer:
         _ = self.ctx.error  # clear the GL error flag (workaround for a bug that prevents interoperability with Pyglet)
 
     def redraw(self):
+        """ Redraw the tiled image view with refreshed pan & zoom, filtering, etc. """
         # pylint: disable=too-many-locals
         t0 = time.time()
         hex_to_rgb = lambda h: [h >> 16, (h >> 8) & 0xff, h & 0xff]
@@ -105,13 +115,14 @@ class GLRenderer:
 
     def _update_texture(self, texture, img):
         # pylint: disable=no-self-use
+        # pylint: disable=fixme
         # TODO: take this into use
         texture.write(img.ravel())
         texture.build_mipmaps()
         return texture
 
     def _load_texture(self, idx):
-        img = self.loader.load_image(idx)
+        img = self.loader.get_image(idx)
         assert isinstance(img, (np.ndarray, str))
         if isinstance(img, np.ndarray):  # success
             texture = self._create_texture(img)

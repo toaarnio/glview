@@ -1,3 +1,5 @@
+""" A graphical user interface for glview, based on Pyglet and ModernGL. """
+
 import os                      # built-in library
 import threading               # built-in library
 import pprint                  # built-in library
@@ -9,14 +11,17 @@ import imsize                  # pip install imsize
 
 
 class PygletUI:
+    """ A graphical user interface for glview, based on Pyglet and ModernGL. """
+
     # pylint: disable=too-many-instance-attributes
 
-    def __init__(self, files, fullscreen, numtiles, verbose=False):
+    def __init__(self, files, verbose=False):
+        """ Create a new PygletUI with the given (hardcoded) FileList instance. """
         self.thread_name = "UIThread"
         self.verbose = verbose
         self.files = files
-        self.fullscreen = fullscreen
-        self.numtiles = numtiles
+        self.fullscreen = False
+        self.numtiles = 1
         self.running = None
         self.window = None
         self.screensize = None
@@ -36,6 +41,7 @@ class PygletUI:
         self.ev = 0
 
     def start(self, renderer):
+        """ Start the UI thread. """
         self._vprint(f"spawning {self.thread_name}...")
         self.renderer = renderer
         self.running = True
@@ -44,6 +50,7 @@ class PygletUI:
         self.ui_thread.start()
 
     def stop(self):
+        """ Stop the UI thread. """
         self._vprint(f"killing {self.thread_name}...")
         self.running = False
         self.event_loop.has_exit = True

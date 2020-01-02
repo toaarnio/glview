@@ -1,3 +1,5 @@
+""" A multithreaded image file loader. """
+
 import os                      # built-in library
 import time                    # built-in library
 import threading               # built-in library
@@ -10,9 +12,11 @@ import imsize                  # pip install imsize
 import imgio                   # pip install imgio
 
 
-class ImageProviderMT:
+class ImageProvider:
+    """ A multithreaded image file loader. """
 
     def __init__(self, files, verbose=False):
+        """ Create a new ImageProvider with the given (hardcoded) FileList instance. """
         self.thread_name = "ImageProviderThread"
         self.verbose = verbose
         self.files = files
@@ -21,6 +25,7 @@ class ImageProviderMT:
         self.estimate_size()
 
     def start(self):
+        """ Start the image loader thread. """
         self._vprint(f"spawning {self.thread_name}...")
         self.running = True
         self.loader_thread = threading.Thread(target=lambda: self._try(self._image_loader), name=self.thread_name)
@@ -28,12 +33,14 @@ class ImageProviderMT:
         self.loader_thread.start()
 
     def stop(self):
+        """ Stop the image loader thread. """
         self._vprint(f"killing {self.thread_name}...")
         self.running = False
         self.loader_thread.join()
         self._vprint(f"{self.thread_name} killed")
 
     def estimate_size(self):
+        """ Quickly scan all image files to estimate their memory consumption. """
         size_on_disk = 0
         size_in_mem = 0
         if len(self.files.filespecs) > 100:
@@ -47,13 +54,25 @@ class ImageProviderMT:
         size_in_mem /= 1024 ** 2
         print(f"Found {self.files.numfiles} images, consuming {size_on_disk:.0f} MB on disk, {size_in_mem:.0f} MB in memory.")
 
-    def load_image(self, index):
+    def get_image(self, index):
+        """
+        Return the image at the given index. The image might not be present,
+        in which case the return value is either "PENDING" (not loaded yet),
+        "RELEASED" (already released to free up the memory), or "INVALID"
+        (tried to load the image but failed).
+        """
         return self.files.images[index]
 
     def release_image(self, index):
+        """
+        Release the image at the given index to (eventually) free up the memory.
+        """
         self.files.images[index] = "RELEASED"
 
     def _image_loader(self):
+        """
+        Load all images in sequential order.
+        """
         waiting_for_ram = False
         ram_total = psutil.virtual_memory().total / 1024**2
         ram_before = psutil.virtual_memory().available / 1024**2
@@ -118,6 +137,8 @@ class ImageProviderMT:
             return "INVALID"
 
     def _try(self, func):
+        # pylint: disable=R0801
+        # disable warning about this function being a duplicate
         try:
             func()
         except Exception as e:  # pylint: disable=broad-except
