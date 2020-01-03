@@ -4,8 +4,6 @@
 A collection of simple command-line parsing functions.
 """
 
-from __future__ import print_function as __print  # hide from help(argv)
-
 import os                         # standard library
 import sys                        # standard library
 import glob                       # standard library
