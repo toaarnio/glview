@@ -1,0 +1,39 @@
+name: glview
+version: 0.9.4
+summary: Lightning-fast multi-tile image viewer with synchronized zooming & panning.
+description: |
+  Longer description goes here.
+
+grade: stable
+confinement: devmode  # change to strict when deploying
+base: core18
+
+
+apps:
+  glview:
+    command: python3 $SNAP/glview.py
+    environment:
+      LANG: C.UTF-8  # Pyglet/X11 still failing because of missing UTF-8
+    plugs:
+      - desktop  # might not be needed?
+      - wayland
+      - unity7
+      - x11
+      - opengl
+
+
+parts:
+  copy-stuff:
+    plugin: dump
+    source: glview
+  glview:
+    plugin: python
+    python-version: python3
+    source: .
+    stage-packages:
+      - libglu1-mesa
+      - libjpeg-dev
+      - libtiff-dev
+      - libpng-dev
+    requirements:
+      - /root/project/requirements.txt
