@@ -1,6 +1,5 @@
 lint:
 	flake8 glview/*.py
-	pylint glview/*.py
 
 install:
 	pip3 uninstall --yes glview || true
