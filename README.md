@@ -1,5 +1,7 @@
 # glview
 
+[![Build Status](https://travis-ci.com/toaarnio/glview.svg?branch=master)](https://travis-ci.com/github/toaarnio/glview)
+
 Lightning-fast image viewer with smooth zooming &amp; panning.
 
 **Installing:**
@@ -16,5 +18,3 @@ glview --help
 ```
 make install
 ```
-
-[![Build Status](https://travis-ci.org/toaarnio/glview.svg?branch=master)](https://travis-ci.org/toaarnio/glview)
