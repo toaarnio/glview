@@ -193,6 +193,9 @@ class PygletUI:
                     self.fullscreen = not self.fullscreen
                     self.window.set_fullscreen(self.fullscreen)
                     self.window.set_mouse_visible(not self.fullscreen)
+                if symbol == keys.H:  # reset zoom & pan
+                    self.scale = 1.0
+                    self.mousepos = np.zeros(2)
                 if symbol == keys.G:  # gamma
                     self.gamma = not self.gamma
                 if symbol == keys.B:  # brightness
