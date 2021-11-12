@@ -62,7 +62,7 @@ class PygletUI:
         self._init_pyglet()
         self.renderer.init()
         self._vprint("starting Pyglet event loop...")
-        pyglet.clock.schedule_interval(lambda t: None, 0.5)  # trigger on_draw every 0.5 seconds
+        pyglet.clock.schedule_interval(lambda t: None, 0.05)  # trigger on_draw every 50 ms
         self.event_loop = pyglet.app.EventLoop()
         self.event_loop.run()
         self._vprint("Pyglet event loop stopped")
