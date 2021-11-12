@@ -31,6 +31,7 @@ class PygletUI:
         self.mousepos = np.zeros(2)  # always scaled & clipped to [0, 1] x [0, 1]
         self.mouse_speed = 4.0
         self.mouse_canvas_width = 1000
+        self.keyboard_pan_speed = 100
         self.viewports = None
         self.ui_thread = None
         self.event_loop = None
@@ -80,6 +81,8 @@ class PygletUI:
         self.window.set_fullscreen(self.fullscreen)
         self.window.set_mouse_visible(not self.fullscreen)
         self._setup_events()
+        self.key_state = pyglet.window.key.KeyStateHandler()
+        self.window.push_handlers(self.key_state)
         self._vprint("Pyglet & native OpenGL initialized")
 
     def _caption(self):
@@ -137,6 +140,18 @@ class PygletUI:
 
         @self.window.event
         def on_draw():
+            keys = pyglet.window.key
+            if self.key_state[keys.PLUS]:  # zoom in
+                self.scale *= 1.1
+            if self.key_state[keys.MINUS]:  # zoom out
+                self.scale *= 1 / 1.1
+            dx = self.key_state[keys.LEFT] - self.key_state[keys.RIGHT]
+            dy = self.key_state[keys.DOWN] - self.key_state[keys.UP]
+            dxdy = np.array((dx, dy))
+            dxdy = dxdy * self.keyboard_pan_speed
+            dxdy = dxdy / self.scale
+            dxdy = dxdy / self.mouse_canvas_width
+            self.mousepos = np.clip(self.mousepos + dxdy, -1.0, 1.0)
             self.renderer.redraw()
             self.window.set_caption(self._caption())
 
