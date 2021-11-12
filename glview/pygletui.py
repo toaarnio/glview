@@ -244,18 +244,11 @@ class PygletUI:
                 imgidx = (imgidx + incr) % self.files.numfiles
                 self.img_per_tile[self.tileidx] = imgidx
                 self.window.set_caption(self._caption())
-            if motion in [keys.MOTION_LEFT, keys.MOTION_RIGHT]:
-                incr = 1 if motion == keys.MOTION_RIGHT else -1
+            if motion in [keys.MOTION_NEXT_WORD, keys.MOTION_PREVIOUS_WORD]:
+                incr = 1 if motion == keys.MOTION_NEXT_WORD else -1
                 active_tiles = self.img_per_tile[:self.numtiles]
-                stride = max(active_tiles) - min(active_tiles)
-                is_consecutive = (stride + 1 == self.numtiles)
-                incr *= self.numtiles if is_consecutive else 1
-                active_tiles = np.array(active_tiles) + incr
-                if np.amax(active_tiles) >= self.files.numfiles:
-                    active_tiles -= np.amin(active_tiles)
-                if np.amin(active_tiles) < 0:
-                    active_tiles += self.files.numfiles
-                    active_tiles -= stride * (1 - int(is_consecutive))
+                active_tiles = np.array(active_tiles) + incr * self.numtiles
+                active_tiles = active_tiles % self.files.numfiles
                 self.img_per_tile[:self.numtiles] = active_tiles
                 self.window.set_caption(self._caption())
 
