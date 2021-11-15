@@ -219,7 +219,7 @@ class PygletUI:
                     self.fullscreen = not self.fullscreen
                     self.window.set_fullscreen(self.fullscreen)
                     self.window.set_mouse_visible(not self.fullscreen)
-                if symbol == keys.H:  # reset zoom & pan
+                if symbol == keys.H:  # reset zoom & pan ("home")
                     self.scale = 1.0
                     self.mousepos = np.zeros(2)
                 if symbol == keys.G:  # gamma
@@ -261,16 +261,19 @@ class PygletUI:
                     self.tileidx = tileidx if tileidx < self.numtiles else self.tileidx
 
         @self.window.event
-        def on_text_motion(motion):  # handle PageUp / PageDown
+        def on_text_motion(motion):
             keys = pyglet.window.key
-            self._vprint(f"on_text_motion({keys.symbol_string(motion)})")
             if motion in [keys.MOTION_NEXT_PAGE, keys.MOTION_PREVIOUS_PAGE]:
+                # PageUp / PageDown
+                self._vprint(f"on_text_motion({keys.symbol_string(motion)})")
                 incr = 1 if motion == keys.MOTION_NEXT_PAGE else -1
                 imgidx = self.img_per_tile[self.tileidx]
                 imgidx = (imgidx + incr) % self.files.numfiles
                 self.img_per_tile[self.tileidx] = imgidx
                 self.window.set_caption(self._caption())
             if motion in [keys.MOTION_NEXT_WORD, keys.MOTION_PREVIOUS_WORD]:
+                # Ctrl + Left / Right
+                self._vprint(f"on_text_motion({keys.symbol_string(motion)})")
                 incr = 1 if motion == keys.MOTION_NEXT_WORD else -1
                 active_tiles = self.img_per_tile[:self.numtiles]
                 active_tiles = np.array(active_tiles) + incr * self.numtiles
