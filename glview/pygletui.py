@@ -23,6 +23,7 @@ class PygletUI:
         self.fullscreen = False
         self.numtiles = 1
         self.running = None
+        self.need_redraw = True
         self.window = None
         self.screensize = None
         self.winsize = None
@@ -62,7 +63,7 @@ class PygletUI:
         self._init_pyglet()
         self.renderer.init()
         self._vprint("starting Pyglet event loop...")
-        pyglet.clock.schedule_interval(lambda t: None, 0.05)  # trigger on_draw every 50 ms
+        pyglet.clock.schedule_interval(self._keyboard_zoom_pan, 0.02)  # 50fps
         self.event_loop = pyglet.app.EventLoop()
         self.event_loop.run()
         self._vprint("Pyglet event loop stopped")
@@ -133,6 +134,26 @@ class PygletUI:
         except piexif.InvalidImageDataError as e:
             print(f"Failed to extract EXIF metadata from {filespec}: {e}")
 
+    def _keyboard_zoom_pan(self, dt):
+        # this is invoked 50 times per second, so the zoom/pan speed
+        # is pretty high
+        keys = pyglet.window.key
+        prev_scale = self.scale
+        self.scale *= 1.0 + 0.1 * self.key_state[keys.PLUS]  # zoom in
+        self.scale /= 1.0 + 0.1 * self.key_state[keys.MINUS]  # zoom out
+        dx = self.key_state[keys.LEFT] - self.key_state[keys.RIGHT]
+        dy = self.key_state[keys.DOWN] - self.key_state[keys.UP]
+        dxdy = np.array((dx, dy))
+        dxdy = dxdy * self.keyboard_pan_speed
+        dxdy = dxdy / self.scale
+        dxdy = dxdy / self.mouse_canvas_width
+        self.mousepos = np.clip(self.mousepos + dxdy, -1.0, 1.0)
+        # pyglet always calls on_draw() upon exit from any event
+        # handler, including this one, so we have to explicitly
+        # disable the redraw if there's no need for it
+        if np.all(dxdy == 0.0) and self.scale == prev_scale:
+            self.need_redraw = False
+
     def _setup_events(self):
         # pylint: disable=too-many-statements
         # pylint: disable=unused-variable
@@ -140,20 +161,10 @@ class PygletUI:
 
         @self.window.event
         def on_draw():
-            keys = pyglet.window.key
-            if self.key_state[keys.PLUS]:  # zoom in
-                self.scale *= 1.1
-            if self.key_state[keys.MINUS]:  # zoom out
-                self.scale *= 1 / 1.1
-            dx = self.key_state[keys.LEFT] - self.key_state[keys.RIGHT]
-            dy = self.key_state[keys.DOWN] - self.key_state[keys.UP]
-            dxdy = np.array((dx, dy))
-            dxdy = dxdy * self.keyboard_pan_speed
-            dxdy = dxdy / self.scale
-            dxdy = dxdy / self.mouse_canvas_width
-            self.mousepos = np.clip(self.mousepos + dxdy, -1.0, 1.0)
-            self.renderer.redraw()
-            self.window.set_caption(self._caption())
+            if self.need_redraw:
+                self.renderer.redraw()
+                self.window.set_caption(self._caption())
+            self.need_redraw = True
 
         @self.window.event
         def on_resize(width, height):
