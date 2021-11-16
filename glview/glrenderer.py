@@ -88,8 +88,9 @@ class GLRenderer:
         self.ctx.finish()
         elapsed = (time.time() - t0) * 1000
         interval = (time.time() - self.tprev) * 1000
+        w, h = self.ui.window.get_size()
         self.tprev = time.time()
-        self._vprint(f"rendering took {elapsed:.1f} ms, frame-to-frame interval was {interval:.1f} ms")
+        self._vprint(f"rendering {w} x {h} pixels took {elapsed:.1f} ms, frame-to-frame interval was {interval:.1f} ms")
         return elapsed
 
     def _create_texture(self, img):
