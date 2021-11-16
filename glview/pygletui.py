@@ -146,21 +146,20 @@ class PygletUI:
     def _keyboard_zoom_pan(self):
         # this is invoked 50 times per second, so zooming/panning is pretty fast
         keys = pyglet.window.key
-        prev_scale = self.scale
-        self.scale *= 1.0 + 0.1 * self.key_state[keys.PLUS]  # zoom in
-        self.scale /= 1.0 + 0.1 * self.key_state[keys.MINUS]  # zoom out
-        dx = self.key_state[keys.LEFT] - self.key_state[keys.RIGHT]
-        dy = self.key_state[keys.DOWN] - self.key_state[keys.UP]
-        dxdy = np.array((dx, dy))
-        dxdy = dxdy * self.keyboard_pan_speed
-        dxdy = dxdy / self.scale
-        dxdy = dxdy / self.mouse_canvas_width
-        self.mousepos = np.clip(self.mousepos + dxdy, -1.0, 1.0)
-        # pyglet always calls on_draw() upon exit from any event
-        # handler, including this one, so we have to explicitly
-        # disable the redraw if there's no need for it
-        if np.any(dxdy != 0.0) or self.scale != prev_scale:
-            self.need_redraw = True
+        ctrl_down = self.key_state[keys.LCTRL] or self.key_state[keys.RCTRL]
+        if not ctrl_down:
+            prev_scale = self.scale
+            self.scale *= 1.0 + 0.1 * self.key_state[keys.PLUS]  # zoom in
+            self.scale /= 1.0 + 0.1 * self.key_state[keys.MINUS]  # zoom out
+            dx = self.key_state[keys.LEFT] - self.key_state[keys.RIGHT]
+            dy = self.key_state[keys.DOWN] - self.key_state[keys.UP]
+            dxdy = np.array((dx, dy))
+            dxdy = dxdy * self.keyboard_pan_speed
+            dxdy = dxdy / self.scale
+            dxdy = dxdy / self.mouse_canvas_width
+            self.mousepos = np.clip(self.mousepos + dxdy, -1.0, 1.0)
+            if np.any(dxdy != 0.0) or self.scale != prev_scale:
+                self.need_redraw = True
 
     def _setup_events(self):
         # pylint: disable=too-many-statements
