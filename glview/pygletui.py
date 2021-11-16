@@ -74,7 +74,8 @@ class PygletUI:
                 dt = self.clock.update_time()
                 window = list(pyglet.app.windows)[0]
                 window.dispatch_event("on_draw")
-                time.sleep(1 / fps)
+                sleep = max(1 / fps - dt, 0.0)
+                time.sleep(sleep)
         return EventLoop()
 
     def _init_pyglet(self):
