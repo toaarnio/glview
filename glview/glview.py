@@ -30,8 +30,6 @@ IMAGE_TYPES = [".pgm", ".ppm", ".pnm", ".pfm", ".png", ".jpg", ".jpeg", ".tif", 
 class FileList:
     """ An indexed container for images and their source filenames. """
 
-    # pylint: disable=too-few-public-methods
-
     def __init__(self, filespecs):
         """
         Create a new FileList with the given list of filenames. Files can only
@@ -67,7 +65,6 @@ class FileList:
 
 def main():
     """ Parse command-line arguments and run the application. """
-    # pylint: disable=too-many-statements
     fullscreen = argv.exists("--fullscreen")
     numtiles = argv.intval("--split", default=1, accepted=[1, 2, 3, 4])
     url = argv.stringval("--url", default=None)

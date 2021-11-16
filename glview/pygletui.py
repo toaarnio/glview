@@ -14,8 +14,6 @@ import imsize                  # pip install imsize
 class PygletUI:
     """ A graphical user interface for glview, based on Pyglet and ModernGL. """
 
-    # pylint: disable=too-many-instance-attributes
-
     def __init__(self, files, verbose=False):
         """ Create a new PygletUI with the given (hardcoded) FileList instance. """
         self.thread_name = "UIThread"
@@ -26,6 +24,7 @@ class PygletUI:
         self.running = None
         self.need_redraw = True
         self.window = None
+        self.key_state = None
         self.screensize = None
         self.winsize = None
         self.tileidx = 0
@@ -69,14 +68,14 @@ class PygletUI:
         self._vprint("Pyglet event loop stopped")
 
     def _create_eventloop(self, fps):
-        class EventLoop(pyglet.app.EventLoop):
+        class _EventLoop(pyglet.app.EventLoop):
             def idle(self):
                 dt = self.clock.update_time()
                 window = list(pyglet.app.windows)[0]
                 window.dispatch_event("on_draw")
                 sleep = max(1 / fps - dt, 0.0)
                 time.sleep(sleep)
-        return EventLoop()
+        return _EventLoop()
 
     def _init_pyglet(self):
         self._vprint("initializing Pyglet & native OpenGL...")
@@ -106,8 +105,6 @@ class PygletUI:
         return caption
 
     def _retile(self, numtiles, winsize):
-        # pylint: disable=bad-whitespace
-        # pylint: disable=no-self-use
         w, h = winsize
         viewports = {}
         if numtiles == 1:
@@ -131,7 +128,6 @@ class PygletUI:
         return viewports
 
     def _print_exif(self, filespec):
-        # pylint: disable=no-self-use
         try:
             exif_all = piexif.load(filespec)
             exif_tags = {tag: name for name, tag in piexif.ExifIFD.__dict__.items() if isinstance(tag, int)}
@@ -163,8 +159,6 @@ class PygletUI:
                 self.need_redraw = True
 
     def _setup_events(self):
-        # pylint: disable=too-many-statements
-        # pylint: disable=unused-variable
         self._vprint("setting up Pyglet window event handlers...")
 
         @self.window.event
@@ -215,8 +209,6 @@ class PygletUI:
 
         @self.window.event
         def on_key_press(symbol, modifiers):
-            # pylint: disable=too-many-branches
-            # pylint: disable=too-many-statements
             keys = pyglet.window.key
             disallowed_keys = keys.MOD_CTRL | keys.MOD_ALT
             self._vprint(f"on_key_press({keys.symbol_string(symbol)}, modifiers={keys.modifiers_string(modifiers)})")
@@ -308,7 +300,7 @@ class PygletUI:
     def _try(self, func):
         try:
             func()
-        except Exception as e:  # pylint: disable=broad-except
+        except Exception as e:
             self.running = False
             self.event_loop.has_exit = True
             if self.verbose:

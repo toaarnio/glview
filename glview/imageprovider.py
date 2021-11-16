@@ -44,7 +44,7 @@ class ImageProvider:
         size_on_disk = 0
         size_in_mem = 0
         if len(self.files.filespecs) > 100:
-            print(f"Scanning images & estimating memory consumption...")
+            print("Scanning images & estimating memory consumption...")
         for filespec in self.files.filespecs:
             if "://" not in filespec:
                 info = imsize.read(filespec)
@@ -137,11 +137,9 @@ class ImageProvider:
             return "INVALID"
 
     def _try(self, func):
-        # pylint: disable=R0801
-        # disable warning about this function being a duplicate
         try:
             func()
-        except Exception as e:  # pylint: disable=broad-except
+        except Exception as e:
             self.running = False
             if self.verbose:
                 self._vprint(f"exception in {func.__name__}():")

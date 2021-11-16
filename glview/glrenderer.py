@@ -11,8 +11,6 @@ import moderngl                # pip install moderngl
 class GLRenderer:
     """ A tiled image renderer with zoom & pan support based on OpenGL. """
 
-    # pylint: disable=too-many-instance-attributes
-
     filter_nearest = (moderngl.NEAREST, moderngl.NEAREST)
     filter_linear = (moderngl.LINEAR_MIPMAP_LINEAR, moderngl.LINEAR)
     filters = {"LINEAR": filter_linear, "NEAREST": filter_nearest}
@@ -47,8 +45,8 @@ class GLRenderer:
         self.ctx.enable(moderngl.DEPTH_TEST)
         self._vprint("compiling shaders...")
         shader_path = os.path.dirname(os.path.realpath(__file__))
-        vshader = open(os.path.join(shader_path, 'panzoom.vs')).read()
-        fshader = open(os.path.join(shader_path, 'texture.fs')).read()
+        vshader = open(os.path.join(shader_path, "panzoom.vs"), encoding="utf-8").read()
+        fshader = open(os.path.join(shader_path, "texture.fs"), encoding="utf-8").read()
         self.prog = self.ctx.program(vertex_shader=vshader, fragment_shader=fshader)
         self.prog['scale'].value = 1.0
         self.prog['orientation'].value = 0
@@ -60,7 +58,6 @@ class GLRenderer:
 
     def redraw(self):
         """ Redraw the tiled image view with refreshed pan & zoom, filtering, etc. """
-        # pylint: disable=too-many-locals
         t0 = time.time()
         hex_to_rgb = lambda h: [h >> 16, (h >> 8) & 0xff, h & 0xff]
         tile_colors = [hex_to_rgb(hexrgb) for hexrgb in self.tile_colors]
@@ -115,8 +112,6 @@ class GLRenderer:
         return dummy
 
     def _update_texture(self, texture, img):
-        # pylint: disable=no-self-use
-        # pylint: disable=fixme
         # TODO: take this into use
         texture.write(img.ravel())
         texture.build_mipmaps()
@@ -139,7 +134,6 @@ class GLRenderer:
         return texture
 
     def _get_aspect_ratio(self, vpw, vph, texw, texh):
-        # pylint: disable=no-self-use
         viewport_aspect = vpw / vph
         texture_aspect = texw / texh
         if texture_aspect > viewport_aspect:
