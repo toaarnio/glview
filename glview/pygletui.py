@@ -1,6 +1,7 @@
 """ A graphical user interface for glview, based on Pyglet and ModernGL. """
 
 import os                      # built-in library
+import time                    # built-in library
 import threading               # built-in library
 import pprint                  # built-in library
 import traceback               # built-in library
@@ -63,10 +64,18 @@ class PygletUI:
         self._init_pyglet()
         self.renderer.init()
         self._vprint("starting Pyglet event loop...")
-        pyglet.clock.schedule_interval(self._keyboard_zoom_pan, 0.02)  # 50fps
-        self.event_loop = pyglet.app.EventLoop()
+        self.event_loop = self._create_eventloop(fps=50)
         self.event_loop.run()
         self._vprint("Pyglet event loop stopped")
+
+    def _create_eventloop(self, fps):
+        class EventLoop(pyglet.app.EventLoop):
+            def idle(self):
+                dt = self.clock.update_time()
+                window = list(pyglet.app.windows)[0]
+                window.dispatch_event("on_draw")
+                time.sleep(1 / fps)
+        return EventLoop()
 
     def _init_pyglet(self):
         self._vprint("initializing Pyglet & native OpenGL...")
@@ -134,9 +143,8 @@ class PygletUI:
         except piexif.InvalidImageDataError as e:
             print(f"Failed to extract EXIF metadata from {filespec}: {e}")
 
-    def _keyboard_zoom_pan(self, dt):
-        # this is invoked 50 times per second, so the zoom/pan speed
-        # is pretty high
+    def _keyboard_zoom_pan(self):
+        # this is invoked 50 times per second, so zooming/panning is pretty fast
         keys = pyglet.window.key
         prev_scale = self.scale
         self.scale *= 1.0 + 0.1 * self.key_state[keys.PLUS]  # zoom in
@@ -151,8 +159,8 @@ class PygletUI:
         # pyglet always calls on_draw() upon exit from any event
         # handler, including this one, so we have to explicitly
         # disable the redraw if there's no need for it
-        if np.all(dxdy == 0.0) and self.scale == prev_scale:
-            self.need_redraw = False
+        if np.any(dxdy != 0.0) or self.scale != prev_scale:
+            self.need_redraw = True
 
     def _setup_events(self):
         # pylint: disable=too-many-statements
@@ -161,16 +169,18 @@ class PygletUI:
 
         @self.window.event
         def on_draw():
+            self._keyboard_zoom_pan()
             if self.need_redraw:
                 self.renderer.redraw()
                 self.window.set_caption(self._caption())
-            self.need_redraw = True
+                self.window.flip()
+                self.need_redraw = False
 
         @self.window.event
         def on_resize(width, height):
             self.winsize = (width, height)
             self.viewports = self._retile(self.numtiles, self.winsize)
-            self.window.dispatch_event("on_draw")
+            self.need_redraw = True
 
         @self.window.event
         def on_mouse_press(_x, _y, button, _modifiers):
@@ -190,11 +200,13 @@ class PygletUI:
                 dxdy = dxdy / self.scale
                 dxdy = dxdy / self.mouse_canvas_width
                 self.mousepos = np.clip(self.mousepos + dxdy, -1.0, 1.0)
+                self.need_redraw = True
 
         @self.window.event
         def on_mouse_scroll(_x, _y, _scroll_x, scroll_y):
             scale_factor = 1.0 + 0.1 * scroll_y
             self.scale *= scale_factor
+            self.need_redraw = True
 
         @self.window.event
         def on_close():
@@ -219,27 +231,34 @@ class PygletUI:
                     self.fullscreen = not self.fullscreen
                     self.window.set_fullscreen(self.fullscreen)
                     self.window.set_mouse_visible(not self.fullscreen)
+                    self.need_redraw = True
                 if symbol == keys.H:  # reset zoom & pan ("home")
                     self.scale = 1.0
                     self.mousepos = np.zeros(2)
+                    self.need_redraw = True
                 if symbol == keys.G:  # gamma
                     self.gamma = not self.gamma
+                    self.need_redraw = True
                 if symbol == keys.B:  # brightness
                     ev = (self.ev * 2) + 4
                     ev = (ev + 1) % 9  # [0, 8] ==> [-2, +2] EV in 0.5-EV steps
                     self.ev = (ev - 4) / 2
+                    self.need_redraw = True
                 if symbol == keys.T:  # texture filtering
                     self.texture_filter = "LINEAR" if self.texture_filter == "NEAREST" else "NEAREST"
+                    self.need_redraw = True
                 if symbol == keys.S:  # split
                     self.numtiles = (self.numtiles % 4) + 1
                     self.tileidx = min(self.tileidx, self.numtiles - 1)
                     self.img_per_tile = np.clip(self.img_per_tile, 0, self.files.numfiles - 1)
                     self.viewports = self._retile(self.numtiles, self.winsize)
                     self.window.set_caption(self._caption())
+                    self.need_redraw = True
                 if symbol == keys.R:  # rotate
                     imgidx = self.img_per_tile[self.tileidx]
                     self.files.orientations[imgidx] += 90
                     self.files.orientations[imgidx] %= 360
+                    self.need_redraw = True
                 if symbol == keys.I:  # image info
                     imgidx = self.img_per_tile[self.tileidx]
                     filespec = self.files.filespecs[imgidx]
@@ -256,10 +275,12 @@ class PygletUI:
                         else:
                             self.img_per_tile[self.tileidx] = (imgidx - 1) % self.files.numfiles
                             self.window.set_caption(self._caption())
+                            self.need_redraw = True
                 # pylint: disable=protected-access
                 if symbol in [keys._1, keys._2, keys._3, keys._4]:
                     tileidx = symbol - keys._1
                     self.tileidx = tileidx if tileidx < self.numtiles else self.tileidx
+                    self.need_redraw = True
 
         @self.window.event
         def on_text_motion(motion):
@@ -272,6 +293,7 @@ class PygletUI:
                 imgidx = (imgidx + incr) % self.files.numfiles
                 self.img_per_tile[self.tileidx] = imgidx
                 self.window.set_caption(self._caption())
+                self.need_redraw = True
             if motion in [keys.MOTION_NEXT_WORD, keys.MOTION_PREVIOUS_WORD]:
                 # Ctrl + Left / Right
                 self._vprint(f"on_text_motion({keys.symbol_string(motion)})")
@@ -281,6 +303,7 @@ class PygletUI:
                 active_tiles = active_tiles % self.files.numfiles
                 self.img_per_tile[:self.numtiles] = active_tiles
                 self.window.set_caption(self._caption())
+                self.need_redraw = True
 
     def _try(self, func):
         try:
