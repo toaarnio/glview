@@ -77,7 +77,7 @@ class PygletUI:
         self.screensize = (screen.width, screen.height)
         self.winsize = (screen.width // 3, screen.height // 3)
         self.viewports = self._retile(self.numtiles, self.winsize)
-        self.window = pyglet.window.Window(*self.winsize, resizable=True, vsync=False)
+        self.window = pyglet.window.Window(*self.winsize, resizable=True, vsync=True)
         self.window.set_caption(self._caption())
         self.window.set_fullscreen(self.fullscreen)
         self.window.set_mouse_visible(not self.fullscreen)
