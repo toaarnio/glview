@@ -233,6 +233,7 @@ class PygletUI:
                 if symbol == keys.S:  # split
                     self.numtiles = (self.numtiles % 4) + 1
                     self.tileidx = min(self.tileidx, self.numtiles - 1)
+                    self.img_per_tile = np.clip(self.img_per_tile, 0, self.files.numfiles - 1)
                     self.viewports = self._retile(self.numtiles, self.winsize)
                     self.window.set_caption(self._caption())
                 if symbol == keys.R:  # rotate
