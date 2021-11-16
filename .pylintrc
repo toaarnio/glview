@@ -1,16 +1,27 @@
 [FORMAT]
 
-# Maximum number of characters on a single line.
-max-line-length=150
+# Increase certain limits that are too tight by default
+max-line-length=120
+max-locals=20
+max-branches=20
+max-args=6
 
 # Regexp for a line that is allowed to be longer than the limit.
 ignore-long-lines=\".*\"
 
-# Allow certain short variable names
-good-names=f,w,h,c,i,j,k,x,y,z,r,g,b,e,t0,t1,dx,dy,ev,ui
-
 # Expected format of line ending, e.g. empty (any line ending), LF or CRLF.
 expected-line-ending-format=LF
 
-# Disable spurious warnings about numpy member functions
-extension-pkg-whitelist=numpy
+# Disable warnings that are not applicable to our coding style
+disable =
+  no-self-use,
+  invalid-name,
+  f-string-without-interpolation,
+  broad-except,
+  too-few-public-methods,
+  too-many-statements,
+  too-many-instance-attributes,
+  consider-using-with,
+  use-a-generator,
+  locally-disabled,
+  fixme

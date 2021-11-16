@@ -6,8 +6,7 @@ python:
   - 3.8
 install:
   - pip install -r requirements.txt
-  - pip install flake8
-  - pip install pylint
+  - pip install prospector
 script:
   - python setup.py test
   - make lint

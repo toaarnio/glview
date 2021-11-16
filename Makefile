@@ -1,5 +1,5 @@
 lint:
-	flake8 glview/*.py
+	prospector glview/[^a]*.py
 
 install:
 	pip3 uninstall --yes glview || true

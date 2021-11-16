@@ -1,0 +1,3 @@
+mccabe:
+  options:
+    max-complexity: 32
