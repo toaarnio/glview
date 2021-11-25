@@ -112,6 +112,8 @@ def main():
         print("    g                       toggle sRGB gamma correction on/off")
         print("    b                       increase brightness in 0.5 EV steps")
         print("    i                       print image information (EXIF)")
+        print("    d                       drop the currently shown image")
+        print("    del                     delete the currently shown image")
         print("    q / esc / ctrl+c        terminate")
         print()
         print("  supported file types:")

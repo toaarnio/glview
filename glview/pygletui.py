@@ -257,10 +257,13 @@ class PygletUI:
                     fileinfo = imsize.read(filespec)
                     print(fileinfo)
                     self._print_exif(filespec)
-                if symbol == keys.DELETE:  # delete file, but not in split-screen mode
-                    if self.numtiles == 1:
+                if symbol in [keys.D, keys.DELETE]:  # drop and/or delete
+                    if self.numtiles == 1:  # only in single-tile mode
                         imgidx = self.img_per_tile[self.tileidx]
-                        self.files.remove(imgidx)
+                        if symbol == keys.D:
+                            self.files.remove(imgidx)  # drop
+                        else:
+                            self.files.delete(imgidx)  # delete
                         if self.files.numfiles == 0:
                             self.running = False
                             self.event_loop.has_exit = True
