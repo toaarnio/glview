@@ -45,7 +45,19 @@ class FileList:
         self._update()
 
     def remove(self, idx):
-        """ Removes the given image from this FileList. """
+        """ Remove the given image from this FileList, do not delete the file. """
+        with self.mutex:
+            try:
+                filespec = self.filespecs.pop(idx)
+                self.orientations.pop(idx)
+                self.textures.pop(idx)
+                self.images.pop(idx)
+                self._update()
+            except IndexError:
+                pass
+
+    def delete(self, idx):
+        """ Remove the given image from this FileList and delete the file from disk. """
         with self.mutex:
             try:
                 filespec = self.filespecs.pop(idx)
