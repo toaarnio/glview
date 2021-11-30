@@ -1,7 +1,6 @@
 """ A graphical user interface for glview, based on Pyglet and ModernGL. """
 
 import os                      # built-in library
-import time                    # built-in library
 import threading               # built-in library
 import pprint                  # built-in library
 import traceback               # built-in library
@@ -63,18 +62,21 @@ class PygletUI:
         self._init_pyglet()
         self.renderer.init()
         self._vprint("starting Pyglet event loop...")
-        self.event_loop = self._create_eventloop(fps=50)
+        self.event_loop = self._create_eventloop()
         self.event_loop.run()
         self._vprint("Pyglet event loop stopped")
 
-    def _create_eventloop(self, fps):
+    def _create_eventloop(self):
+        parent = self
+
         class _EventLoop(pyglet.app.EventLoop):
             def idle(self):
                 dt = self.clock.update_time()
                 window = list(pyglet.app.windows)[0]
+                parent.need_redraw |= dt > 0.9  # redraw at least once per second
                 window.dispatch_event("on_draw")
-                sleep = max(1 / fps - dt, 0.0)
-                time.sleep(sleep)
+                return 1.0  # call again after 1 second if no events until then
+
         return _EventLoop()
 
     def _init_pyglet(self):
