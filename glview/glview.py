@@ -8,6 +8,7 @@ import sys                     # built-in library
 import os                      # built-in library
 import time                    # built-in library
 import threading               # built-in library
+import natsort                 # pip install natsort
 import psutil                  # pip install psutil
 
 try:
@@ -124,7 +125,8 @@ def main():
         print("See 'glview --help' for command-line options and keyboard commands.")
 
     filepatterns = sys.argv[1:] or url or ["*"]
-    filenames, _ = argv.filenames(filepatterns, IMAGE_TYPES, sort=True, allowAllCaps=True)
+    filenames, _ = argv.filenames(filepatterns, IMAGE_TYPES, allowAllCaps=True)
+    filenames = natsort.natsorted(filenames)
     filenames += [url] if url is not None else []
     numfiles = len(filenames)
     enforce(numfiles > 0, "No valid images to show. Terminating.")
