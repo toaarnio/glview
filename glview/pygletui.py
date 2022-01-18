@@ -22,6 +22,7 @@ class PygletUI:
         self.numtiles = 1
         self.running = None
         self.need_redraw = True
+        self.was_resized = True
         self.window = None
         self.key_state = None
         self.screensize = None
@@ -75,7 +76,7 @@ class PygletUI:
                 window = list(pyglet.app.windows)[0]
                 parent.need_redraw |= dt > 0.9  # redraw at least once per second
                 window.dispatch_event("on_draw")
-                return 1.0  # call again after 1 second if no events until then
+                return 0.5  # call again after 0.5 seconds if no events until then
 
         return _EventLoop()
 
@@ -170,6 +171,13 @@ class PygletUI:
                 self.renderer.redraw()
                 self.window.set_caption(self._caption())
                 self.window.flip()
+                if self.was_resized:
+                    # ensure that both buffers (back & front) are filled
+                    # with the same image after a resize event, or else
+                    # the window may be left black until the next redraw
+                    self.renderer.redraw()
+                    self.window.flip()
+                    self.was_resized = False
                 self.need_redraw = False
 
         @self.window.event
@@ -177,6 +185,7 @@ class PygletUI:
             self.winsize = (width, height)
             self.viewports = self._retile(self.numtiles, self.winsize)
             self.need_redraw = True
+            self.was_resized = True
 
         @self.window.event
         def on_mouse_press(_x, _y, button, _modifiers):
