@@ -176,8 +176,8 @@ def floatpair(argname, default=None):
             val1 = sys.argv[argidx + 1]
             val2 = sys.argv[argidx + 2]
             del sys.argv[argidx:argidx + 3]
-            _enforce(_isInt(val1), f"Invalid value for '{argname}': '{val1}' does not represent a decimal number")
-            _enforce(_isInt(val2), f"Invalid value for '{argname}': '{val2}' does not represent a decimal number.")
+            _enforce(_isFloat(val1), f"Invalid value for '{argname}': '{val1}' does not represent a decimal number")
+            _enforce(_isFloat(val2), f"Invalid value for '{argname}': '{val2}' does not represent a decimal number.")
             val1 = float(val1)
             val2 = float(val2)
             return [val1, val2]
@@ -353,6 +353,12 @@ class _Tests(unittest.TestCase):
         self.assertEqual(intpair("--repeated", repeats=True), set([(-1, 1), (10, 20)]))
         self.assertEqual(intpair("--repeated", default=(2, 1), repeats=True), set([(2, 1)]))
 
+    def test_floatpair(self):
+        print("Testing argv.floatpair()...")
+        sys.argv = ["--foo", "-1.2", "2.1"]
+        self.assertEqual(floatpair("--foo"), [-1.2, 2.1])
+        self.assertEqual(intpair("--foo", default=[0.1, -1.5]), [0.1, -1.5])
+
     def test_missing_values(self):
         print("Testing missing argument values...")
         sys.argv = ["--foo", "3"]
@@ -363,8 +369,6 @@ class _Tests(unittest.TestCase):
         self.assertRaises(SystemExit, lambda: intpair("--foo"))
         sys.argv = ["--foo", "2", "2.1"]
         self.assertRaises(SystemExit, lambda: intpair("--foo"))
-        sys.argv = ["--foo", "3.1", "3.2"]
-        self.assertRaises(SystemExit, lambda: floatpair("--foo"))
         sys.argv = ["--foo"]
         self.assertRaises(SystemExit, lambda: stringval("--foo", accepted=["bar"]))
 
