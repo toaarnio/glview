@@ -41,7 +41,7 @@ class GLRenderer:
         """ Initialize an OpenGL context and attach it to an existing window. """
         # OpenGL window must already exist and be owned by this thread
         self._vprint("attaching to native OpenGL window...")
-        self.ctx = moderngl.create_context()
+        self.ctx = moderngl.create_context(require=310)
         self.ctx.enable(moderngl.DEPTH_TEST)
         self._vprint("compiling shaders...")
         shader_path = os.path.dirname(os.path.realpath(__file__))
