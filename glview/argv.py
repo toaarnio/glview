@@ -40,24 +40,25 @@ import unittest                   # standard library
 ######################################################################################
 
 
-def filenames(patterns, extensions=None, sort=False, allowAllCaps=False, numRequired=0):
+def filenames(patterns, extensions=None, allowAllCaps=False, numRequired=0):
     """
     Examples:
-      filenames, basenames = argv.filenames(sys.argv[1:], numRequired=2)
-      filenames, basenames = argv.filenames(sys.argv[1:], [".ppm", ".png"], sort=True)
-      filenames, basenames = argv.filenames(sys.argv[1:], [".jpg"], allowAllCaps=True)
+      filenames = argv.filenames(sys.argv[1:], numRequired=2)
+      filenames = argv.filenames(sys.argv[1:], [".ppm", ".png"])
+      filenames = argv.filenames(sys.argv[1:], [".jpg"], allowAllCaps=True)
     """
-    fullnames = [glob.glob(filepattern, recursive=True) for filepattern in patterns]  # expand wildcards
-    fullnames = [item for sublist in fullnames for item in sublist]                 # flatten nested lists
-    fullnames = [f for f in set(fullnames) if os.path.isfile(f)]                    # check file existence
+    fullnames = [glob.glob(pattern, recursive=True) for pattern in patterns]  # expand wildcards
+    fullnames = [item for sublist in fullnames for item in sublist]  # flatten nested lists
+    dirs = [f for f in set(fullnames) if os.path.isdir(f)]  # collect directories
+    for dirname in dirs:  # collect files from directories
+        fullnames += glob.glob(os.path.join(dirname, "*"))
+    fullnames = [f for f in set(fullnames) if os.path.isfile(f)]  # keep existing files only
     if extensions is not None:
-        extensions += [e.upper() for e in extensions] if allowAllCaps else []       # jpg => [jpg, JPG]
+        extensions += [e.upper() for e in extensions] if allowAllCaps else []  # jpg => [jpg, JPG]
         fullnames = [f for f in fullnames if os.path.splitext(f)[1] in extensions]  # filter by extension
-    fullnames = sorted(fullnames) if sort else fullnames                            # sort if requested
-    basenames = [os.path.splitext(f)[0] for f in fullnames]                         # strip extensions
-    errmsg = f"Found {len(fullnames)} matching files, {numRequired} required."      # check file count
-    _enforce(len(fullnames) >= numRequired, errmsg)
-    return fullnames, basenames
+    errmsg = f"Found {len(fullnames)} matching files, {numRequired} required."
+    _enforce(len(fullnames) >= numRequired, errmsg)  # check file count
+    return fullnames
 
 
 def exists(argname):

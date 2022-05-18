@@ -125,7 +125,7 @@ def main():
         print("See 'glview --help' for command-line options and keyboard commands.")
 
     filepatterns = sys.argv[1:] or url or ["*"]
-    filenames, _ = argv.filenames(filepatterns, IMAGE_TYPES, allowAllCaps=True)
+    filenames = argv.filenames(filepatterns, IMAGE_TYPES, allowAllCaps=True)
     filenames = natsort.natsorted(filenames)
     filenames += [url] if url is not None else []
     numfiles = len(filenames)

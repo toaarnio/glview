@@ -10,6 +10,6 @@ https://github.com/toaarnio/glview
 
 from .glview import main
 
-__version__ = "1.1.1"
+__version__ = "1.2.0"
 
 __all__ = ["main"]
