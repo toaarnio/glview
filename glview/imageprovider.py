@@ -92,24 +92,24 @@ class ImageProvider:
                 with self.files.mutex:  # avoid race conditions
                     if idx < self.files.numfiles:
                         if isinstance(self.files.images[idx], str) and self.files.images[idx] == "PENDING":
-                            img = self._load_single(idx)
+                            verbose = self.verbose or self.files.numfiles < 200
+                            img = self._load_single(idx, verbose)
                             self.files.images[idx] = img
                             nbytes += img.nbytes if isinstance(img, np.ndarray) else 0
                     else:
                         break
-                time.sleep(0.01)  # yield some CPU time to the UI thread
                 idx += 1
-            if nbytes > 1e6:
+            if nbytes > 1e4:
                 elapsed = time.time() - t0
                 nbytes = nbytes / 1024**2
                 bandwidth = nbytes / elapsed
                 ram_after = psutil.virtual_memory().available / 1024**2
                 consumed = ram_before - ram_after
-                self._print(f"loaded {nbytes:.0f} MB of image data in {elapsed:.1f} seconds ({bandwidth:.1f} MB/sec).")
+                self._print(f"loaded {idx} files, {nbytes:.0f} MB of image data in {elapsed:.1f} seconds ({bandwidth:.1f} MB/sec).")
                 self._print(f"consumed {consumed:.0f} MB of system RAM, {ram_after:.0f}/{ram_total:.0f} MB remaining.")
             time.sleep(0.1)
 
-    def _load_single(self, idx):
+    def _load_single(self, idx, verbose):
         """
         Read image, drop alpha channel, convert to fp32 if maxval != 255;
         if loading fails, mark the slot as "INVALID" and keep going.
@@ -117,13 +117,13 @@ class ImageProvider:
         try:
             filespec = self.files.filespecs[idx]
             if not self.files.is_url[idx]:
-                img, maxval = imgio.imread(filespec, verbose=True)
+                img, maxval = imgio.imread(filespec, verbose=verbose)
             else:
                 data = urllib.request.urlopen(filespec).read()
                 basename = os.path.basename(filespec)
                 with tempfile.NamedTemporaryFile(suffix=f"_{basename}") as tmpfile:
                     tmpfile.write(data)
-                    img, maxval = imgio.imread(tmpfile.name, verbose=True)
+                    img, maxval = imgio.imread(tmpfile.name, verbose=verbose)
             img = np.atleast_3d(img)  # {2D, 3D} => 3D
             img = img[:, :, :3]  # scrap alpha channel, if any
             if maxval != 255:  # if not uint8, convert to fp16 (due to ModernGL limitations)
