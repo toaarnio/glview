@@ -16,6 +16,7 @@ expected-line-ending-format=LF
 disable =
   no-self-use,
   invalid-name,
+  unnecessary-lambda-assignment,
   f-string-without-interpolation,
   broad-except,
   too-few-public-methods,
