@@ -98,6 +98,7 @@ class ImageProvider:
                             nbytes += img.nbytes if isinstance(img, np.ndarray) else 0
                     else:
                         break
+                time.sleep(0.001)
                 idx += 1
             if nbytes > 1e4:
                 elapsed = time.time() - t0
