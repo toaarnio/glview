@@ -305,7 +305,9 @@ class PygletUI:
                 self._vprint(f"on_text_motion({keys.symbol_string(motion)})")
                 incr = 1 if motion == keys.MOTION_NEXT_WORD else -1
                 active_tiles = self.img_per_tile[:self.numtiles]
-                active_tiles = np.array(active_tiles) + incr * self.numtiles
+                consecutive = np.ptp(active_tiles) + 1 == self.numtiles
+                stride = self.numtiles if consecutive else 1
+                active_tiles = np.array(active_tiles) + incr * stride
                 active_tiles = active_tiles % self.files.numfiles
                 self.img_per_tile[:self.numtiles] = active_tiles
                 self.window.set_caption(self._caption())
