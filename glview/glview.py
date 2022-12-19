@@ -25,7 +25,7 @@ except ImportError:
     import imageprovider           # local import
 
 
-IMAGE_TYPES = [".pgm", ".ppm", ".pnm", ".pfm", ".png", ".bmp", ".jpg", ".jpeg", ".tif", ".tiff", ".insp", ".exr"]
+IMAGE_TYPES = [".pgm", ".ppm", ".pnm", ".pfm", ".png", ".bmp", ".jpg", ".jpeg", ".tif", ".tiff", ".insp", ".exr", ".npy"]
 
 
 class FileList:
