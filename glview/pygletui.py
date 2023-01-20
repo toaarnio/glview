@@ -99,7 +99,7 @@ class PygletUI:
         self._vprint("Pyglet & native OpenGL initialized")
 
     def _caption(self):
-        fps = pyglet.clock.get_fps()
+        fps = pyglet.clock.get_frequency()
         caption = f"glview [{self.ev:+1.1f}EV | {fps:.1f} fps]"
         for tileidx in range(self.numtiles):
             imgidx = self.img_per_tile[tileidx]
