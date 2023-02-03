@@ -40,7 +40,9 @@ class PygletUI:
         self.texture_filter = "NEAREST"
         self.img_per_tile = [0, 1, 2, 3]
         self.gamma = False
-        self.ev = 0
+        self.ev_range = 2
+        self.ev_linear = 0.0
+        self.ev = 0.0
 
     def start(self, renderer):
         """ Start the UI thread. """
@@ -100,7 +102,7 @@ class PygletUI:
 
     def _caption(self):
         fps = pyglet.clock.get_frequency()
-        caption = f"glview [{self.ev:+1.1f}EV | {fps:.1f} fps]"
+        caption = f"glview [{self.ev:+1.2f}EV | {fps:.1f} fps]"
         for tileidx in range(self.numtiles):
             imgidx = self.img_per_tile[tileidx]
             basename = os.path.basename(self.files.filespecs[imgidx])
@@ -161,12 +163,24 @@ class PygletUI:
             if np.any(dxdy != 0.0) or self.scale != prev_scale:
                 self.need_redraw = True
 
+    def _smooth_exposure(self):
+        # this is invoked 50 times per second, so exposure control is pretty fast
+        keys = pyglet.window.key
+        def triangle_wave(x, amplitude):
+            # [0, 1] => [-amplitude, +amplitude]
+            y = 4 * amplitude * np.abs((x - 0.25) % 1 - 0.5) - amplitude
+            return y
+        self.ev_linear += 0.005 * self.key_state[keys.E]
+        self.ev = triangle_wave(self.ev_linear, self.ev_range)
+        self.need_redraw = True
+
     def _setup_events(self):
         self._vprint("setting up Pyglet window event handlers...")
 
         @self.window.event
         def on_draw():
             self._keyboard_zoom_pan()
+            self._smooth_exposure()
             if self.need_redraw:
                 self.renderer.redraw()
                 self.window.set_caption(self._caption())
@@ -235,17 +249,16 @@ class PygletUI:
                     self.window.set_fullscreen(self.fullscreen)
                     self.window.set_mouse_visible(not self.fullscreen)
                     self.need_redraw = True
-                if symbol == keys.H:  # reset zoom & pan ("home")
+                if symbol == keys.H:  # reset exposure + zoom & pan ("home")
                     self.scale = 1.0
                     self.mousepos = np.zeros(2)
+                    self.ev_linear = 0.0
                     self.need_redraw = True
                 if symbol == keys.G:  # gamma
                     self.gamma = not self.gamma
                     self.need_redraw = True
-                if symbol == keys.B:  # brightness
-                    ev = (self.ev * 2) + 4
-                    ev = (ev + 1) % 9  # [0, 8] ==> [-2, +2] EV in 0.5-EV steps
-                    self.ev = (ev - 4) / 2
+                if symbol == keys.B:  # toggle between narrow/wide (LDR/HDR) exposure control
+                    self.ev_range = (self.ev_range + 6) % 12
                     self.need_redraw = True
                 if symbol == keys.T:  # texture filtering
                     self.texture_filter = "LINEAR" if self.texture_filter == "NEAREST" else "NEAREST"
