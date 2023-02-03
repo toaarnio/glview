@@ -95,10 +95,10 @@ class GLRenderer:
     def _create_texture(self, img):
         # ModernGL texture dtypes that actually work:
         #   'f1': fixed-point [0, 1] internal format (GL_RGB8), uint8 input
-        #   'f2': fixed-point [0, 1] internal format (GL_RGB16F), float16 input in [0, 1]
-        #   'f4': fixed-point [0, 1] internal format (GL_RGB32F), float32 input in [0, 1]
+        #   'f2': float16 internal format (GL_RGB16F), float16 input
+        #   'f4': float32 internal format (GL_RGB32F), float32 input
         #
-        # dtypes yielding constant zero in fragment shader (as of ModernGL 5.5.2):
+        # dtypes yielding constant zero in fragment shader (as of ModernGL 5.7.4):
         #   'u1': integer [0, 255] internal format (GL_RGB8UI), uint8 input
         #   'u2': integer [0, 65535] internal format (GL_RGB16UI), uint16 input
         #   'u4': integer [0, 2^32-1] internal format (GL_RGB32UI), uint32 input
