@@ -31,7 +31,7 @@ class GLRenderer:
         self.prog = None            # <Program> image renderer with zoom & pan
         self.vbo = None             # <Buffer> xy vertex coords for 2D rectangle
         self.vao = None             # <VertexArray> 2D rectangle vertices + shader
-        self.texture_filter = None  # filter_nearest' or filter_linear
+        self.texture_filter = None  # filter_nearest or filter_linear
         self.running = None
         self.render_thread = None
         self.tprev = None
@@ -66,6 +66,8 @@ class GLRenderer:
             imgidx = self.ui.img_per_tile[i]
             texture = self._load_texture(imgidx)
             texture.filter = self.filters[self.ui.texture_filter]
+            texture.repeat_x = False
+            texture.repeat_y = False
             texture.swizzle = 'RGB1'
             texture.use()
             orientation = self.files.orientations[imgidx]
