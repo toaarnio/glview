@@ -10,6 +10,13 @@ uniform sampler2D texture;
 in vec2 tex;
 out vec4 color;
 
+vec3 srgb_gamma(vec3 rgb) {
+    bvec3 cutoff = lessThan(rgb, vec3(0.0031308));
+    vec3 higher = vec3(1.055) * pow(rgb, vec3(1.0 / 2.4)) - vec3(0.055);
+    vec3 lower = rgb * vec3(12.92);
+    return mix(higher, lower, cutoff);
+}
+
 void main() {
   vec2 flipped = vec2(tex.x, 1.0 - tex.y);
   vec2 rotated = flipped;
@@ -27,6 +34,6 @@ void main() {
 
   color = texture2D(texture, rotated) * exp(ev);  // exp(x) == 2^x
   color.rgb = grayscale ? color.rrr : color.rgb;
-  color.rgb = gamma ? pow(color.rgb, vec3(1/2.2)) : color.rgb;
+  color.rgb = gamma ? srgb_gamma(color.rgb) : color.rgb;
   color.r = debug ? color.r + 0.5 : color.r;
 }
