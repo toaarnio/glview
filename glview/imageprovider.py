@@ -127,10 +127,11 @@ class ImageProvider:
                     img, maxval = imgio.imread(tmpfile.name, verbose=verbose)
             img = np.atleast_3d(img)  # {2D, 3D} => 3D
             img = img[:, :, :3]  # scrap alpha channel, if any
-            if maxval != 255:  # if not uint8, convert to fp16 (due to ModernGL limitations)
+            if img.dtype == np.uint16:
+                # uint16 still doesn't work in ModernGL as of 5.7.4;
+                # scale to [0, 1] and use float32 instead
                 norm = max(maxval, np.max(img))
                 img = img.astype(np.float32) / norm
-                img = img.astype(np.float16)
             return img
         except imgio.ImageIOError as e:
             print(f"\n{e}")
