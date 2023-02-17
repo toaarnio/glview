@@ -83,6 +83,9 @@ class GLRenderer:
             self.prog['grayscale'].value = (texture.components == 1)
             self.prog['gamma'].value = self.ui.gamma
             self.prog['ev'].value = self.ui.ev
+            self.prog['gamut.power'].value = self.ui.gamut_power
+            self.prog['gamut.thr'].value = self.ui.gamut_thr
+            self.prog['gamut.scale'].value = self._gamut_curve(self.ui.gamut_power, self.ui.gamut_thr, self.ui.gamut_lim)
             self.vao.render(moderngl.TRIANGLE_STRIP)
         self.ctx.finish()
         elapsed = (time.time() - t0) * 1000
@@ -91,6 +94,17 @@ class GLRenderer:
         self.tprev = time.time()
         self._vprint(f"rendering {w} x {h} pixels took {elapsed:.1f} ms, frame-to-frame interval was {interval:.1f} ms")
         return elapsed
+
+    def _gamut_curve(self, power, thr, lim):
+        invp = 1 / power
+        src_domain = lim - thr  # range on the x axis to compress from; always > 0
+        dst_domain = 1.0 - thr  # range on the x axis to compress to; >= src_domain
+        rel_domain = src_domain / dst_domain  # always >= 1, typically 1..10
+        pow_domain = rel_domain ** power  # always >= 1, can be very large if p >> 1
+        pow_domain = (pow_domain - 1) ** invp  # ~rel_domain, if p >> 1 or lim >> 1
+        with np.errstate(divide="ignore"):  # divide-by-zero => inf, no warning
+            s = src_domain / pow_domain  # > dst_domain; ~dst_domain, if p >> 1 or lim >> 1
+        return s
 
     def _create_texture(self, img):
         # ModernGL texture dtypes that actually work:

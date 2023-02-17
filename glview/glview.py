@@ -113,6 +113,7 @@ def main():
         print("    g                       toggle sRGB gamma correction on/off")
         print("    e                       slide exposure from -2EV to +2EV & back")
         print("    b                       toggle between HDR/LDR exposure control")
+        print("    c                       toggle gamut compression on/off")
         print("    i                       print image information (EXIF)")
         print("    d                       drop the currently shown image")
         print("    del                     delete the currently shown image")
