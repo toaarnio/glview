@@ -92,7 +92,7 @@ class GLRenderer:
         interval = (time.time() - self.tprev) * 1000
         w, h = self.ui.window.get_size()
         self.tprev = time.time()
-        self._vprint(f"rendering {w} x {h} pixels took {elapsed:.1f} ms, frame-to-frame interval was {interval:.1f} ms")
+        self._vprint(f"rendering {w} x {h} pixels took {elapsed:.1f} ms, frame-to-frame interval was {interval:.1f} ms", log_level=2)
         return elapsed
 
     def _gamut_curve(self, power, thr, lim):
@@ -160,6 +160,6 @@ class GLRenderer:
             xscale, yscale = (texture_aspect / viewport_aspect, 1.0)
         return xscale, yscale
 
-    def _vprint(self, message):
-        if self.verbose:
+    def _vprint(self, message, log_level=1):
+        if self.verbose >= log_level:
             print(f"[{self.__class__.__name__}/{threading.current_thread().name}] {message}")
