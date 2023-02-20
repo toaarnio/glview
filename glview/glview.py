@@ -42,6 +42,7 @@ class FileList:
         self.orientations = [0] * self.numfiles
         self.images = ["PENDING"] * self.numfiles  # PENDING | RELEASED | INVALID
         self.textures = [None] * self.numfiles     # None | <Texture>
+        self.metadata = [None] * self.numfiles
         self.is_url = [None] * self.numfiles
         self._update()
 
@@ -52,6 +53,7 @@ class FileList:
                 self.filespecs.pop(idx)
                 self.orientations.pop(idx)
                 self.textures.pop(idx)
+                self.metadata.pop(idx)
                 self.images.pop(idx)
                 self._update()
             except IndexError:
@@ -64,6 +66,7 @@ class FileList:
                 filespec = self.filespecs.pop(idx)
                 self.orientations.pop(idx)
                 self.textures.pop(idx)
+                self.metadata.pop(idx)
                 self.images.pop(idx)
                 self._update()
                 print(f"[{threading.current_thread().name}] Deleting {filespec}...")
