@@ -83,6 +83,7 @@ def main():
     url = argv.stringval("--url", default=None)
     smooth = argv.exists("--filter")
     verbose = argv.exists("--verbose")
+    verbose += argv.exists("--verbose")
     show_help = argv.exists("--help")
     argv.exitIfAnyUnparsedOptions()
     if show_help:
@@ -94,6 +95,7 @@ def main():
         print("    --url <address>         load image from the given web address")
         print("    --filter                use linear filtering; default = nearest")
         print("    --verbose               print extra traces to the console")
+        print("    --verbose               print even more traces to the console")
         print("    --help                  show this help message")
         print()
         print("  runtime:")
@@ -134,8 +136,8 @@ def main():
     enforce(numfiles > 0, "No valid images to show. Terminating.")
 
     files = FileList(filenames)
-    ui = pygletui.PygletUI(files, verbose)
-    loader = imageprovider.ImageProvider(files, verbose)
+    ui = pygletui.PygletUI(files, bool(verbose))
+    loader = imageprovider.ImageProvider(files, bool(verbose))
     renderer = glrenderer.GLRenderer(ui, files, loader, verbose)
     ui.texture_filter = "LINEAR" if smooth else "NEAREST"
     ui.fullscreen = fullscreen
