@@ -106,6 +106,34 @@ class GLRenderer:
             s = src_domain / pow_domain  # > dst_domain; ~dst_domain, if p >> 1 or lim >> 1
         return s
 
+    def _fit_gamut(self, rgb):
+
+        # grayscale images have no color gamut
+
+        is_grayscale = rgb.ndim == 2 or rgb.shape[2] == 1
+        if is_grayscale:
+            max_dist = np.zeros(3)
+            return max_dist
+
+        # convert to float64 to avoid overflows, underflows & dtype issues
+
+        rgb = rgb.astype(np.float64)
+
+        # distance is relative to per-pixel maximum color; >1.0 means out of gamut
+
+        max_rgb = np.max(rgb, axis=-1, keepdims=True)  # (H, W, 1)
+        valid = np.abs(max_rgb) > 0.0
+        zeros = np.zeros_like(rgb)  # (H, W, 3)
+        dist = np.divide(max_rgb - rgb, max_rgb, out=zeros, where=valid)
+
+        # determine the maximum distance from the gray axis that will be squeezed
+        # into gamut; colors further than that will remain out of gamut, but less
+        # than before
+
+        all_but_last = tuple(np.arange(rgb.ndim - 1))  # (0,) or (0, 1)
+        max_dist = np.max(dist, axis=all_but_last)  # global RGB-wise maximum
+        return max_dist
+
     def _create_texture(self, img):
         # ModernGL texture dtypes that actually work:
         #   'f1': fixed-point [0, 1] internal format (GL_RGB8), uint8 input
@@ -138,13 +166,17 @@ class GLRenderer:
         assert isinstance(img, (np.ndarray, str))
         if isinstance(img, np.ndarray):  # success
             texture = self._create_texture(img)
+            gamut_bounds = self._fit_gamut(img)
             self.files.textures[idx] = texture
+            self.files.metadata[idx] = {'gamut_bounds': gamut_bounds}
             self.loader.release_image(idx)
+            self._vprint(f"{self.files.filespecs[idx]} gamut extents = {gamut_bounds.round(3).tolist()}")
         else:  # PENDING | INVALID | RELEASED
             texture = self.files.textures[idx]
             if texture is None:
                 texture = self._create_dummy_texture()
                 self.files.textures[idx] = texture
+                self.files.metadata[idx] = {'gamut_bounds': np.ones(3)}
         if self.ui.texture_filter != "NEAREST":
             texture.build_mipmaps()
         return texture
