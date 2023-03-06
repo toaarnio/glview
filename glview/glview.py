@@ -156,7 +156,7 @@ def main_loop(modules):
     """ Keep the application running until exit request or out of memory. """
     try:
         ram_minimum = 512  # exit if available RAM drops below 512 MB
-        while all([m.running for m in modules]):
+        while all(m.running for m in modules):
             ram_available = psutil.virtual_memory().available / 1024**2
             if ram_available < ram_minimum:
                 print(f"ERROR: Only {ram_available:.0f} MB of RAM remaining. Terminating.")
