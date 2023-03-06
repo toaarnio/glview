@@ -115,9 +115,17 @@ class GLRenderer:
             max_dist = np.zeros(3)
             return max_dist
 
-        # convert to float64 to avoid overflows, underflows & dtype issues
+        # pick every Nth pixel to speed up processing for very large images;
+        # for example, a 100MP image will be downscaled by 8x in both x & y
 
-        rgb = rgb.astype(np.float64)
+        magnitude = np.log10(rgb.size / 3)
+        N = max(np.rint(magnitude) - 5, 0)  # 0, 1, 2, 3
+        N = int(2 ** N)  # 1, 2, 4, 8
+        rgb = rgb[::N, ::N]  # 1MP => 2x, 10MP => 4x, 100MP => 8x
+
+        # convert to float32 to avoid overflows, underflows & dtype issues
+
+        rgb = rgb.astype(np.float32)
 
         # distance is relative to per-pixel maximum color; >1.0 means out of gamut
 
