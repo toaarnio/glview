@@ -1,0 +1,31 @@
+target-version = "py38"
+
+line-length = 150
+
+select = ["ALL"]
+ignore = [
+       "D",  # pydocstyle
+       "N",  # pep8-naming
+       "Q",  # flake8-quotes
+       "T20",  # flake8-print
+       "ANN",  # flake8-annotations
+       "FBT",  # flake8-boolean-trap
+       "ERA",  # eradicate
+       "PT",  # flake8-pytest-style
+       "PTH",  # flake8-use-pathlib
+       "BLE",  # flake8-blind-except
+       "E731",  # pycodestyle: lambda-assignment
+       "S101",  # flake8-bandit: use of assert detected
+       "I001",  # isort: unsorted-imports
+       "PLR2004",  # refactor: magic-value-comparison
+       "RET504",  # flake8-return: unnecessary-assign
+       "SLF001",  # flake8-self: private-member-access
+       "SIM102",  # flake8-simplify: collapsible-if
+       "SIM115",  # flake8-simplify: open-file-with-context-handler
+       "TRY300",  # tryceratops: try-consider-else
+       ]
+
+
+[per-file-ignores]
+
+"__init__.py" = ["E402"]  # pycodestyle: module-import-not-at-top-of-file

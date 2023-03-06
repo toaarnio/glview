@@ -1,5 +1,5 @@
 lint:
-	prospector glview/[^a]*.py
+	ruff check --show-source glview/[^a]*.py
 
 install:
 	pip3 uninstall --yes glview || true
