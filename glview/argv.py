@@ -136,7 +136,7 @@ def stringval(argname, default=None, accepted=None, condition=None, repeats=Fals
         argSet = set()
         argstr = _string(argname)
         if argstr is None:
-            argSet |= set([default])
+            argSet |= {default}
         while argstr is not None:
             if not _isValid(argname, argstr, accepted, condition):
                 sys.exit(-1)
@@ -159,9 +159,9 @@ def intpair(argname, default=None, repeats=False):
         pairSet = set()
         pair = _intpair(argname)
         if pair is None:
-            pairSet |= set([default])
+            pairSet |= {default}
         while pair is not None:
-            pairSet |= set([pair])
+            pairSet |= {pair}
             pair = _intpair(argname)
         return pairSet
 
@@ -342,7 +342,7 @@ class _Tests(unittest.TestCase):
     def test_stringval_repeat(self):
         print("Testing argv.stringval(repeats=True)...")
         sys.argv = ["--repeated", "foo", "--repeated", "bar", "--repeated", "baz"]
-        self.assertEqual(stringval("--repeated", repeats=True), set(("foo", "bar", "baz")))
+        self.assertEqual(stringval("--repeated", repeats=True), {"foo", "bar", "baz"})
         exitIfAnyUnparsedOptions()
 
     def test_intpair(self):
@@ -351,8 +351,8 @@ class _Tests(unittest.TestCase):
         self.assertEqual(intpair("--foo"), (-1, 1))
         self.assertEqual(intpair("--foo", default=(0, 2)), (0, 2))
         sys.argv = ["--repeated", "-1", "1", "--repeated", "10", "20"]
-        self.assertEqual(intpair("--repeated", repeats=True), set([(-1, 1), (10, 20)]))
-        self.assertEqual(intpair("--repeated", default=(2, 1), repeats=True), set([(2, 1)]))
+        self.assertEqual(intpair("--repeated", repeats=True), {(-1, 1), (10, 20)})
+        self.assertEqual(intpair("--repeated", default=(2, 1), repeats=True), {(2, 1)})
 
     def test_floatpair(self):
         print("Testing argv.floatpair()...")
