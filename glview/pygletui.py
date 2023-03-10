@@ -13,9 +13,11 @@ import imsize                  # pip install imsize
 class PygletUI:
     """ A graphical user interface for glview, based on Pyglet and ModernGL. """
 
-    def __init__(self, files, verbose=False):
+    def __init__(self, files, debug, verbose=False):
         """ Create a new PygletUI with the given (hardcoded) FileList instance. """
         self.thread_name = "UIThread"
+        self.debug_selected = debug  # selected debug rendering mode: 1|2|3|...
+        self.debug_mode = 0  # start in normal mode, toggle on/off with space
         self.verbose = verbose
         self.files = files
         self.fullscreen = False
@@ -43,10 +45,11 @@ class PygletUI:
         self.ev_range = 2
         self.ev_linear = 0.0
         self.ev = 0.0
-        self.gamut = False
-        self.gamut_lim = np.ones(3)
-        self.gamut_thr = np.zeros(3)
-        self.gamut_power = np.ones(3)
+        self.gamut_fit = False  # on/off toggle
+        self.gamut_lin = 0.0  # adjusted dynamically
+        self.gamut_pow = np.ones(3)  # derived from self.gamut_lin
+        self.gamut_thr = np.ones(3) * 0.8  # hardcoded preset
+        self.gamut_lim = np.ones(3) * 3.0  # hardcoded preset
 
     def start(self, renderer):
         """ Start the UI thread. """
@@ -106,7 +109,7 @@ class PygletUI:
 
     def _caption(self):
         fps = pyglet.clock.get_frequency()
-        gamut = "on" if self.gamut else "off"
+        gamut = "off" if not self.gamut_fit else f"p = {self.gamut_pow[0]:.1f}"
         caption = f"glview [{self.ev:+1.2f}EV | gamut fit {gamut} | {fps:.1f} fps]"
         for tileidx in range(self.numtiles):
             imgidx = self.img_per_tile[tileidx]
@@ -168,15 +171,24 @@ class PygletUI:
             if np.any(dxdy != 0.0) or self.scale != prev_scale:
                 self.need_redraw = True
 
+    def _triangle_wave(self, x, amplitude):
+        # [0, 1] => [-amplitude, +amplitude]
+        y = 4 * amplitude * np.abs((x - 0.25) % 1 - 0.5) - amplitude
+        return y
+
     def _smooth_exposure(self):
         # this is invoked 50 times per second, so exposure control is pretty fast
         keys = pyglet.window.key
-        def triangle_wave(x, amplitude):
-            # [0, 1] => [-amplitude, +amplitude]
-            y = 4 * amplitude * np.abs((x - 0.25) % 1 - 0.5) - amplitude
-            return y
         self.ev_linear += 0.005 * self.key_state[keys.E]
-        self.ev = triangle_wave(self.ev_linear, self.ev_range)
+        self.ev = self._triangle_wave(self.ev_linear, self.ev_range)
+        self.need_redraw = True
+
+    def _smooth_gamut_fit(self):
+        # this is invoked 50 times per second, so gamut fit control is pretty fast
+        keys = pyglet.window.key
+        self.gamut_lin += 0.005 * self.key_state[keys.C]
+        power = self._triangle_wave(self.gamut_lin, 2) + 3  # [0, 1] => [-2, 2] => [1, 5]
+        self.gamut_pow = np.ones(3) * power
         self.need_redraw = True
 
     def _setup_events(self):
@@ -186,6 +198,7 @@ class PygletUI:
         def on_draw():
             self._keyboard_zoom_pan()
             self._smooth_exposure()
+            self._smooth_gamut_fit()
             if self.need_redraw:
                 self.renderer.redraw()
                 self.window.set_caption(self._caption())
@@ -258,6 +271,8 @@ class PygletUI:
                     self.scale = 1.0
                     self.mousepos = np.zeros(2)
                     self.ev_linear = 0.0
+                    self.gamut_lin = 0.0
+                    self.gamut_fit = False
                     self.need_redraw = True
                 if symbol == keys.G:  # gamma
                     self.gamma = not self.gamma
@@ -265,11 +280,8 @@ class PygletUI:
                 if symbol == keys.B:  # toggle between narrow/wide (LDR/HDR) exposure control
                     self.ev_range = (self.ev_range + 6) % 12
                     self.need_redraw = True
-                if symbol == keys.C:  # toggle gamut compression on/off
-                    self.gamut = not self.gamut
-                    self.gamut_lim = np.ones(3) * (2.0 if self.gamut else 1.0)
-                    self.gamut_thr = np.ones(3) * 0.5
-                    self.gamut_power = np.ones(3) * 10.0
+                if symbol == keys.K: # toggle gamut compression on/off
+                    self.gamut_fit = not self.gamut_fit
                     self.need_redraw = True
                 if symbol == keys.T:  # texture filtering
                     self.texture_filter = "LINEAR" if self.texture_filter == "NEAREST" else "NEAREST"
@@ -292,6 +304,11 @@ class PygletUI:
                     fileinfo = imsize.read(filespec)
                     print(fileinfo)
                     self._print_exif(filespec)
+                if symbol == keys.SPACE:
+                    N = self.debug_selected  # toggle between 0/N
+                    self.debug_mode = (self.debug_mode + N) % (N * 2)
+                    self._vprint(f"debug rendering mode {self.debug_mode}")
+                    self.need_redraw = True
                 if symbol in [keys.D, keys.DELETE]:  # drop and/or delete
                     if self.numtiles == 1:  # only in single-tile mode
                         imgidx = self.img_per_tile[self.tileidx]
