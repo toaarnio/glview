@@ -9,7 +9,6 @@ https://github.com/toaarnio/glview
 """
 
 from .glview import main
-
-__version__ = "1.4.1"
+from .version import __version__
 
 __all__ = ["main"]

@@ -13,12 +13,14 @@ import psutil                  # pip install psutil
 
 try:
     # package mode
+    from glview import version        # local import
     from glview import argv           # local import
     from glview import pygletui       # local import
     from glview import glrenderer     # local import
     from glview import imageprovider  # local import
 except ImportError:
     # stand-alone mode
+    import version                 # local import
     import argv                    # local import
     import pygletui                # local import
     import glrenderer              # local import
@@ -87,8 +89,12 @@ def main():
     smooth = argv.exists("--filter")
     verbose = argv.exists("--verbose")
     verbose += argv.exists("--verbose")
+    show_version = argv.exists("--version")
     show_help = argv.exists("--help")
     argv.exitIfAnyUnparsedOptions()
+    if show_version:
+        print(f"glview version {version.__version__}")
+        sys.exit(-1)
     if show_help:
         print("Usage: glview [options] [image.(pgm|ppm|pnm|png|jpg|..)] ...")
         print()
@@ -99,6 +105,7 @@ def main():
         print("    --filter                use linear filtering; default = nearest")
         print("    --verbose               print extra traces to the console")
         print("    --verbose               print even more traces to the console")
+        print("    --version               show glview version number & exit")
         print("    --help                  show this help message")
         print()
         print("  runtime:")
@@ -126,6 +133,8 @@ def main():
         print()
         print("  supported file types:")
         print("   ", '\n    '.join(IMAGE_TYPES))
+        print()
+        print(f"  glview version {version.__version__}.")
         print()
         sys.exit(-1)
     else:
