@@ -13,9 +13,11 @@ import imsize                  # pip install imsize
 class PygletUI:
     """ A graphical user interface for glview, based on Pyglet and ModernGL. """
 
-    def __init__(self, files, verbose=False):
+    def __init__(self, files, debug, verbose=False):
         """ Create a new PygletUI with the given (hardcoded) FileList instance. """
         self.thread_name = "UIThread"
+        self.debug_selected = debug  # selected debug rendering mode: 1|2|3|...
+        self.debug_mode = 0  # start in normal mode, toggle on/off with space
         self.verbose = verbose
         self.files = files
         self.fullscreen = False
@@ -292,6 +294,11 @@ class PygletUI:
                     fileinfo = imsize.read(filespec)
                     print(fileinfo)
                     self._print_exif(filespec)
+                if symbol == keys.SPACE:  # toggle debug mode on/off
+                    N = self.debug_selected
+                    self.debug_mode = (self.debug_mode + N) % (N * 2)
+                    self._vprint(f"debug rendering mode {self.debug_mode}")
+                    self.need_redraw = True
                 if symbol in [keys.D, keys.DELETE]:
                     if symbol == keys.D:  # drop
                         indices = self.img_per_tile[:self.numtiles]
