@@ -292,20 +292,23 @@ class PygletUI:
                     fileinfo = imsize.read(filespec)
                     print(fileinfo)
                     self._print_exif(filespec)
-                if symbol in [keys.D, keys.DELETE]:  # drop and/or delete
-                    if self.numtiles == 1:  # only in single-tile mode
-                        imgidx = self.img_per_tile[self.tileidx]
-                        if symbol == keys.D:
-                            self.files.remove(imgidx)  # drop
-                        else:
-                            self.files.delete(imgidx)  # delete
-                        if self.files.numfiles == 0:
-                            self.running = False
-                            self.event_loop.has_exit = True
-                        else:
-                            self.img_per_tile[self.tileidx] = (imgidx - 1) % self.files.numfiles
-                            self.window.set_caption(self._caption())
-                            self.need_redraw = True
+                if symbol in [keys.D, keys.DELETE]:
+                    if symbol == keys.D:  # drop
+                        indices = self.img_per_tile[:self.numtiles]
+                        self.files.drop(indices)
+                    if symbol == keys.DELETE:  # delete
+                        if self.numtiles == 1:  # only in single-tile mode
+                            imgidx = self.img_per_tile[self.tileidx]
+                            self.files.delete(imgidx)
+                    if self.files.numfiles == 0:
+                        self.running = False
+                        self.event_loop.has_exit = True
+                    else:
+                        N = self.numtiles
+                        visible_images = np.asarray(self.img_per_tile[:N]) - N
+                        self.img_per_tile[:N] = visible_images % self.files.numfiles
+                        self.window.set_caption(self._caption())
+                        self.need_redraw = True
                 # pylint: disable=protected-access
                 if symbol in [keys._1, keys._2, keys._3, keys._4]:
                     tileidx = symbol - keys._1

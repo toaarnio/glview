@@ -8,6 +8,7 @@ import sys                     # built-in library
 import os                      # built-in library
 import time                    # built-in library
 import threading               # built-in library
+import numpy as np             # pip install numpy
 import natsort                 # pip install natsort
 import psutil                  # pip install psutil
 
@@ -48,16 +49,17 @@ class FileList:
         self.is_url = [None] * self.numfiles
         self._update()
 
-    def remove(self, idx):
-        """ Remove the given image from this FileList, do not delete the file. """
+    def drop(self, indices):
+        """ Drop the given images from this FileList, do not delete the files. """
         with self.mutex:
             try:
-                self.filespecs.pop(idx)
-                self.orientations.pop(idx)
-                self.textures.pop(idx)
-                self.metadata.pop(idx)
-                self.images.pop(idx)
+                self.filespecs = self._drop(self.filespecs, indices)
+                self.orientations = self._drop(self.orientations, indices)
+                self.textures = self._drop(self.textures, indices)
+                self.metadata = self._drop(self.metadata, indices)
+                self.images = self._drop(self.images, indices)
                 self._update()
+                print(f"[{threading.current_thread().name}] Dropped images {indices}")
             except IndexError:
                 pass
 
@@ -65,16 +67,18 @@ class FileList:
         """ Remove the given image from this FileList and delete the file from disk. """
         with self.mutex:
             try:
-                filespec = self.filespecs.pop(idx)
-                self.orientations.pop(idx)
-                self.textures.pop(idx)
-                self.metadata.pop(idx)
-                self.images.pop(idx)
-                self._update()
-                print(f"[{threading.current_thread().name}] Deleting {filespec}...")
+                filespec = self.filespecs[idx]
+                self.drop([idx])
                 os.remove(filespec)
+                print(f"[{threading.current_thread().name}] Deleted {filespec}")
             except IndexError:
                 pass
+
+    def _drop(self, arr, indices):
+        arr = np.asarray(arr, dtype=object)
+        arr = np.delete(arr, indices)
+        arr = arr.tolist()
+        return arr
 
     def _update(self):
         self.numfiles = len(self.filespecs)
