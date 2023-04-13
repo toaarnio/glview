@@ -282,9 +282,9 @@ class PygletUI:
                     self.window.set_caption(self._caption())
                     self.need_redraw = True
                 if symbol == keys.R:  # rotate
-                    imgidx = self.img_per_tile[self.tileidx]
-                    self.files.orientations[imgidx] += 90
-                    self.files.orientations[imgidx] %= 360
+                    for imgidx in self.img_per_tile[:self.numtiles]:
+                        self.files.orientations[imgidx] += 90
+                        self.files.orientations[imgidx] %= 360
                     self.need_redraw = True
                 if symbol == keys.I:  # image info
                     imgidx = self.img_per_tile[self.tileidx]
