@@ -83,9 +83,11 @@ class GLRenderer:
             self.prog['grayscale'].value = (texture.components == 1)
             self.prog['gamma'].value = self.ui.gamma
             self.prog['ev'].value = self.ui.ev
-            self.prog['gamut.power'].value = self.ui.gamut_power
+            self.prog['gamut.compress'].value = self.ui.gamut_fit
+            self.prog['gamut.power'].value = self.ui.gamut_pow
             self.prog['gamut.thr'].value = self.ui.gamut_thr
-            self.prog['gamut.scale'].value = self._gamut_curve(self.ui.gamut_power, self.ui.gamut_thr, self.ui.gamut_lim)
+            self.prog['gamut.scale'].value = self._gamut(imgidx)
+            self.prog['debug'].value = self.ui.debug_mode
             self.vao.render(moderngl.TRIANGLE_STRIP)
         self.ctx.finish()
         elapsed = (time.time() - t0) * 1000
@@ -95,52 +97,82 @@ class GLRenderer:
         self._vprint(f"rendering {w} x {h} pixels took {elapsed:.1f} ms, frame-to-frame interval was {interval:.1f} ms", log_level=2)
         return elapsed
 
+    def _gamut(self, imgidx):
+        """
+        Calculate per-color-channel scale factors as required by the shader for gamut
+        compression. The calculation is based on a user-defined 'power' controlling the
+        curve slope, and 'thr' and 'limit' values that are currently hardcoded at 0.8
+        and 1.2, respectively. Gamut distance values are compressed from [thr, lim] to
+        [thr, 1].
+        """
+        gamut_lim = self.files.metadata[imgidx]['gamut_bounds']  # per-channel limits
+        gamut_lim = np.clip(gamut_lim, 1.01, np.inf)  # >1.01 to ensure no overflows
+        scale = self._gamut_curve(self.ui.gamut_pow, self.ui.gamut_thr, gamut_lim)
+        return scale
+
     def _gamut_curve(self, power, thr, lim):
-        invp = 1 / power
-        src_domain = lim - thr  # range on the x axis to compress from; always > 0
-        dst_domain = 1.0 - thr  # range on the x axis to compress to; >= src_domain
-        rel_domain = src_domain / dst_domain  # always >= 1, typically 1..10
-        pow_domain = rel_domain ** power  # always >= 1, can be very large if p >> 1
-        pow_domain = (pow_domain - 1) ** invp  # ~rel_domain, if p >> 1 or lim >> 1
-        with np.errstate(divide="ignore"):  # divide-by-zero => inf, no warning
-            s = src_domain / pow_domain  # > dst_domain; ~dst_domain, if p >> 1 or lim >> 1
-        return s
+        """
+        Calculate a curve shaping scale factor for each color channel, based on the given
+        power, threshold and limit.
 
-    def _fit_gamut(self, rgb):
+        Arguments:
+          - power: curve exponent; higher value = steeper curve
+          - thr: percentage of core gamut to leave unmodified
+          - lim: upper bound for values to compress into gamut
 
-        # grayscale images have no color gamut
+        Returns:
+          - scale: compression curve global scale factor, required by the shader
+        """
 
-        is_grayscale = rgb.ndim == 2 or rgb.shape[2] == 1
-        if is_grayscale:
-            max_dist = np.zeros(3)
-            return max_dist
+        assert np.all(thr <= 0.95), thr  # must be < 1.0 to avoid infs and nans
+        assert np.all(lim >= 1.01), lim  # must be > 1.0 to avoid infs and nans
+        assert np.all(thr >= 0.0), thr  # not strictly necessary, but helps range analysis
+        assert np.all(lim <= 3.0), lim  # not an exact bound, but safe at float32
+        assert np.all(power >= 1.0), power  # not an exact bound, but safe at float32
+        assert np.all(power <= 20.0), power  # not an exact bound, but safe at float32
 
-        # pick every Nth pixel to speed up processing for very large images;
-        # for example, a 100MP image will be downscaled by 8x in both x & y
+        # range analysis for inputs yielding the smallest scale (~0.05):
+        #   thr = 0.95
+        #   lim = 3.0
+        #   pow = 1.0
+        #   src_domain = 3.0 - 0.95 = 2.05
+        #   dst_domain = 1.0 - 0.95 = 0.05
+        #   rel_domain = 2.05 / 0.05 = 2.05 * 20 = 41
+        #   pow_domain = 41 ^ 1 = 41
+        #   ipow_domain = (41 - 1) ^ (1 / 1) = 40
+        #   scale = 2.05 / 40 = 0.05125 > 0.05 = dst_domain
 
-        magnitude = np.log10(rgb.size / 3)
-        N = max(np.rint(magnitude) - 5, 0)  # 0, 1, 2, 3
-        N = int(2 ** N)  # 1, 2, 4, 8
-        rgb = rgb[::N, ::N]  # 1MP => 2x, 10MP => 4x, 100MP => 8x
+        # range analysis for inputs yielding the largest intermediate value (~1e32):
+        #   thr = 0.95
+        #   lim = 3.0
+        #   pow = 20.0
+        #   src_domain = 2.05
+        #   dst_domain = 0.05
+        #   rel_domain = 2.05 / 0.05 = 41
+        #   pow_domain = 41 ^ 20 < 1e33 < inf
+        #   ipow_domain = (41 ^ 20 - 1) / (1 / 20) ~ 41
+        #   scale = 2.05 / 41 = 0.05 = dst_domain
 
-        # convert to float32 to avoid overflows, underflows & dtype issues
+        # range analysis for inputs minimizing ipow_domain (0.2):
+        #   thr = 0.95
+        #   lim = 1.01
+        #   pow = 1.0
+        #   src_domain = 1.01 - 0.95 = 0.06
+        #   dst_domain = 1.00 - 0.95 = 0.05
+        #   rel_domain = 0.06 / 0.05 = 1.2
+        #   pow_domain = 1.2 ^ 1 = 1.2
+        #   ipow_domain = 1.2 - 1 = 0.2
+        #   scale = 0.06 / 0.2 = 0.30 >> dst_domain
 
-        rgb = rgb.astype(np.float32)
-
-        # distance is relative to per-pixel maximum color; >1.0 means out of gamut
-
-        max_rgb = np.max(rgb, axis=-1, keepdims=True)  # (H, W, 1)
-        valid = np.abs(max_rgb) > 0.0
-        zeros = np.zeros_like(rgb)  # (H, W, 3)
-        dist = np.divide(max_rgb - rgb, max_rgb, out=zeros, where=valid)
-
-        # determine the maximum distance from the gray axis that will be squeezed
-        # into gamut; colors further than that will remain out of gamut, but less
-        # than before
-
-        all_but_last = tuple(np.arange(rgb.ndim - 1))  # (0,) or (0, 1)
-        max_dist = np.max(dist, axis=all_but_last)  # global RGB-wise maximum
-        return max_dist
+        invp = 1 / power  # [1/20, 1]
+        src_domain = lim - thr  # range on the x axis to compress from; [0.06, 3.0]
+        dst_domain = 1.0 - thr  # range on the x axis to compress to; [0.05, 1.0]
+        rel_domain = src_domain / dst_domain  # [1.01, 41]
+        pow_domain = rel_domain ** power  # max = 41^20 < 1e33 < inf
+        ipow_domain = (pow_domain - 1) ** invp  # [0.01, 41]
+        scale = src_domain / ipow_domain  # [dst_domain, 101 * dst_domain]
+        assert np.all(1.01 * scale >= dst_domain), f"{1.01 * scale} vs. {dst_domain}"
+        return scale
 
     def _create_texture(self, img):
         # ModernGL texture dtypes that actually work:
@@ -174,11 +206,9 @@ class GLRenderer:
         assert isinstance(img, (np.ndarray, str))
         if isinstance(img, np.ndarray):  # success
             texture = self._create_texture(img)
-            gamut_bounds = self._fit_gamut(img)
             self.files.textures[idx] = texture
-            self.files.metadata[idx] = {'gamut_bounds': gamut_bounds}
+            self.files.metadata[idx] = {'gamut_bounds': np.ones(3) * 1.2}
             self.loader.release_image(idx)
-            self._vprint(f"{self.files.filespecs[idx]} gamut extents = {gamut_bounds.round(3).tolist()}")
         else:  # PENDING | INVALID | RELEASED
             texture = self.files.textures[idx]
             if texture is None:
