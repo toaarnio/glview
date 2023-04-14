@@ -170,15 +170,16 @@ class PygletUI:
             if np.any(dxdy != 0.0) or self.scale != prev_scale:
                 self.need_redraw = True
 
+    def _triangle_wave(self, x, amplitude):
+        # [0, 1] => [-amplitude, +amplitude]
+        y = 4 * amplitude * np.abs((x - 0.25) % 1 - 0.5) - amplitude
+        return y
+
     def _smooth_exposure(self):
         # this is invoked 50 times per second, so exposure control is pretty fast
         keys = pyglet.window.key
-        def triangle_wave(x, amplitude):
-            # [0, 1] => [-amplitude, +amplitude]
-            y = 4 * amplitude * np.abs((x - 0.25) % 1 - 0.5) - amplitude
-            return y
         self.ev_linear += 0.005 * self.key_state[keys.E]
-        self.ev = triangle_wave(self.ev_linear, self.ev_range)
+        self.ev = self._triangle_wave(self.ev_linear, self.ev_range)
         self.need_redraw = True
 
     def _setup_events(self):
