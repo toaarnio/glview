@@ -45,10 +45,11 @@ class PygletUI:
         self.ev_range = 2
         self.ev_linear = 0.0
         self.ev = 0.0
-        self.gamut_fit = False  # on/off toggle
-        self.gamut_lin = 0.0  # adjusted dynamically
-        self.gamut_pow = np.ones(3)  # derived from self.gamut_lin
-        self.gamut_thr = np.ones(3) * 0.8  # hardcoded preset
+        self.gamut_fit = 0  # 0|1|2...
+        self.gamut_lim = np.ones(3) * 1.1
+        self.gamut_pow = np.ones(3) * 1.5
+        self.gamut_thr = np.ones(3) * 0.8
+        self.gamut_lin = 0.0
 
     def start(self, renderer):
         """ Start the UI thread. """
@@ -182,13 +183,18 @@ class PygletUI:
         self.ev = self._triangle_wave(self.ev_linear, self.ev_range)
         self.need_redraw = True
 
-    def _smooth_gamut_fit(self):
-        # this is invoked 50 times per second, so gamut fit control is pretty fast
-        keys = pyglet.window.key
-        self.gamut_lin += 0.005 * self.key_state[keys.C]
-        power = self._triangle_wave(self.gamut_lin, 2) + 3  # [0, 1] => [-2, 2] => [1, 5]
-        self.gamut_pow = np.ones(3) * power
-        self.need_redraw = True
+    def _switch_gamut_curve(self):
+        # cycle through a predefined selection of gamut compression modes:
+        #  0 - off
+        #  1 - steep curve, almost like clipping
+        #  2 - shallow curve, strong desaturation
+        presets = [None, (10.0, 1.1, 0.8), (3.0, 1.2, 0.8)]
+        self.gamut_fit = (self.gamut_fit + 1) % len(presets)
+        if (selection := presets[self.gamut_fit]) is not None:
+            power, limit, threshold = selection
+            self.gamut_pow = np.ones(3) * power
+            self.gamut_lim = np.ones(3) * limit
+            self.gamut_thr = np.ones(3) * threshold
 
     def _setup_events(self):
         self._vprint("setting up Pyglet window event handlers...")
@@ -197,7 +203,6 @@ class PygletUI:
         def on_draw():
             self._keyboard_zoom_pan()
             self._smooth_exposure()
-            self._smooth_gamut_fit()
             if self.need_redraw:
                 self.renderer.redraw()
                 self.window.set_caption(self._caption())
@@ -271,7 +276,7 @@ class PygletUI:
                     self.mousepos = np.zeros(2)
                     self.ev_linear = 0.0
                     self.gamut_lin = 0.0
-                    self.gamut_fit = False
+                    self.gamut_fit = 0
                     self.need_redraw = True
                 if symbol == keys.G:  # gamma
                     self.gamma = not self.gamma
@@ -279,8 +284,8 @@ class PygletUI:
                 if symbol == keys.B:  # toggle between narrow/wide (LDR/HDR) exposure control
                     self.ev_range = (self.ev_range + 6) % 12
                     self.need_redraw = True
-                if symbol == keys.K: # toggle gamut compression on/off
-                    self.gamut_fit = not self.gamut_fit
+                if symbol == keys.K: # cycle through gamut compression modes (off/hi/lo)
+                    self._switch_gamut_curve()
                     self.need_redraw = True
                 if symbol == keys.T:  # texture filtering
                     self.texture_filter = "LINEAR" if self.texture_filter == "NEAREST" else "NEAREST"

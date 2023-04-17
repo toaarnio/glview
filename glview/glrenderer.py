@@ -83,7 +83,7 @@ class GLRenderer:
             self.prog['grayscale'].value = (texture.components == 1)
             self.prog['gamma'].value = self.ui.gamma
             self.prog['ev'].value = self.ui.ev
-            self.prog['gamut.compress'].value = self.ui.gamut_fit
+            self.prog['gamut.compress'].value = (self.ui.gamut_fit != 0)
             self.prog['gamut.power'].value = self.ui.gamut_pow
             self.prog['gamut.thr'].value = self.ui.gamut_thr
             self.prog['gamut.scale'].value = self._gamut(imgidx)
@@ -100,12 +100,12 @@ class GLRenderer:
     def _gamut(self, imgidx):
         """
         Calculate per-color-channel scale factors as required by the shader for gamut
-        compression. The calculation is based on a user-defined 'power' controlling the
-        curve slope, and 'thr' and 'limit' values that are currently hardcoded at 0.8
-        and 1.2, respectively. Gamut distance values are compressed from [thr, lim] to
-        [thr, 1].
+        compression. The calculation is based on three user-defined parameters (power,
+        limit, and threshold) that control the shape of the compression curve. Per-image
+        control of the 'limit' parameter is supported, but not currently used.
         """
-        gamut_lim = self.files.metadata[imgidx]['gamut_bounds']  # per-channel limits
+        if (gamut_lim := self.ui.gamut_lim) is None:  # use global limits by default
+            gamut_lim = self.files.metadata[imgidx]['gamut_bounds']  # per-image limit
         gamut_lim = np.clip(gamut_lim, 1.01, np.inf)  # >1.01 to ensure no overflows
         scale = self._gamut_curve(self.ui.gamut_pow, self.ui.gamut_thr, gamut_lim)
         return scale
