@@ -207,14 +207,14 @@ class GLRenderer:
         if isinstance(img, np.ndarray):  # success
             texture = self._create_texture(img)
             self.files.textures[idx] = texture
-            self.files.metadata[idx] = {'gamut_bounds': np.ones(3) * 1.2}
+            self.files.metadata[idx] = {'gamut_bounds': None}
             self.loader.release_image(idx)
         else:  # PENDING | INVALID | RELEASED
             texture = self.files.textures[idx]
             if texture is None:
                 texture = self._create_dummy_texture()
                 self.files.textures[idx] = texture
-                self.files.metadata[idx] = {'gamut_bounds': np.ones(3)}
+                self.files.metadata[idx] = {'gamut_bounds': None}
         if self.ui.texture_filter != "NEAREST":
             texture.build_mipmaps()
         return texture
