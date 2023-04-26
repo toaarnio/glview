@@ -195,6 +195,9 @@ class PygletUI:
             self.gamut_pow = np.ones(3) * power
             self.gamut_lim = np.ones(3) * limit
             self.gamut_thr = np.ones(3) * threshold
+            self._vprint(f"Gamut curve shape: pow = {power}, lim = {limit}, thr = {threshold}")
+        else:
+            self._vprint("Gamut compression off")
 
     def _setup_events(self):
         self._vprint("setting up Pyglet window event handlers...")
