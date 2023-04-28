@@ -68,7 +68,12 @@ class FileList:
         with self.mutex:
             try:
                 filespec = self.filespecs[idx]
-                self.drop([idx])
+                self.filespecs = self._drop(self.filespecs, [idx])
+                self.orientations = self._drop(self.orientations, [idx])
+                self.textures = self._drop(self.textures, [idx])
+                self.metadata = self._drop(self.metadata, [idx])
+                self.images = self._drop(self.images, [idx])
+                self._update()
                 os.remove(filespec)
                 print(f"[{threading.current_thread().name}] Deleted {filespec}")
             except IndexError:
