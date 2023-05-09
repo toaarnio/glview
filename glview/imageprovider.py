@@ -132,6 +132,9 @@ class ImageProvider:
                 # scale to [0, 1] and use float32 instead
                 norm = max(maxval, np.max(img))
                 img = img.astype(np.float32) / norm
+            if img.dtype == np.float64:
+                # float64 is not universally supported yet
+                img = img.astype(np.float32)
             return img
         except imgio.ImageIOError as e:
             print(f"\n{e}")
