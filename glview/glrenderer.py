@@ -48,9 +48,9 @@ class GLRenderer:
         vshader = open(os.path.join(shader_path, "panzoom.vs"), encoding="utf-8").read()
         fshader = open(os.path.join(shader_path, "texture.fs"), encoding="utf-8").read()
         self.prog = self.ctx.program(vertex_shader=vshader, fragment_shader=fshader)
-        self.prog['scale'].value = 1.0
-        self.prog['orientation'].value = 0
-        self.prog['mousepos'].value = (0.0, 0.0)
+        self.prog['scale'] = 1.0
+        self.prog['orientation'] = 0
+        self.prog['mousepos'] = (0.0, 0.0)
         self.vbo = self.ctx.buffer(struct.pack('8f', -1.0, -1.0, -1.0, 1.0, 1.0, -1.0, 1.0, 1.0))
         self.vao = self.ctx.vertex_array(self.prog, [(self.vbo, "2f", "vert")])
         self.tprev = time.time()
@@ -76,18 +76,18 @@ class GLRenderer:
             _vpx, _vpy, vpw, vph = self.ui.viewports[i]
             self.ctx.viewport = self.ui.viewports[i]
             self.ctx.clear(*tile_colors[i], viewport=self.ctx.viewport)
-            self.prog['mousepos'].value = tuple(self.ui.mousepos)
-            self.prog['orientation'].value = orientation
-            self.prog['aspect'].value = self._get_aspect_ratio(vpw, vph, texw, texh)
-            self.prog['scale'].value = self.ui.scale
-            self.prog['grayscale'].value = (texture.components == 1)
-            self.prog['gamma'].value = self.ui.gamma
-            self.prog['ev'].value = self.ui.ev
-            self.prog['gamut.compress'].value = (self.ui.gamut_fit != 0)
-            self.prog['gamut.power'].value = self.ui.gamut_pow
-            self.prog['gamut.thr'].value = self.ui.gamut_thr
-            self.prog['gamut.scale'].value = self._gamut(imgidx)
-            self.prog['debug'].value = self.ui.debug_mode
+            self.prog['mousepos'] = tuple(self.ui.mousepos)
+            self.prog['orientation'] = orientation
+            self.prog['aspect'] = self._get_aspect_ratio(vpw, vph, texw, texh)
+            self.prog['scale'] = self.ui.scale
+            self.prog['grayscale'] = (texture.components == 1)
+            self.prog['gamma'] = self.ui.gamma
+            self.prog['ev'] = self.ui.ev
+            self.prog['gamut.compress'] = (self.ui.gamut_fit != 0)
+            self.prog['gamut.power'] = self.ui.gamut_pow
+            self.prog['gamut.thr'] = self.ui.gamut_thr
+            self.prog['gamut.scale'] = self._gamut(imgidx)
+            self.prog['debug'] = self.ui.debug_mode
             self.vao.render(moderngl.TRIANGLE_STRIP)
         self.ctx.finish()
         elapsed = (time.time() - t0) * 1000
