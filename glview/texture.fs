@@ -13,7 +13,7 @@ uniform struct {
   vec3 scale;
 } gamut;
 
-in vec2 tex;
+in vec2 texcoords;
 out vec4 color;
 
 
@@ -141,7 +141,7 @@ vec2 rotate(vec2 tc, int degrees) {
 
 
 void main() {
-  color = texture2D(texture, rotate(tex, orientation));
+  color = texture2D(texture, rotate(texcoords, orientation));
   color.rgb = grayscale ? color.rrr : color.rgb;
   color.rgb = gamut.compress ? compress_gamut(color.rgb) : color.rgb;
   color.rgb = color.rgb * exp(ev);  // exp(x) == 2^x
