@@ -195,12 +195,6 @@ class GLRenderer:
         dummy = self.ctx.texture((32, 32), 3, np.random.random((32, 32, 3)).astype(np.float32), dtype='f4')
         return dummy
 
-    def _update_texture(self, texture, img):
-        # TODO: take this into use
-        texture.write(img.ravel())
-        texture.build_mipmaps()
-        return texture
-
     def _load_texture(self, idx):
         img = self.loader.get_image(idx)
         assert isinstance(img, (np.ndarray, str))
