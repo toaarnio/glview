@@ -42,6 +42,7 @@ class PygletUI:
         self.texture_filter = "NEAREST"
         self.img_per_tile = [0, 1, 2, 3]
         self.gamma = False
+        self.normalize = False
         self.ev_range = 2
         self.ev_linear = 0.0
         self.ev = 0.0
@@ -289,6 +290,9 @@ class PygletUI:
                     self.need_redraw = True
                 if symbol == keys.K: # cycle through gamut compression modes (off/hi/lo)
                     self._switch_gamut_curve()
+                    self.need_redraw = True
+                if symbol == keys.N:  # normalize
+                    self.normalize = not self.normalize
                     self.need_redraw = True
                 if symbol == keys.T:  # texture filtering
                     self.texture_filter = "LINEAR" if self.texture_filter == "NEAREST" else "NEAREST"

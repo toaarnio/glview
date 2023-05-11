@@ -74,6 +74,7 @@ class GLRenderer:
             texw, texh = texture.width, texture.height
             texw, texh = (texh, texw) if orientation in [90, 270] else (texw, texh)
             _vpx, _vpy, vpw, vph = self.ui.viewports[i]
+            maxval = self.files.metadata[imgidx]['maxval']
             self.ctx.viewport = self.ui.viewports[i]
             self.ctx.clear(*tile_colors[i], viewport=self.ctx.viewport)
             self.prog['mousepos'] = tuple(self.ui.mousepos)
@@ -82,6 +83,7 @@ class GLRenderer:
             self.prog['scale'] = self.ui.scale
             self.prog['grayscale'] = (texture.components == 1)
             self.prog['gamma'] = self.ui.gamma
+            self.prog['maxval'] = maxval if self.ui.normalize else 1.0
             self.prog['ev'] = self.ui.ev
             self.prog['gamut.compress'] = (self.ui.gamut_fit != 0)
             self.prog['gamut.power'] = self.ui.gamut_pow
@@ -189,6 +191,7 @@ class GLRenderer:
         dtype = f"f{img.itemsize}"  # uint8 => 'f1', float16 => 'f2', float32 => 'f4'
         components = img.shape[2] if img.ndim == 3 else 1  # RGB/RGBA/grayscale
         texture = self.ctx.texture((w, h), components, img.ravel(), dtype=dtype)
+        texture.build_mipmaps()
         return texture
 
     def _create_dummy_texture(self):
@@ -199,18 +202,23 @@ class GLRenderer:
         img = self.loader.get_image(idx)
         assert isinstance(img, (np.ndarray, str))
         if isinstance(img, np.ndarray):  # success
+            maxval = 1.0 if img.dtype == np.uint8 else np.max(img)
             texture = self._create_texture(img)
+            self.files.metadata[idx] = {}
+            self.files.metadata[idx]['maxval'] = maxval
+            self.files.metadata[idx]['gamut_bounds'] = None
             self.files.textures[idx] = texture
-            self.files.metadata[idx] = {'gamut_bounds': None}
             self.loader.release_image(idx)
         else:  # PENDING | INVALID | RELEASED
-            texture = self.files.textures[idx]
-            if texture is None:
+            if self.files.textures[idx] is None:
                 texture = self._create_dummy_texture()
+                maxval = 1.0
+                self.files.metadata[idx] = {}
+                self.files.metadata[idx]['maxval'] = maxval
+                self.files.metadata[idx]['gamut_bounds'] = None
                 self.files.textures[idx] = texture
-                self.files.metadata[idx] = {'gamut_bounds': None}
-        if self.ui.texture_filter != "NEAREST":
-            texture.build_mipmaps()
+            else:  # RELEASED
+                texture = self.files.textures[idx]
         return texture
 
     def _get_aspect_ratio(self, vpw, vph, texw, texh):

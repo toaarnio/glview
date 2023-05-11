@@ -4,6 +4,7 @@ uniform int debug;
 uniform bool grayscale;
 uniform bool gamma;
 uniform float ev;
+uniform float maxval;
 uniform int orientation;
 uniform sampler2D texture;
 uniform struct {
@@ -142,6 +143,7 @@ vec2 rotate(vec2 tc, int degrees) {
 
 void main() {
   color = texture2D(texture, rotate(texcoords, orientation));
+  color.rgb = color.rgb / maxval;
   color.rgb = grayscale ? color.rrr : color.rgb;
   color.rgb = gamut.compress ? compress_gamut(color.rgb) : color.rgb;
   color.rgb = color.rgb * exp(ev);  // exp(x) == 2^x
