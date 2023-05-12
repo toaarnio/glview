@@ -69,7 +69,7 @@ class GLRenderer:
             texture.repeat_x = False
             texture.repeat_y = False
             texture.swizzle = 'RGB1'
-            texture.use()
+            texture.use(location=0)
             orientation = self.files.orientations[imgidx]
             texw, texh = texture.width, texture.height
             texw, texh = (texh, texw) if orientation in [90, 270] else (texw, texh)
@@ -77,6 +77,7 @@ class GLRenderer:
             maxval = self.files.metadata[imgidx]['maxval']
             self.ctx.viewport = self.ui.viewports[i]
             self.ctx.clear(*tile_colors[i], viewport=self.ctx.viewport)
+            self.prog['texture'] = 0
             self.prog['mousepos'] = tuple(self.ui.mousepos)
             self.prog['orientation'] = orientation
             self.prog['aspect'] = self._get_aspect_ratio(vpw, vph, texw, texh)
