@@ -201,8 +201,8 @@ class GLRenderer:
 
     def _load_texture(self, idx):
         img = self.loader.get_image(idx)
-        assert isinstance(img, (np.ndarray, str))
-        if isinstance(img, np.ndarray):  # success
+        assert isinstance(img, (np.ndarray, str)), type(img)
+        if isinstance(img, np.ndarray):
             maxval = 1.0 if img.dtype == np.uint8 else np.max(img)
             texture = self._create_texture(img)
             self.files.metadata[idx] = {}
