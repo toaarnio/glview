@@ -29,7 +29,8 @@ class ImageProvider:
         """ Start the image loader thread. """
         self._vprint(f"spawning {self.thread_name}...")
         self.running = True
-        self.loader_thread = threading.Thread(target=lambda: self._try(self._parallel_loader), name=self.thread_name)
+        loader = self._sequential_loader if self.verbose else self._parallel_loader
+        self.loader_thread = threading.Thread(target=lambda: self._try(loader), name=self.thread_name)
         self.loader_thread.daemon = True  # terminate when main process ends
         self.loader_thread.start()
 
@@ -76,7 +77,6 @@ class ImageProvider:
         ram_before = psutil.virtual_memory().available / 1024**2
         nfiles = self.files.numfiles
         verbose = self.verbose or nfiles < 200
-        filespecs = np.asarray(self.files.filespecs)
         splits = [2, 8, 16] + list(range(32, nfiles, 32))
         chunks = np.split(np.arange(nfiles), splits)
         with self.files.mutex:  # drop/delete not allowed while loading
