@@ -129,7 +129,6 @@ def main():
         print("    r                       rotate active tile 90 degrees clockwise")
         print("    s                       split window into 1/2/3/4 tiles")
         print("    1 / 2 / 3 / 4           select active tile for PageUp/PageDown/r")
-        print("    w                       write current tile(s) to a PNG")
         print("    h                       reset zoom/pan/exposure to initial state")
         print("    f                       toggle fullscreen <-> windowed")
         print("    t                       toggle nearest <-> linear filtering")
