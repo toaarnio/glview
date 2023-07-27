@@ -114,7 +114,7 @@ class PygletUI:
         caption = f"glview [{self.ev:+1.2f}EV | gamut fit {gamut} | {fps:.1f} fps]"
         for tileidx in range(self.numtiles):
             imgidx = self.img_per_tile[tileidx]
-            basename = os.path.basename(self.files.filespecs[imgidx])
+            basename = self.files.filespecs[imgidx]
             caption = f"{caption} | {basename} [{imgidx+1}/{self.files.numfiles}]"
         return caption
 
