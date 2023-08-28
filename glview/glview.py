@@ -11,6 +11,7 @@ import threading               # built-in library
 import numpy as np             # pip install numpy
 import natsort                 # pip install natsort
 import psutil                  # pip install psutil
+import imgio                   # pip install imgio
 
 try:
     # package mode
@@ -28,7 +29,7 @@ except ImportError:
     import imageprovider           # local import
 
 
-IMAGE_TYPES = [".pgm", ".ppm", ".pnm", ".pfm", ".png", ".bmp", ".jpg", ".jpeg", ".tif", ".tiff", ".insp", ".exr", ".npy"]
+IMAGE_TYPES = imgio.RO_FORMATS
 
 
 class FileList:
