@@ -110,8 +110,10 @@ class PygletUI:
 
     def _caption(self):
         fps = pyglet.clock.get_frequency()
+        norm = "off" if not self.normalize else "on"
+        gamma = "off" if not self.gamma else "on"
         gamut = "off" if not self.gamut_fit else f"p = {self.gamut_pow[0]:.1f}"
-        caption = f"glview [{self.ev:+1.2f}EV | gamut fit {gamut} | {fps:.1f} fps]"
+        caption = f"glview [{self.ev:+1.2f}EV | norm {norm} | gamma {gamma} | gamut fit {gamut} | {fps:.1f} fps]"
         for tileidx in range(self.numtiles):
             imgidx = self.img_per_tile[tileidx]
             basename = self.files.filespecs[imgidx]
