@@ -1,6 +1,5 @@
 """ A graphical user interface for glview, based on Pyglet and ModernGL. """
 
-import os                      # built-in library
 import threading               # built-in library
 import pprint                  # built-in library
 import traceback               # built-in library

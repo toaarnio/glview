@@ -23,7 +23,7 @@ class ImageProvider:
         self.files = files
         self.loader_thread = None
         self.running = False
-        self.estimate_size()
+        self.validate_files()
 
     def start(self):
         """ Start the image loader thread. """
@@ -41,20 +41,30 @@ class ImageProvider:
         self.loader_thread.join()
         self._vprint(f"{self.thread_name} killed")
 
-    def estimate_size(self):
-        """ Quickly scan all image files to estimate their memory consumption. """
+    def validate_files(self):
+        """ Quickly validate all image files & estimate their memory consumption. """
         size_on_disk = 0
         size_in_mem = 0
         if len(self.files.filespecs) > 100:
             print("Scanning images & estimating memory consumption...")
-        for filespec in self.files.filespecs:
+        invalid = []
+        for idx, filespec in enumerate(self.files.filespecs):
             if "://" not in filespec:
-                info = imsize.read(filespec)
-                size_on_disk += info.filesize
-                size_in_mem += info.nbytes
+                try:
+                    info = imsize.read(filespec)
+                    size_on_disk += info.filesize
+                    size_in_mem += info.nbytes
+                except RuntimeError as e:
+                    print(f"{os.path.basename(filespec)}: Skipping: {e}")
+                    invalid.append(idx)
+                except TypeError:
+                    print(f"{os.path.basename(filespec)}: Skipping: Unable to determine image dimensions.")
+                    invalid.append(idx)
+        if invalid:
+            self.files.drop(invalid)
         size_on_disk /= 1024 ** 2
         size_in_mem /= 1024 ** 2
-        print(f"Found {self.files.numfiles} images, consuming {size_on_disk:.0f} MB on disk, {size_in_mem:.0f} MB in memory.")
+        print(f"Found {self.files.numfiles} valid images, consuming {size_on_disk:.0f} MB on disk, {size_in_mem:.0f} MB in memory.")
 
     def get_image(self, index):
         """

@@ -13,6 +13,7 @@ import natsort                 # pip install natsort
 import psutil                  # pip install psutil
 import imgio                   # pip install imgio
 
+
 try:
     # package mode
     from glview import version        # local import
@@ -168,7 +169,9 @@ def main():
     files = FileList(filenames)
     ui = pygletui.PygletUI(files, debug, bool(verbose))
     loader = imageprovider.ImageProvider(files, bool(verbose))
-    renderer = glrenderer.GLRenderer(ui, files, loader, verbose)
+    enforce(loader.files.numfiles > 0, "No valid images to show. Terminating.")
+
+    renderer = glrenderer.GLRenderer(ui, loader.files, loader, verbose)
     ui.texture_filter = "LINEAR" if smooth else "NEAREST"
     ui.fullscreen = fullscreen
     ui.numtiles = numtiles
