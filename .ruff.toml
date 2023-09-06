@@ -23,6 +23,7 @@ ignore = [
        "SIM102",  # flake8-simplify: collapsible-if
        "SIM115",  # flake8-simplify: open-file-with-context-handler
        "TRY300",  # tryceratops: try-consider-else
+       "RUF005",  # ruff: collection-literal-concatenation
        ]
 
 
