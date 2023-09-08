@@ -2,7 +2,7 @@
 
 uniform int debug;
 uniform bool grayscale;
-uniform bool gamma;
+uniform int gamma;
 uniform float ev;
 uniform float maxval;
 uniform int orientation;
@@ -41,6 +41,47 @@ vec3 srgb_gamma(vec3 rgb) {
   vec3 higher = vec3(1.055) * pow(rgb, vec3(1.0 / 2.4)) - vec3(0.055);
   vec3 lower = rgb * vec3(12.92);
   return mix(higher, lower, cutoff);
+}
+
+
+vec3 st2084_gamma(vec3 rgb) {
+  /**
+   * Applies the standard SMPTE ST 2084 Perceptual Quantizer (PQ) on the given
+   * color, compressing linear luminances from a nominal range of [0, 10000] cd/m²
+   * into a perceptually uniform [0, 1] scale. This function is an HDR equivalent
+   * of sRGB gamma; see https://en.wikipedia.org/wiki/Perceptual_quantizer.
+   */
+  float m1 = 2610.0 / 16384;
+  float m2 = 2523.0 / 4096 * 128;
+  float c1 = 3424.0 / 4096;
+  float c2 = 2413.0 / 4096 * 32;
+  float c3 = 2392.0 / 4096 * 32;
+  vec3 y = rgb / 10000;
+  y = pow(y, vec3(m1));
+  rgb = (c1 + c2 * y) / (1 + c3 * y);
+  rgb = pow(rgb, vec3(m2));
+  return rgb;
+}
+
+
+vec3 apply_gamma(vec3 rgb) {
+  /**
+   * Applies the selected electro-optical transfer function (EOTF), aka. gamma,
+   * on the given RGB color. The following functions are available:
+   *
+   *   0 - none
+   *   1 - sRGB gamma
+   *   2 - ST2084, assumed max display luminance 1000 nits (cd/m²)
+   */
+  switch (gamma) {
+    case 1:
+      rgb = srgb_gamma(rgb);
+      break;
+    case 2:
+      rgb = st2084_gamma(rgb * 1000.0);
+      break;
+  }
+  return rgb;
 }
 
 
@@ -148,5 +189,5 @@ void main() {
   color.rgb = gamut.compress ? compress_gamut(color.rgb) : color.rgb;
   color.rgb = color.rgb * exp(ev);  // exp(x) == 2^x
   color.rgb = debug_indicators(color.rgb);
-  color.rgb = gamma ? srgb_gamma(color.rgb) : color.rgb;
+  color.rgb = apply_gamma(color.rgb);
 }

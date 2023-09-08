@@ -40,7 +40,7 @@ class PygletUI:
         self.renderer = None
         self.texture_filter = "NEAREST"
         self.img_per_tile = [0, 1, 2, 3]
-        self.gamma = False
+        self.gamma = 0
         self.normalize = False
         self.ev_range = 2
         self.ev_linear = 0.0
@@ -110,7 +110,7 @@ class PygletUI:
     def _caption(self):
         fps = pyglet.clock.get_frequency()
         norm = "off" if not self.normalize else "on"
-        gamma = "off" if not self.gamma else "on"
+        gamma = ["off", "sRGB", "HDR"][self.gamma]
         gamut = "off" if not self.gamut_fit else f"p = {self.gamut_pow[0]:.1f}"
         caption = f"glview [{self.ev:+1.2f}EV | norm {norm} | gamma {gamma} | gamut fit {gamut} | {fps:.1f} fps]"
         for tileidx in range(self.numtiles):
@@ -284,7 +284,7 @@ class PygletUI:
                     self.gamut_fit = 0
                     self.need_redraw = True
                 if symbol == keys.G:  # gamma
-                    self.gamma = not self.gamma
+                    self.gamma = (self.gamma + 1) % 3
                     self.need_redraw = True
                 if symbol == keys.B:  # toggle between narrow/wide (LDR/HDR) exposure control
                     self.ev_range = (self.ev_range + 6) % 12
