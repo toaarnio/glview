@@ -18,6 +18,13 @@ in vec2 texcoords;
 out vec4 color;
 
 
+/**************************************************************************************/
+/*
+/*    U T I L I T I E S
+/*
+/**************************************************************************************/
+
+
 const vec3 ones = vec3(1.0);
 const vec3 zeros = vec3(0.0);
 const vec3 eps = vec3(5.0 / 256);
@@ -30,6 +37,13 @@ float max3(vec3 v) {
    */
   return max(max(v.x, v.y), v.z);
 }
+
+
+/**************************************************************************************/
+/*
+/*    G A M M A
+/*
+/**************************************************************************************/
 
 
 vec3 srgb_gamma(vec3 rgb) {
@@ -88,6 +102,13 @@ vec3 apply_gamma(vec3 rgb) {
 }
 
 
+/**************************************************************************************/
+/*
+/*    G A M U T   C O M P R E S S I O N
+/*
+/**************************************************************************************/
+
+
 vec3 gamut_distance(vec3 rgb) {
   /**
    * Returns component-wise relative distances to gamut boundary; >1.0 means out
@@ -132,6 +153,41 @@ vec3 compress_gamut(vec3 rgb) {
 }
 
 
+/**************************************************************************************/
+/*
+/*    I M A G E   R O T A T I O N
+/*
+/**************************************************************************************/
+
+
+vec2 rotate(vec2 tc, int degrees) {
+  /**
+   * Flips the given texture coordinates in the Y direction, then rotates
+   * counterclockwise by 0/90/180/270 degrees.
+   */
+  tc = vec2(tc.x, 1.0 - tc.y);
+  switch (degrees) {
+    case 90:
+      tc = vec2(tc.y, 1.0 - tc.x);
+      break;
+    case 180:
+      tc = vec2(1.0 - tc.x, 1.0 - tc.y);
+      break;
+    case 270:
+      tc = vec2(1.0 - tc.y, tc.x);
+      break;
+  }
+  return tc;
+}
+
+
+/**************************************************************************************/
+/*
+/*    D E B U G G I N G
+/*
+/**************************************************************************************/
+
+
 vec3 debug_indicators(vec3 rgb) {
   /**
    * Returns a color-coded debug representation of the given pixel, depending on
@@ -164,25 +220,11 @@ vec3 debug_indicators(vec3 rgb) {
 }
 
 
-vec2 rotate(vec2 tc, int degrees) {
-  /**
-   * Flips the given texture coordinates in the Y direction, then rotates
-   * counterclockwise by 0/90/180/270 degrees.
-   */
-  tc = vec2(tc.x, 1.0 - tc.y);
-  switch (degrees) {
-    case 90:
-      tc = vec2(tc.y, 1.0 - tc.x);
-      break;
-    case 180:
-      tc = vec2(1.0 - tc.x, 1.0 - tc.y);
-      break;
-    case 270:
-      tc = vec2(1.0 - tc.y, tc.x);
-      break;
-  }
-  return tc;
-}
+/**************************************************************************************/
+/*
+/*    M A I N
+/*
+/**************************************************************************************/
 
 
 void main() {
