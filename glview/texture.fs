@@ -34,9 +34,10 @@ float max3(vec3 v) {
 
 vec3 srgb_gamma(vec3 rgb) {
   /**
-   * Returns the given color with standard sRGB gamma applied. The input color
-   * must be in [0, 1] range.
+   * Returns the given color with standard sRGB gamma applied. Input color
+   * components are clamped to [0, 1].
    */
+  rgb = clamp(rgb, 0.0, 1.0);
   bvec3 cutoff = lessThan(rgb, vec3(0.0031308));
   vec3 higher = vec3(1.055) * pow(rgb, vec3(1.0 / 2.4)) - vec3(0.055);
   vec3 lower = rgb * vec3(12.92);
@@ -48,9 +49,11 @@ vec3 st2084_gamma(vec3 rgb) {
   /**
    * Applies the standard SMPTE ST 2084 Perceptual Quantizer (PQ) on the given
    * color, compressing linear luminances from a nominal range of [0, 10000] cd/m²
-   * into a perceptually uniform [0, 1] scale. This function is an HDR equivalent
-   * of sRGB gamma; see https://en.wikipedia.org/wiki/Perceptual_quantizer.
+   * into a perceptually uniform [0, 1] scale. Negative input values are clamped
+   * to zero. This function is the equivalent of sRGB gamma for HDR monitors; see
+   * https://en.wikipedia.org/wiki/Perceptual_quantizer.
    */
+  rgb = max(rgb, 0.0);
   float m1 = 2610.0 / 16384;
   float m2 = 2523.0 / 4096 * 128;
   float c1 = 3424.0 / 4096;
