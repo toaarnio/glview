@@ -310,7 +310,7 @@ class PygletUI:
                         self.files.orientations[imgidx] += 90
                         self.files.orientations[imgidx] %= 360
                     self.need_redraw = True
-                if symbol == keys.I:  # image info
+                if symbol == keys.X:  # EXIF info
                     imgidx = self.img_per_tile[self.tileidx]
                     filespec = self.files.filespecs[imgidx]
                     fileinfo = imsize.read(filespec)
