@@ -2,7 +2,7 @@
 
 [![Build Status](https://travis-ci.com/toaarnio/glview.svg?branch=master)](https://travis-ci.com/github/toaarnio/glview)
 
-Lightning-fast image viewer with synchronized split-screen zooming &amp; panning + HDR exposure control.
+Lightning-fast image viewer with synchronized split-screen zooming &amp; panning + HDR &amp; WCG support
 
 **Installing:**
 ```

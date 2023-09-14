@@ -138,6 +138,8 @@ def main():
         print("    n                       toggle exposure normalization on/off")
         print("    e                       slide exposure from -2EV to +2EV & back")
         print("    b                       toggle between HDR/LDR exposure control")
+        print("    i                       toggle input color space: sRGB/P3/Rec2020")
+        print("    o                       toggle output color space: sRGB/P3/Rec2020")
         print("    k                       toggle gamut compression strength")
         print("    x                       print image information (EXIF)")
         print("    d                       drop the currently shown image")

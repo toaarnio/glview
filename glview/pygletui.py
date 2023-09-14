@@ -40,6 +40,8 @@ class PygletUI:
         self.renderer = None
         self.texture_filter = "NEAREST"
         self.img_per_tile = [0, 1, 2, 3]
+        self.cs_in = 0
+        self.cs_out = 0
         self.gamma = 0
         self.normalize = False
         self.ev_range = 2
@@ -109,10 +111,12 @@ class PygletUI:
 
     def _caption(self):
         fps = pyglet.clock.get_frequency()
+        cspaces = ["sRGB", "DCI-P3", "Rec2020"]
+        csc = f"{cspaces[self.cs_in]} => {cspaces[self.cs_out]}"
         norm = "off" if not self.normalize else "on"
         gamma = ["off", "sRGB", "HDR"][self.gamma]
         gamut = "off" if not self.gamut_fit else f"p = {self.gamut_pow[0]:.1f}"
-        caption = f"glview [{self.ev:+1.2f}EV | norm {norm} | gamma {gamma} | gamut fit {gamut} | {fps:.1f} fps]"
+        caption = f"glview [{self.ev:+1.2f}EV | norm {norm} | {csc} | gamma {gamma} | gamut fit {gamut} | {fps:.1f} fps]"
         for tileidx in range(self.numtiles):
             imgidx = self.img_per_tile[tileidx]
             basename = self.files.filespecs[imgidx]
@@ -285,6 +289,12 @@ class PygletUI:
                     self.need_redraw = True
                 if symbol == keys.G:  # gamma
                     self.gamma = (self.gamma + 1) % 3
+                    self.need_redraw = True
+                if symbol == keys.I:  # input color space
+                    self.cs_in = (self.cs_in + 1) % 3
+                    self.need_redraw = True
+                if symbol == keys.O:  # output color space
+                    self.cs_out = (self.cs_out + 1) % 3
                     self.need_redraw = True
                 if symbol == keys.B:  # toggle between narrow/wide (LDR/HDR) exposure control
                     self.ev_range = (self.ev_range + 6) % 12
