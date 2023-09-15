@@ -157,7 +157,8 @@ class ImageProvider:
         try:
             filespec = self.files.filespecs[idx]
             if not self.files.is_url[idx]:
-                img, maxval = imgio.imread(filespec, verbose=verbose)
+                info = imsize.read(filespec)
+                img, maxval = imgio.imread(filespec, width=info.width, height=info.height, bpp=info.bitdepth, verbose=verbose)
             else:
                 data = urllib.request.urlopen(filespec).read()
                 basename = os.path.basename(filespec)
