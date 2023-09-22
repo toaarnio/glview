@@ -6,6 +6,7 @@ import struct                  # built-in library
 import threading               # built-in library
 import numpy as np             # pip install numpy
 import moderngl                # pip install moderngl
+import PIL.Image
 
 
 class GLRenderer:
@@ -196,7 +197,46 @@ class GLRenderer:
         components = img.shape[2] if img.ndim == 3 else 1  # RGB/RGBA/grayscale
         texture = self.ctx.texture((w, h), components, img.ravel(), dtype=dtype)
         texture.build_mipmaps()
+        mipmap = img
+        for lvl in range(1, int(np.log2(max(w, h)))):
+            #import rawpipe
+            mipw = int(np.floor(w / (2 ** lvl)))
+            miph = int(np.floor(h / (2 ** lvl)))
+            mipmap = self._downsample(img, 2 ** lvl)
+            #mipmap = rawpipe.verbose.downsample(mipmap)
+            texture.write(mipmap.ravel(), level=lvl)
+        """
+        mipmaps = []
+        for lvl in range(int(np.log2(max(w, h)))):
+            mipw = int(np.floor(w / (2 ** lvl)))
+            miph = int(np.floor(h / (2 ** lvl)))
+            print(f"Retrieving mipmap level {lvl}: {mipw} x {miph} x {components}...")
+            mipmap = texture.read(level=lvl)
+            mipmap = np.frombuffer(mipmap, dtype=img.dtype)
+            print(mipmap.dtype)
+            mipmap = mipmap.reshape(miph, mipw, components)
+            print(mipmap.shape)
+            mipmaps.append(mipmap)
+        """
         return texture
+
+    def _downsample(self, img, factor):
+        h, w = np.floor(np.asarray(img.shape[:2]) / factor).astype(int)
+        self._vprint(f"PIL (Lanczos) downscaling {img.dtype} texture by factor {factor}: {img.shape} => ({h}, {w}, {img.shape[2]})")
+        if img.ndim == 3:
+            planar = np.moveaxis(img, -1, 0).astype(np.float32)
+            channels = []
+            for channel in planar:
+                channel_pil = PIL.Image.fromarray(channel, mode="F")
+                channel_pil = channel_pil.resize((w, h), resample=PIL.Image.Resampling.LANCZOS)
+                channels.append(np.asarray(channel_pil))
+            downscaled = np.dstack(channels)
+            downscaled = np.rint(downscaled).astype(img.dtype)
+        else:
+            downscaled = PIL.Image.fromarray(img.astype(np.float32), mode="F")
+            downscaled = downscaled.resize((w, h), resample=PIL.Image.Resampling.LANCZOS)
+            downscaled = np.rint(downscaled).astype(img.dtype)
+        return downscaled
 
     def _create_dummy_texture(self):
         dummy = self.ctx.texture((32, 32), 3, np.random.random((32, 32, 3)).astype(np.float32), dtype='f4')
