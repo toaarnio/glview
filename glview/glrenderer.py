@@ -84,6 +84,7 @@ class GLRenderer:
             self.prog['scale'] = self.ui.scale
             self.prog['grayscale'] = (texture.components == 1)
             self.prog['gamma'] = self.ui.gamma
+            self.prog['degamma'] = self.files.linearize[imgidx]
             self.prog['cs_in'] = self.ui.cs_in
             self.prog['cs_out'] = self.ui.cs_out
             self.prog['maxval'] = maxval if self.ui.normalize else 1.0

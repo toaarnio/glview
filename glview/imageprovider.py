@@ -6,6 +6,7 @@ import threading               # built-in library
 import urllib.request          # built-in library
 import tempfile                # built-in library
 import traceback               # built-in library
+from pathlib import Path       # built-in library
 import numpy as np             # pip install numpy
 import psutil                  # pip install psutil
 import imsize                  # pip install imsize
@@ -49,6 +50,8 @@ class ImageProvider:
             print("Scanning images & estimating memory consumption...")
         invalid = []
         for idx, filespec in enumerate(self.files.filespecs):
+            if Path(filespec).suffix.lower() in [".jpg", ".jpeg", ".png", ".bmp"]:
+                self.files.linearize[idx] = True
             if "://" not in filespec:
                 try:
                     info = imsize.read(filespec)

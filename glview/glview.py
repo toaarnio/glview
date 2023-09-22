@@ -45,6 +45,7 @@ class FileList:
         self.filespecs = filespecs
         self.numfiles = len(filespecs)
         self.orientations = [0] * self.numfiles
+        self.linearize = [False] * self.numfiles
         self.images = ["PENDING"] * self.numfiles  # PENDING | RELEASED | INVALID
         self.textures = [None] * self.numfiles     # None | <Texture>
         self.metadata = [None] * self.numfiles
@@ -57,6 +58,7 @@ class FileList:
             try:
                 self.filespecs = self._drop(self.filespecs, indices)
                 self.orientations = self._drop(self.orientations, indices)
+                self.linearize = self._drop(self.linearize, indices)
                 self.textures = self._drop(self.textures, indices)
                 self.metadata = self._drop(self.metadata, indices)
                 self.images = self._drop(self.images, indices)
@@ -72,6 +74,7 @@ class FileList:
                 filespec = self.filespecs[idx]
                 self.filespecs = self._drop(self.filespecs, [idx])
                 self.orientations = self._drop(self.orientations, [idx])
+                self.linearize = self._drop(self.linearize, [idx])
                 self.textures = self._drop(self.textures, [idx])
                 self.metadata = self._drop(self.metadata, [idx])
                 self.images = self._drop(self.images, [idx])
@@ -128,13 +131,14 @@ def main():
         print("    left / right            pan image; synchronized if multiple tiles")
         print("    PageUp / PageDown       cycle through images on active tile")
         print("    ctrl + left / right     cycle through images on all tiles")
-        print("    r                       rotate active tile 90 degrees clockwise")
+        print("    r                       rotate current image 90 degrees clockwise")
+        print("    l                       toggle current image linearization on/off")
         print("    s                       split window into 1/2/3/4 tiles")
-        print("    1 / 2 / 3 / 4           select active tile for PageUp/PageDown/r")
+        print("    1 / 2 / 3 / 4           select active tile for PageUp/PageDown/r/l")
         print("    h                       reset zoom/pan/exposure to initial state")
         print("    f                       toggle fullscreen <-> windowed")
         print("    t                       toggle nearest <-> linear filtering")
-        print("    g                       toggle gamma correction: sRGB/HDR/off")
+        print("    g                       toggle output gamma: sRGB/HDR/none")
         print("    n                       toggle exposure normalization on/off")
         print("    e                       slide exposure from -2EV to +2EV & back")
         print("    b                       toggle between HDR/LDR exposure control")

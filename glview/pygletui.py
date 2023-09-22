@@ -42,7 +42,7 @@ class PygletUI:
         self.img_per_tile = [0, 1, 2, 3]
         self.cs_in = 0
         self.cs_out = 0
-        self.gamma = 0
+        self.gamma = 1
         self.normalize = False
         self.ev_range = 2
         self.ev_linear = 0.0
@@ -286,6 +286,10 @@ class PygletUI:
                     self.ev_linear = 0.0
                     self.gamut_lin = 0.0
                     self.gamut_fit = 0
+                    self.need_redraw = True
+                if symbol == keys.L:  # linearize / degamma
+                    imgidx = self.img_per_tile[self.tileidx]
+                    self.files.linearize[imgidx] = not self.files.linearize[imgidx]
                     self.need_redraw = True
                 if symbol == keys.G:  # gamma
                     self.gamma = (self.gamma + 1) % 3
