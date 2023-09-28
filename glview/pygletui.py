@@ -19,6 +19,7 @@ class PygletUI:
         self.debug_mode = 0  # start in normal mode, toggle on/off with space
         self.verbose = verbose
         self.files = files
+        self.version = None
         self.fullscreen = False
         self.numtiles = 1
         self.running = None
@@ -110,13 +111,14 @@ class PygletUI:
         self._vprint("Pyglet & native OpenGL initialized")
 
     def _caption(self):
+        ver = self.version
         fps = pyglet.clock.get_frequency()
         cspaces = ["sRGB", "DCI-P3", "Rec2020"]
         csc = f"{cspaces[self.cs_in]} => {cspaces[self.cs_out]}"
         norm = "off" if not self.normalize else "on"
         gamma = ["off", "sRGB", "HDR10", "HLG"][self.gamma]
         gamut = "clip" if not self.gamut_fit else f"fit p = {self.gamut_pow[0]:.1f}"
-        caption = f"glview [{self.ev:+1.2f}EV | norm {norm} | {csc} | gamut {gamut} | gamma {gamma} | {fps:.1f} fps]"
+        caption = f"glview {ver} | {self.ev:+1.2f}EV | norm {norm} | {csc} | gamut {gamut} | gamma {gamma} | {fps:.0f} fps"
         for tileidx in range(self.numtiles):
             imgidx = self.img_per_tile[tileidx]
             basename = self.files.filespecs[imgidx]

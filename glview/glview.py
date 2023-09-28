@@ -169,18 +169,16 @@ def main():
     filenames = argv.filenames(filepatterns, IMAGE_TYPES, allowAllCaps=True)
     filenames = natsort.natsorted(filenames)
     filenames += [url] if url is not None else []
-    numfiles = len(filenames)
-    enforce(numfiles > 0, "No valid images to show. Terminating.")
-
-    files = FileList(filenames)
-    ui = pygletui.PygletUI(files, debug, bool(verbose))
-    loader = imageprovider.ImageProvider(files, bool(verbose))
+    loader = imageprovider.ImageProvider(FileList(filenames), bool(verbose))
     enforce(loader.files.numfiles > 0, "No valid images to show. Terminating.")
 
-    renderer = glrenderer.GLRenderer(ui, loader.files, loader, verbose)
+    ui = pygletui.PygletUI(loader.files, debug, bool(verbose))
+    ui.version = version.__version__
     ui.texture_filter = "LINEAR" if smooth else "NEAREST"
     ui.fullscreen = fullscreen
     ui.numtiles = numtiles
+
+    renderer = glrenderer.GLRenderer(ui, loader.files, loader, verbose)
     ui.start(renderer)
     loader.start()
     main_loop([ui, loader])
