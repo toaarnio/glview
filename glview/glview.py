@@ -138,7 +138,7 @@ def main():
         print("    h                       reset zoom/pan/exposure to initial state")
         print("    f                       toggle fullscreen <-> windowed")
         print("    t                       toggle nearest <-> linear filtering")
-        print("    g                       toggle output gamma: sRGB/HDR/none")
+        print("    g                       toggle output gamma: sRGB/HDR10/HLG")
         print("    n                       toggle exposure normalization on/off")
         print("    e                       slide exposure from -2EV to +2EV & back")
         print("    b                       toggle between HDR/LDR exposure control")

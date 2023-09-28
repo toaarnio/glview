@@ -110,6 +110,24 @@ vec3 st2084_gamma(vec3 rgb) {
 }
 
 
+vec3 hlg(vec3 rgb) {
+  /**
+   * Applies the standard Hybrid Log-Gamma (HLG) electro-optical transfer function
+   * on the given frame, as specified in ITU Rec. 2100. Negative input values are
+   * clamped to zero. This function is an extension of sRGB gamma for HDR displays;
+   * see https://en.wikipedia.org/wiki/Hybrid_log-gamma.
+   */
+  rgb = max(rgb, 0.0);
+  vec3 a = vec3(0.17883277);
+  vec3 b = vec3(1.0) - vec3(4.0) * a;
+  vec3 c = vec3(0.5) - a * log(vec3(4.0) * a);
+  vec3 lo = sqrt(vec3(3.0) * rgb);
+  vec3 hi = a * log(vec3(12.0) * rgb - b) + c;
+  bvec3 is_hi = greaterThan(rgb, vec3(1.0 / 12.0));
+  return mix(lo, hi, is_hi);
+}
+
+
 vec3 apply_gamma(vec3 rgb) {
   /**
    * Applies the selected electro-optical transfer function (EOTF), aka. gamma,
@@ -117,7 +135,8 @@ vec3 apply_gamma(vec3 rgb) {
    *
    *   0 - none
    *   1 - sRGB gamma
-   *   2 - ST2084, assumed max display luminance 1000 nits (cd/m²)
+   *   2 - ST2084 (HDR10), assumed max display luminance 1000 nits (cd/m²)
+   *   3 - HLG (Hybrid Log-Gamma), max display luminance 1000 nits (cd/m²)
    */
   switch (gamma) {
     case 1:
@@ -125,6 +144,9 @@ vec3 apply_gamma(vec3 rgb) {
       break;
     case 2:
       rgb = st2084_gamma(rgb * 1000.0);
+      break;
+    case 3:
+      rgb = hlg(rgb);
       break;
   }
   return rgb;

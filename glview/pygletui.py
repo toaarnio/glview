@@ -114,7 +114,7 @@ class PygletUI:
         cspaces = ["sRGB", "DCI-P3", "Rec2020"]
         csc = f"{cspaces[self.cs_in]} => {cspaces[self.cs_out]}"
         norm = "off" if not self.normalize else "on"
-        gamma = ["off", "sRGB", "HDR"][self.gamma]
+        gamma = ["off", "sRGB", "HDR10", "HLG"][self.gamma]
         gamut = "clip" if not self.gamut_fit else f"fit p = {self.gamut_pow[0]:.1f}"
         caption = f"glview [{self.ev:+1.2f}EV | norm {norm} | {csc} | gamut {gamut} | gamma {gamma} | {fps:.1f} fps]"
         for tileidx in range(self.numtiles):
@@ -292,7 +292,7 @@ class PygletUI:
                     self.files.linearize[imgidx] = not self.files.linearize[imgidx]
                     self.need_redraw = True
                 if symbol == keys.G:  # gamma
-                    self.gamma = (self.gamma + 1) % 3
+                    self.gamma = (self.gamma + 1) % 4
                     self.need_redraw = True
                 if symbol == keys.I:  # input color space
                     self.cs_in = (self.cs_in + 1) % 3
