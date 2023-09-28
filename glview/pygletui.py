@@ -84,6 +84,8 @@ class PygletUI:
 
         class _EventLoop(pyglet.app.EventLoop):
             def idle(self):
+                parent._keyboard_zoom_pan()
+                parent._smooth_exposure()
                 dt = self.clock.update_time()
                 window = list(pyglet.app.windows)[0]
                 parent.need_redraw |= dt > 0.9  # redraw at least once per second
@@ -185,11 +187,13 @@ class PygletUI:
         return y
 
     def _smooth_exposure(self):
-        # this is invoked 50 times per second, so exposure control is pretty fast
+        # this is typically invoked 60 times per second,
+        # so exposure control is pretty fast
         keys = pyglet.window.key
-        self.ev_linear += 0.005 * self.key_state[keys.E]
+        if self.key_state[keys.E]:
+            self.ev_linear += 0.005 * self.key_state[keys.E]
+            self.need_redraw = True
         self.ev = self._triangle_wave(self.ev_linear, self.ev_range)
-        self.need_redraw = True
 
     def _switch_gamut_curve(self):
         # cycle through a predefined selection of gamut compression modes:
@@ -212,8 +216,6 @@ class PygletUI:
 
         @self.window.event
         def on_draw():
-            self._keyboard_zoom_pan()
-            self._smooth_exposure()
             if self.need_redraw:
                 self.renderer.redraw()
                 self.window.set_caption(self._caption())
