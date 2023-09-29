@@ -130,7 +130,7 @@ class PygletUI:
         cspaces = ["sRGB", "DCI-P3", "Rec2020"]
         csc = f"{cspaces[self.cs_in]} => {cspaces[self.cs_out]}"
         norm = "off" if not self.normalize else "on"
-        gamma = ["off", "sRGB", "HDR10", "HLG"][self.gamma]
+        gamma = ["off", "sRGB", "HLG", "HDR10"][self.gamma]
         gamut = "clip" if not self.gamut_fit else f"fit p = {self.gamut_pow[0]:.1f}"
         caption = f"glview {ver} | {self.ev:+1.2f}EV | norm {norm} | {csc} | gamut {gamut} | gamma {gamma} | {fps:.0f} fps"
         for tileidx in range(self.numtiles):

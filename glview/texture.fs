@@ -135,18 +135,18 @@ vec3 apply_gamma(vec3 rgb) {
    *
    *   0 - none
    *   1 - sRGB gamma
-   *   2 - ST2084 (HDR10), assumed max display luminance 1000 nits (cd/m²)
-   *   3 - HLG (Hybrid Log-Gamma), max display luminance 1000 nits (cd/m²)
+   *   2 - HLG (Hybrid Log-Gamma), max display luminance 1000 nits (cd/m²)
+   *   3 - ST2084 (HDR10), assumed max display luminance 1000 nits (cd/m²)
    */
   switch (gamma) {
     case 1:
       rgb = srgb_gamma(rgb);
       break;
     case 2:
-      rgb = st2084_gamma(rgb * 1000.0);
+      rgb = hlg(rgb);
       break;
     case 3:
-      rgb = hlg(rgb);
+      rgb = st2084_gamma(rgb * 1000.0);
       break;
   }
   return rgb;
