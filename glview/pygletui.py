@@ -41,6 +41,7 @@ class PygletUI:
         self.renderer = None
         self.texture_filter = "NEAREST"
         self.img_per_tile = [0, 1, 2, 3]
+        self.images_pending = True
         self.cs_in = 0
         self.cs_out = 0
         self.gamma = 1
@@ -86,6 +87,7 @@ class PygletUI:
             def idle(self):
                 parent._keyboard_zoom_pan()
                 parent._smooth_exposure()
+                parent._poll_loading()
                 self.clock.update_time()
                 window = list(pyglet.app.windows)[0]
                 window.dispatch_event("on_draw")
@@ -110,6 +112,17 @@ class PygletUI:
         self.key_state = pyglet.window.key.KeyStateHandler()
         self.window.push_handlers(self.key_state)
         self._vprint("Pyglet & native OpenGL initialized")
+
+    def _poll_loading(self):
+        for imgidx in self.img_per_tile[:self.numtiles]:
+            img = self.files.images[imgidx]
+            if isinstance(img, str) and img == "PENDING":
+                self.images_pending = True
+                break
+        else:
+            if self.images_pending:
+                self.images_pending = False
+                self.need_redraw = True
 
     def _caption(self):
         ver = self.version
