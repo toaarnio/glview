@@ -280,9 +280,10 @@ class PygletUI:
                     self.event_loop.has_exit = True
                 if symbol == keys.F:  # fullscreen
                     self.fullscreen = not self.fullscreen
+                    self.need_redraw = True
+                    self.was_resized = True
                     self.window.set_fullscreen(self.fullscreen)
                     self.window.set_mouse_visible(not self.fullscreen)
-                    self.need_redraw = True
                 if symbol == keys.H:  # reset exposure + zoom & pan ("home")
                     self.scale = 1.0
                     self.mousepos = np.zeros(2)
