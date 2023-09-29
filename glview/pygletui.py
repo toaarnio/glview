@@ -86,11 +86,10 @@ class PygletUI:
             def idle(self):
                 parent._keyboard_zoom_pan()
                 parent._smooth_exposure()
-                dt = self.clock.update_time()
+                self.clock.update_time()
                 window = list(pyglet.app.windows)[0]
-                parent.need_redraw |= dt > 0.9  # redraw at least once per second
                 window.dispatch_event("on_draw")
-                return 0.5  # call again after 0.5 seconds if no events until then
+                return 1/60  # pan/zoom at max 60 fps
 
         return _EventLoop()
 
