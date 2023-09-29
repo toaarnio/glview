@@ -18,7 +18,7 @@ class GLRenderer:
     tile_debug_colors = [0xE0BBE4, 0x957DAD, 0xD291BC, 0xFEC8D8]  # pastel shades
     tile_normal_colors = [0, 0, 0, 0]
 
-    def __init__(self, ui, files, loader, verbose=False):
+    def __init__(self, ui, files, loader, verbose=False, manual_mipmaps=False):
         """
         Create a new GLRenderer with the given (hardcoded) PygletUI, FileList, and
         ImageProvider instances.
@@ -37,6 +37,7 @@ class GLRenderer:
         self.render_thread = None
         self.tprev = None
         self.tile_colors = self.tile_debug_colors if verbose else self.tile_normal_colors
+        self.manual_mipmaps = manual_mipmaps
 
     def init(self):
         """ Initialize an OpenGL context and attach it to an existing window. """
@@ -196,46 +197,44 @@ class GLRenderer:
         dtype = f"f{img.itemsize}"  # uint8 => 'f1', float16 => 'f2', float32 => 'f4'
         components = img.shape[2] if img.ndim == 3 else 1  # RGB/RGBA/grayscale
         texture = self.ctx.texture((w, h), components, img.ravel(), dtype=dtype)
-        texture.build_mipmaps()
-        mipmap = img
-        for lvl in range(1, int(np.log2(max(w, h)))):
-            #import rawpipe
-            mipw = int(np.floor(w / (2 ** lvl)))
-            miph = int(np.floor(h / (2 ** lvl)))
-            mipmap = self._downsample(img, 2 ** lvl)
-            #mipmap = rawpipe.verbose.downsample(mipmap)
-            texture.write(mipmap.ravel(), level=lvl)
-        """
-        mipmaps = []
-        for lvl in range(int(np.log2(max(w, h)))):
-            mipw = int(np.floor(w / (2 ** lvl)))
-            miph = int(np.floor(h / (2 ** lvl)))
-            print(f"Retrieving mipmap level {lvl}: {mipw} x {miph} x {components}...")
-            mipmap = texture.read(level=lvl)
-            mipmap = np.frombuffer(mipmap, dtype=img.dtype)
-            print(mipmap.dtype)
-            mipmap = mipmap.reshape(miph, mipw, components)
-            print(mipmap.shape)
-            mipmaps.append(mipmap)
-        """
+        self._build_mipmaps(texture, high_quality=self.manual_mipmaps)
         return texture
 
-    def _downsample(self, img, factor):
-        h, w = np.floor(np.asarray(img.shape[:2]) / factor).astype(int)
-        self._vprint(f"PIL (Lanczos) downscaling {img.dtype} texture by factor {factor}: {img.shape} => ({h}, {w}, {img.shape[2]})")
-        if img.ndim == 3:
-            planar = np.moveaxis(img, -1, 0).astype(np.float32)
-            channels = []
-            for channel in planar:
-                channel_pil = PIL.Image.fromarray(channel, mode="F")
-                channel_pil = channel_pil.resize((w, h), resample=PIL.Image.Resampling.LANCZOS)
-                channels.append(np.asarray(channel_pil))
-            downscaled = np.dstack(channels)
-            downscaled = np.rint(downscaled).astype(img.dtype)
+    def _build_mipmaps(self, texture, high_quality=False):
+        if high_quality:
+            print("Building high-quality mipmaps...")
+            texture.build_mipmaps()
+            w, h = texture.size
+            img = texture.read(level=0)
+            dt = {"f1": np.uint8,
+                  "f2": np.float16,
+                  "f4": np.float32}
+            img = np.frombuffer(img, dtype=dt[texture.dtype])
+            img = img.reshape(h, w, texture.components)
+            print("base level image:", img.dtype, img.shape)
+            for lvl in range(1, int(np.log2(max(w, h)))):
+                mipw = int(np.floor(w / (2 ** lvl)))
+                miph = int(np.floor(h / (2 ** lvl)))
+                mipmap = self._downsample(img, 2 ** lvl)
+                print("mipmap", lvl, mipmap.dtype, mipmap.shape)
+                texture.write(mipmap.ravel(), level=lvl)
+            print("Done.")
         else:
-            downscaled = PIL.Image.fromarray(img.astype(np.float32), mode="F")
-            downscaled = downscaled.resize((w, h), resample=PIL.Image.Resampling.LANCZOS)
-            downscaled = np.rint(downscaled).astype(img.dtype)
+            print("Building low-quality mipmaps...")
+            texture.build_mipmaps()
+            print("Done.")
+
+    def _downsample(self, img, factor):
+        import rawpipe
+        import resize_right
+        h, w = np.floor(np.asarray(img.shape[:2]) / factor).astype(int)
+        downscaled = resize_right.resize(img, out_shape=(h, w), interp_method=resize_right.interp_methods.lanczos3, pad_mode="edge")
+        if img.dtype == np.uint8:
+            downscaled = rawpipe.verbose.quantize8(downscaled / 255.0)
+        elif img.dtype == np.uint16:
+            downscaled = rawpipe.verbose.quantize16(downscaled / 65535.0)
+        downscaled = downscaled.astype(img.dtype)
+        self._vprint(f"ResizeRight (Lanczos3) downscaling {img.dtype} texture: {img.shape} => {downscaled.shape} [{downscaled.dtype}] [{downscaled.min()}, {downscaled.max()}]")
         return downscaled
 
     def _create_dummy_texture(self):

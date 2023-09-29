@@ -178,7 +178,7 @@ def main():
     ui.fullscreen = fullscreen
     ui.numtiles = numtiles
 
-    renderer = glrenderer.GLRenderer(ui, loader.files, loader, verbose)
+    renderer = glrenderer.GLRenderer(ui, loader.files, loader, verbose, manual_mipmaps=smooth)
     ui.start(renderer)
     loader.start()
     main_loop([ui, loader])
