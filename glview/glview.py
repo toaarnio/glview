@@ -146,6 +146,7 @@ def main():
         print("    o                       toggle output color space: sRGB/P3/Rec2020")
         print("    k                       toggle gamut compression strength")
         print("    x                       print image information (EXIF)")
+        print("    w                       write a screenshot as both JPG & PFM")
         print("    d                       drop the currently shown image")
         print("    del                     delete the currently shown image")
         print("    space                   toggle debug rendering on/off")

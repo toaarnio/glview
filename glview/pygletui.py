@@ -7,6 +7,7 @@ import pyglet                  # pip install pyglet
 import piexif                  # pip install piexif
 import numpy as np             # pip install numpy
 import imsize                  # pip install imsize
+import imgio                   # pip install imgio
 
 
 class PygletUI:
@@ -54,6 +55,7 @@ class PygletUI:
         self.gamut_pow = np.ones(3) * 1.5
         self.gamut_thr = np.ones(3) * 0.8
         self.gamut_lin = 0.0
+        self.ss_idx = 0
 
     def start(self, renderer):
         """ Start the UI thread. """
@@ -347,6 +349,12 @@ class PygletUI:
                     fileinfo = imsize.read(filespec)
                     print(fileinfo)
                     self._print_exif(filespec)
+                if symbol == keys.W:  # take a screenshot
+                    screenshot_uint8 = self.renderer.screenshot(np.uint8)
+                    screenshot_fp32 = self.renderer.screenshot(np.float32)
+                    imgio.imwrite(f"screenshot{self.ss_idx:02d}.jpg", screenshot_uint8, maxval=255, verbose=True)
+                    imgio.imwrite(f"screenshot{self.ss_idx:02d}.pfm", screenshot_fp32, maxval=1.0, verbose=True)
+                    self.ss_idx += 1
                 if symbol == keys.SPACE:  # toggle debug mode on/off
                     N = self.debug_selected
                     self.debug_mode = (self.debug_mode + N) % (N * 2)

@@ -103,6 +103,25 @@ class GLRenderer:
         self._vprint(f"rendering {w} x {h} pixels took {elapsed:.1f} ms, frame-to-frame interval was {interval:.1f} ms", log_level=2)
         return elapsed
 
+    def screenshot(self, dtype=np.uint8):
+        """
+        Render the current on-screen view into an offscreen buffer and return the image
+        as a NumPy array.
+        """
+        assert dtype in [np.uint8, np.float32], dtype
+        dt = "f4" if dtype == np.float32 else "f1"
+        w, h = self.ui.window.get_size()
+        rbo = self.ctx.renderbuffer((w, h), components=3, dtype=dt)
+        fbo = self.ctx.framebuffer([rbo])
+        fbo.use()
+        self.redraw()
+        self.ctx.screen.use()
+        screenshot = fbo.read(components=3, dtype=dt, clamp=False)
+        screenshot = np.frombuffer(screenshot, dtype=dtype)
+        screenshot = screenshot.reshape(h, w, 3)
+        screenshot = np.ascontiguousarray(screenshot[::-1])
+        return screenshot
+
     def _gamut(self, imgidx):
         """
         Calculate per-color-channel scale factors as required by the shader for gamut
