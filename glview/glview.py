@@ -7,7 +7,9 @@ The 'glview' command-line application.
 import sys                     # built-in library
 import os                      # built-in library
 import time                    # built-in library
+import pprint                  # built-in library
 import threading               # built-in library
+import pathlib                 # built-in library
 import numpy as np             # pip install numpy
 import natsort                 # pip install natsort
 import psutil                  # pip install psutil
@@ -168,7 +170,7 @@ def main():
 
     filepatterns = sys.argv[1:] or url or ["*"]
     filenames = argv.filenames(filepatterns, IMAGE_TYPES, allowAllCaps=True)
-    filenames = natsort.natsorted(filenames)
+    filenames = natsort.natsorted(natsort.natsorted(filenames), key=lambda p: pathlib.Path(p).parent)
     filenames += [url] if url is not None else []
     loader = imageprovider.ImageProvider(FileList(filenames), bool(verbose))
     enforce(loader.files.numfiles > 0, "No valid images to show. Terminating.")
