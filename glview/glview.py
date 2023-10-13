@@ -58,6 +58,7 @@ class FileList:
         """ Drop the given images from this FileList, do not delete the files. """
         with self.mutex:
             try:
+                self.release_textures(indices)
                 self.filespecs = self._drop(self.filespecs, indices)
                 self.orientations = self._drop(self.orientations, indices)
                 self.linearize = self._drop(self.linearize, indices)
@@ -73,6 +74,7 @@ class FileList:
         """ Remove the given image from this FileList and delete the file from disk. """
         with self.mutex:
             try:
+                self.release_textures([idx])
                 filespec = self.filespecs[idx]
                 self.filespecs = self._drop(self.filespecs, [idx])
                 self.orientations = self._drop(self.orientations, [idx])
@@ -85,6 +87,12 @@ class FileList:
                 print(f"[{threading.current_thread().name}] Deleted {filespec}")
             except IndexError:
                 pass
+
+    def release_textures(self, indices):
+        for idx in indices:
+            texture = self.textures[idx]
+            if texture is not None:
+                texture.release()
 
     def _drop(self, arr, indices):
         arr = np.asarray(arr, dtype=object)
