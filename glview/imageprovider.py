@@ -157,32 +157,33 @@ class ImageProvider:
         Read image, drop alpha channel, convert to fp32 if maxval != 255;
         if loading fails, mark the slot as "INVALID" and keep going.
         """
-        try:
-            filespec = self.files.filespecs[idx]
-            if not self.files.is_url[idx]:
-                info = imsize.read(filespec)
-                img, maxval = imgio.imread(filespec, width=info.width, height=info.height, bpp=info.bitdepth, verbose=verbose)
-            else:
-                data = urllib.request.urlopen(filespec).read()
-                basename = os.path.basename(filespec)
-                with tempfile.NamedTemporaryFile(suffix=f"_{basename}") as tmpfile:
-                    tmpfile.write(data)
-                    img, maxval = imgio.imread(tmpfile.name, verbose=verbose)
-            img = np.atleast_3d(img)  # {2D, 3D} => 3D
-            img = img[:, :, :3]  # scrap alpha channel, if any
-            if img.dtype == np.uint16:
-                # uint16 still doesn't work in ModernGL as of 5.7.4;
-                # scale to [0, 1] and use float32 instead
-                norm = max(maxval, np.max(img))
-                img = img.astype(np.float32) / norm
-            if img.dtype == np.float64:
-                # float64 is not universally supported yet
-                img = img.astype(np.float32)
-            return img
-        except imgio.ImageIOError as e:
-            print(f"\n{e}")
-            self._vprint(e)
-            return "INVALID"
+        if isinstance(self.files.images[idx], str) and self.files.images[idx] == "PENDING":
+            try:
+                filespec = self.files.filespecs[idx]
+                if not self.files.is_url[idx]:
+                    info = imsize.read(filespec)
+                    img, maxval = imgio.imread(filespec, width=info.width, height=info.height, bpp=info.bitdepth, verbose=verbose)
+                else:
+                    data = urllib.request.urlopen(filespec).read()
+                    basename = os.path.basename(filespec)
+                    with tempfile.NamedTemporaryFile(suffix=f"_{basename}") as tmpfile:
+                        tmpfile.write(data)
+                        img, maxval = imgio.imread(tmpfile.name, verbose=verbose)
+                img = np.atleast_3d(img)  # {2D, 3D} => 3D
+                img = img[:, :, :3]  # scrap alpha channel, if any
+                if img.dtype == np.uint16:
+                    # uint16 still doesn't work in ModernGL as of 5.7.4;
+                    # scale to [0, 1] and use float32 instead
+                    norm = max(maxval, np.max(img))
+                    img = img.astype(np.float32) / norm
+                if img.dtype == np.float64:
+                    # float64 is not universally supported yet
+                    img = img.astype(np.float32)
+                return img
+            except imgio.ImageIOError as e:
+                print(f"\n{e}")
+                self._vprint(e)
+                return "INVALID"
 
     def _try(self, func):
         try:
