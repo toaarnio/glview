@@ -53,6 +53,7 @@ class FileList:
         self.metadata = [None] * self.numfiles
         self.is_url = [None] * self.numfiles
         self._update()
+        self.reindexed = False
 
     def drop(self, indices):
         """ Drop the given images from this FileList, do not delete the files. """
@@ -103,6 +104,7 @@ class FileList:
     def _update(self):
         self.numfiles = len(self.filespecs)
         self.is_url = ["://" in f for f in self.filespecs]
+        self.reindexed = True
 
 
 def main():
