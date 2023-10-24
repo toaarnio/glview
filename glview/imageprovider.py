@@ -17,9 +17,10 @@ from pqdm.threads import pqdm  # pip install pqdm
 class ImageProvider:
     """ A multithreaded image file loader. """
 
-    def __init__(self, files, verbose=False):
+    def __init__(self, files, downsample, verbose=False):
         """ Create a new ImageProvider with the given (hardcoded) FileList instance. """
         self.thread_name = "ImageProviderThread"
+        self.downsample = downsample
         self.verbose = verbose
         self.files = files
         self.loader_thread = None

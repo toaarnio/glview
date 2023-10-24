@@ -10,6 +10,7 @@ import time                    # built-in library
 import pprint                  # built-in library
 import threading               # built-in library
 import pathlib                 # built-in library
+import types                   # built-in library
 import numpy as np             # pip install numpy
 import natsort                 # pip install natsort
 import psutil                  # pip install psutil
@@ -109,13 +110,15 @@ class FileList:
 
 def main():
     """ Parse command-line arguments and run the application. """
-    fullscreen = argv.exists("--fullscreen")
-    numtiles = argv.intval("--split", default=1, accepted=[1, 2, 3, 4])
-    url = argv.stringval("--url", default=None)
-    smooth = argv.exists("--filter")
-    debug = argv.intval("--debug", default=1, accepted=[1, 2, 3])
-    verbose = argv.exists("--verbose")
-    verbose += argv.exists("--verbose")
+    config = types.SimpleNamespace()
+    config.fullscreen = argv.exists("--fullscreen")
+    config.numtiles = argv.intval("--split", default=1, accepted=[1, 2, 3, 4])
+    config.url = argv.stringval("--url", default=None)
+    config.downsample = argv.intval("--downsample", default=1, condition="v >= 1")
+    config.smooth = argv.exists("--filter")
+    config.debug = argv.intval("--debug", default=1, accepted=[1, 2, 3])
+    config.verbose = argv.exists("--verbose")
+    config.verbose += argv.exists("--verbose")
     show_version = argv.exists("--version")
     show_help = argv.exists("--help")
     argv.exitIfAnyUnparsedOptions()
@@ -129,6 +132,7 @@ def main():
         print("    --fullscreen            start in full-screen mode; default = windowed")
         print("    --split 1|2|3|4         display images in N separate tiles")
         print("    --url <address>         load image from the given web address")
+        print("    --downsample N          downsample images N-fold to save memory")
         print("    --filter                use linear filtering; default = nearest")
         print("    --debug N               select debug rendering mode; default = 1")
         print("    --verbose               print extra traces to the console")
@@ -178,20 +182,20 @@ def main():
     else:
         print("See 'glview --help' for command-line options and keyboard commands.")
 
-    filepatterns = sys.argv[1:] or url or ["*"]
+    filepatterns = sys.argv[1:] or config.url or ["*"]
     filenames = argv.filenames(filepatterns, IMAGE_TYPES, allowAllCaps=True)
     filenames = natsort.natsorted(natsort.natsorted(filenames), key=lambda p: pathlib.Path(p).parent)
-    filenames += [url] if url is not None else []
-    loader = imageprovider.ImageProvider(FileList(filenames), bool(verbose))
+    filenames += [config.url] if config.url is not None else []
+    loader = imageprovider.ImageProvider(FileList(filenames), config.downsample, bool(config.verbose))
     enforce(loader.files.numfiles > 0, "No valid images to show. Terminating.")
 
-    ui = pygletui.PygletUI(loader.files, debug, bool(verbose))
+    ui = pygletui.PygletUI(loader.files, config.debug, bool(config.verbose))
     ui.version = version.__version__
-    ui.texture_filter = "LINEAR" if smooth else "NEAREST"
-    ui.fullscreen = fullscreen
-    ui.numtiles = numtiles
+    ui.texture_filter = "LINEAR" if config.smooth else "NEAREST"
+    ui.fullscreen = config.fullscreen
+    ui.numtiles = config.numtiles
 
-    renderer = glrenderer.GLRenderer(ui, loader.files, loader, verbose)
+    renderer = glrenderer.GLRenderer(ui, loader.files, loader, config.verbose)
     ui.start(renderer)
     loader.start()
     main_loop([ui, loader])
