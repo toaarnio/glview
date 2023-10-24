@@ -136,9 +136,9 @@ class ImageProvider:
                 self._check_ram(2048, wait=True)
                 with self.files.mutex:  # avoid race conditions
                     if idx < self.files.numfiles:
-                        if isinstance(self.files.images[idx], str) and self.files.images[idx] == "PENDING":
-                            verbose = self.verbose or self.files.numfiles < 200
-                            img = self._load_single(idx, verbose)
+                        verbose = self.verbose or self.files.numfiles < 200
+                        img = self._load_single(idx, verbose)
+                        if img is not None:
                             self.files.images[idx] = img
                             nbytes += img.nbytes if isinstance(img, np.ndarray) else 0
                     else:
