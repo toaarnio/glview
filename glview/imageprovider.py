@@ -136,6 +136,9 @@ class ImageProvider:
                         break
                 time.sleep(0.001)
                 idx += 1
+                if self.files.reindexed:
+                    self.files.reindexed = False
+                    idx = 0  # restart from beginning
             if nbytes > 1e4:
                 elapsed = time.time() - t0
                 nbytes = nbytes / 1024**2
