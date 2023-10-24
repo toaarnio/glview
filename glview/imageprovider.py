@@ -32,7 +32,8 @@ class ImageProvider:
         self._vprint(f"spawning {self.thread_name}...")
         self.running = True
         loader = self._sequential_loader if self.verbose else self._parallel_loader
-        self.loader_thread = threading.Thread(target=lambda: self._try(loader), name=self.thread_name)
+        loader_func = lambda: loader(downsample=self.downsample)
+        self.loader_thread = threading.Thread(target=lambda: self._try(loader_func), name=self.thread_name)
         self.loader_thread.daemon = True  # terminate when main process ends
         self.loader_thread.start()
 
@@ -86,7 +87,7 @@ class ImageProvider:
         """
         self.files.images[index] = "RELEASED"
 
-    def _parallel_loader(self):
+    def _parallel_loader(self, downsample):
         ram_total = psutil.virtual_memory().total / 1024**2
         ram_before = psutil.virtual_memory().available / 1024**2
         verbose = self.verbose or self.files.numfiles < 200
@@ -103,7 +104,7 @@ class ImageProvider:
                 for chunk in split():
                     ok = self._check_ram(2048, wait=False)
                     if ok:
-                        batch = [(idx, verbose) for idx in chunk]
+                        batch = [(idx, downsample, verbose) for idx in chunk]
                         images = pqdm(batch, self._load_single, 8, "args", bounded=True,
                                       exception_behaviour="immediate", disable=True)
                         for idx, img in zip(chunk, images):
@@ -122,7 +123,7 @@ class ImageProvider:
                 self._print(f"consumed {consumed:.0f} MB of system RAM, {ram_after:.0f}/{ram_total:.0f} MB remaining.")
             time.sleep(0.1)
 
-    def _sequential_loader(self):
+    def _sequential_loader(self, downsample):
         """
         Load all images in sequential order.
         """
@@ -137,7 +138,7 @@ class ImageProvider:
                 with self.files.mutex:  # avoid race conditions
                     if idx < self.files.numfiles:
                         verbose = self.verbose or self.files.numfiles < 200
-                        img = self._load_single(idx, verbose)
+                        img = self._load_single(idx, downsample, verbose)
                         if img is not None:
                             self.files.images[idx] = img
                             nbytes += img.nbytes if isinstance(img, np.ndarray) else 0
@@ -158,7 +159,7 @@ class ImageProvider:
                 self._print(f"consumed {consumed:.0f} MB of system RAM, {ram_after:.0f}/{ram_total:.0f} MB remaining.")
             time.sleep(0.1)
 
-    def _load_single(self, idx, verbose):
+    def _load_single(self, idx, downsample, verbose):
         """
         Read image, drop alpha channel, convert to fp32 if maxval != 255;
         if loading fails, mark the slot as "INVALID" and keep going.
@@ -175,6 +176,7 @@ class ImageProvider:
                     with tempfile.NamedTemporaryFile(suffix=f"_{basename}") as tmpfile:
                         tmpfile.write(data)
                         img, maxval = imgio.imread(tmpfile.name, verbose=verbose)
+                img = img[::downsample, ::downsample]
                 img = np.atleast_3d(img)  # {2D, 3D} => 3D
                 img = img[:, :, :3]  # scrap alpha channel, if any
                 if img.dtype == np.uint16:
