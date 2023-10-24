@@ -87,31 +87,40 @@ class ImageProvider:
         self.files.images[index] = "RELEASED"
 
     def _parallel_loader(self):
-        t0 = time.time()
         ram_total = psutil.virtual_memory().total / 1024**2
         ram_before = psutil.virtual_memory().available / 1024**2
-        nfiles = self.files.numfiles
-        verbose = self.verbose or nfiles < 200
-        splits = [2, 8, 16] + list(range(32, nfiles, 32))
-        chunks = np.split(np.arange(nfiles), splits)
-        with self.files.mutex:  # drop/delete not allowed while loading
-            for chunk in chunks:
-                batch = [(idx, verbose) for idx in chunk]
-                images = pqdm(batch, self._load_single, 8, "args", bounded=True,
-                              exception_behaviour="immediate", disable=True)
-                for idx, img in zip(chunk, images):
-                    self.files.images[idx] = img
-                time.sleep(0.01)
-        nbytes = np.sum([img.nbytes for img in self.files.images if isinstance(img, np.ndarray)])
-        if nbytes > 1e4:
-            elapsed = time.time() - t0
-            nbytes = nbytes / 1024**2
-            bandwidth = nbytes / elapsed
-            ram_after = psutil.virtual_memory().available / 1024**2
-            consumed = ram_before - ram_after
+        verbose = self.verbose or self.files.numfiles < 200
+        def split():
             nfiles = self.files.numfiles
-            self._print(f"loaded {nfiles} files, {nbytes:.0f} MB of image data in {elapsed:.1f} seconds ({bandwidth:.1f} MB/sec).")
-            self._print(f"consumed {consumed:.0f} MB of system RAM, {ram_after:.0f}/{ram_total:.0f} MB remaining.")
+            splits = [2, 8, 16] + list(range(32, nfiles, 32))
+            chunks = np.split(np.arange(nfiles), splits)
+            return chunks
+        while self.running:  # keep running in the background
+            t0 = time.time()
+            self._check_ram(2048, wait=True)
+            with self.files.mutex:  # drop/delete not allowed while loading
+                nloaded = 0
+                for chunk in split():
+                    ok = self._check_ram(2048, wait=False)
+                    if ok:
+                        batch = [(idx, verbose) for idx in chunk]
+                        images = pqdm(batch, self._load_single, 8, "args", bounded=True,
+                                      exception_behaviour="immediate", disable=True)
+                        for idx, img in zip(chunk, images):
+                            if img is not None:
+                                self.files.images[idx] = img
+                                nloaded += 1
+            nbytes = np.sum([img.nbytes for img in self.files.images if isinstance(img, np.ndarray)])
+            if nloaded > 0 and nbytes > 1e4:
+                elapsed = time.time() - t0
+                nbytes = nbytes / 1024**2
+                bandwidth = nbytes / elapsed
+                ram_after = psutil.virtual_memory().available / 1024**2
+                consumed = ram_before - ram_after
+                nfiles = self.files.numfiles
+                self._print(f"loaded {nloaded}/{nfiles} files, {nbytes:.0f} MB of image data in {elapsed:.1f} seconds ({bandwidth:.1f} MB/sec).")
+                self._print(f"consumed {consumed:.0f} MB of system RAM, {ram_after:.0f}/{ram_total:.0f} MB remaining.")
+            time.sleep(0.1)
 
     def _sequential_loader(self):
         """
