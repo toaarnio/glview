@@ -68,7 +68,8 @@ class ImageProvider:
             self.files.drop(invalid)
         size_on_disk /= 1024 ** 2
         size_in_mem /= 1024 ** 2
-        print(f"Found {self.files.numfiles} valid images, consuming {size_on_disk:.0f} MB on disk, {size_in_mem:.0f} MB in memory.")
+        ram_available = psutil.virtual_memory().available / 1024**2
+        print(f"Found {self.files.numfiles} valid images, consuming {size_on_disk:.0f} MB on disk, {size_in_mem:.0f} MB in memory ({ram_available:.0f} MB available).")
 
     def get_image(self, index):
         """
@@ -116,7 +117,6 @@ class ImageProvider:
         """
         Load all images in sequential order.
         """
-        waiting_for_ram = False
         ram_total = psutil.virtual_memory().total / 1024**2
         ram_before = psutil.virtual_memory().available / 1024**2
         while self.running:  # loop until program termination
@@ -124,14 +124,7 @@ class ImageProvider:
             nbytes = 0
             t0 = time.time()
             while self.running:  # load all files
-                ram_current = psutil.virtual_memory().available / 1024**2
-                if ram_current < 2048:  # less than 2 GB remaining => stop loading
-                    if not waiting_for_ram:
-                        self._print(f"WARNING: Only {ram_current:.0f} MB of RAM remaining. Free up some memory to load more images.")
-                        waiting_for_ram = True  # display the warning only once
-                    time.sleep(1.0)  # try again once per second
-                    continue
-                waiting_for_ram = False
+                self._check_ram(2048, wait=True)
                 with self.files.mutex:  # avoid race conditions
                     if idx < self.files.numfiles:
                         if isinstance(self.files.images[idx], str) and self.files.images[idx] == "PENDING":
@@ -185,6 +178,16 @@ class ImageProvider:
                 print(f"\n{e}")
                 self._vprint(e)
                 return "INVALID"
+
+    def _check_ram(self, minimum, wait):
+        ram_available = lambda: psutil.virtual_memory().available / 1024**2
+        while ram_available() < minimum:
+            self._print(f"WARNING: Only {ram_available():.0f} MB of RAM remaining. At least {minimum} MB required to continue loading.")
+            if wait:
+                time.sleep(5.0)
+                continue
+            break
+        return ram_available() >= minimum
 
     def _try(self, func):
         try:
