@@ -37,6 +37,7 @@ class PygletUI:
         self.mouse_canvas_width = 1000
         self.keyboard_pan_speed = 100
         self.viewports = None
+        self.layout = "N x 1"
         self.ui_thread = None
         self.event_loop = None
         self.renderer = None
@@ -105,7 +106,7 @@ class PygletUI:
         screen = display.get_default_screen()
         self.screensize = (screen.width, screen.height)
         self.winsize = (screen.width // 3, screen.height // 3)
-        self.viewports = self._retile(self.numtiles, self.winsize)
+        self.viewports = self._retile(self.numtiles, self.winsize, self.layout)
         self.window = pyglet.window.Window(*self.winsize, resizable=True, vsync=True)
         self.window.set_caption(self._caption())
         self.window.set_fullscreen(self.fullscreen)
@@ -141,7 +142,7 @@ class PygletUI:
             caption = f"{caption} | {basename} [{imgidx+1}/{self.files.numfiles}]"
         return caption
 
-    def _retile(self, numtiles, winsize):
+    def _retile(self, numtiles, winsize, layout):
         w, h = winsize
         viewports = {}
         if numtiles == 1:
@@ -153,15 +154,22 @@ class PygletUI:
             viewports[1] = (vpw, 0, vpw, vph)
         elif numtiles == 3:
             vpw, vph = (w // 3, h)
-            viewports[0] = (0,       0, vpw, vph)
-            viewports[1] = (vpw,     0, vpw, vph)
+            viewports[0] = (0 * vpw, 0, vpw, vph)
+            viewports[1] = (1 * vpw, 0, vpw, vph)
             viewports[2] = (2 * vpw, 0, vpw, vph)
         elif numtiles == 4:
-            vpw, vph = (w // 2, h // 2)
-            viewports[0] = (0,   vph, vpw, vph)  # bottom left => top left
-            viewports[1] = (vpw, vph, vpw, vph)  # bottom right => top right
-            viewports[2] = (0,   0,   vpw, vph)  # top left => bottom left
-            viewports[3] = (vpw, 0,   vpw, vph)  # top right => bottom right
+            if layout == "2 x 2":
+                vpw, vph = (w // 2, h // 2)
+                viewports[0] = (0,   vph, vpw, vph)  # bottom left => top left
+                viewports[1] = (vpw, vph, vpw, vph)  # bottom right => top right
+                viewports[2] = (0,   0,   vpw, vph)  # top left => bottom left
+                viewports[3] = (vpw, 0,   vpw, vph)  # top right => bottom right
+            elif layout == "N x 1":
+                vpw, vph = (w // 4, h)
+                viewports[0] = (0 * vpw, 0, vpw, vph)
+                viewports[1] = (1 * vpw, 0, vpw, vph)
+                viewports[2] = (2 * vpw, 0, vpw, vph)
+                viewports[3] = (3 * vpw, 0, vpw, vph)
         return viewports
 
     def _print_exif(self, filespec):
@@ -246,7 +254,7 @@ class PygletUI:
         @self.window.event
         def on_resize(width, height):
             self.winsize = (width, height)
-            self.viewports = self._retile(self.numtiles, self.winsize)
+            self.viewports = self._retile(self.numtiles, self.winsize, self.layout)
             self.need_redraw = True
             self.was_resized = True
 
@@ -332,10 +340,14 @@ class PygletUI:
                     self.texture_filter = "LINEAR" if self.texture_filter == "NEAREST" else "NEAREST"
                     self.need_redraw = True
                 if symbol == keys.S:  # split
-                    self.numtiles = (self.numtiles % 4) + 1
-                    self.tileidx = min(self.tileidx, self.numtiles - 1)
-                    self.img_per_tile = np.clip(self.img_per_tile, 0, self.files.numfiles - 1)
-                    self.viewports = self._retile(self.numtiles, self.winsize)
+                    if self.numtiles == 4 and self.layout == "N x 1":
+                        self.layout = "2 x 2"
+                    else:
+                        self.layout = "N x 1"
+                        self.numtiles = (self.numtiles % 4) + 1
+                        self.tileidx = min(self.tileidx, self.numtiles - 1)
+                        self.img_per_tile = np.clip(self.img_per_tile, 0, self.files.numfiles - 1)
+                    self.viewports = self._retile(self.numtiles, self.winsize, self.layout)
                     self.window.set_caption(self._caption())
                     self.need_redraw = True
                 if symbol == keys.R:  # rotate
