@@ -361,22 +361,23 @@ class PygletUI:
                     self._vprint(f"debug rendering mode {self.debug_mode}")
                     self.need_redraw = True
                 if symbol in [keys.D, keys.DELETE]:
-                    if symbol == keys.D:  # drop
-                        indices = self.img_per_tile[:self.numtiles]
-                        self.files.drop(indices)
-                    if symbol == keys.DELETE:  # delete
-                        if self.numtiles == 1:  # only in single-tile mode
-                            imgidx = self.img_per_tile[self.tileidx]
-                            self.files.delete(imgidx)
-                    if self.files.numfiles == 0:
-                        self.running = False
-                        self.event_loop.has_exit = True
-                    else:
-                        N = self.numtiles
-                        visible_images = np.asarray(self.img_per_tile[:N]) - N
-                        self.img_per_tile[:N] = visible_images % self.files.numfiles
-                        self.window.set_caption(self._caption())
-                        self.need_redraw = True
+                    if not self.files.mutex.locked():
+                        if symbol == keys.D:  # drop
+                            indices = self.img_per_tile[:self.numtiles]
+                            self.files.drop(indices)
+                        if symbol == keys.DELETE:  # delete
+                            if self.numtiles == 1:  # only in single-tile mode
+                                imgidx = self.img_per_tile[self.tileidx]
+                                self.files.delete(imgidx)
+                        if self.files.numfiles == 0:
+                            self.running = False
+                            self.event_loop.has_exit = True
+                        else:
+                            N = self.numtiles
+                            visible_images = np.asarray(self.img_per_tile[:N]) - N
+                            self.img_per_tile[:N] = visible_images % self.files.numfiles
+                            self.window.set_caption(self._caption())
+                            self.need_redraw = True
                 # pylint: disable=protected-access
                 if symbol in [keys._1, keys._2, keys._3, keys._4]:
                     tileidx = symbol - keys._1
