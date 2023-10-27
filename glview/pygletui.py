@@ -111,9 +111,8 @@ class PygletUI:
         self.window.set_caption(self._caption())
         self.window.set_fullscreen(self.fullscreen)
         self.window.set_mouse_visible(not self.fullscreen)
+        self.key_state = {k: False for k in pyglet.window.key._key_names}
         self._setup_events()
-        self.key_state = pyglet.window.key.KeyStateHandler()
-        self.window.push_handlers(self.key_state)
         self._vprint("Pyglet & native OpenGL initialized")
 
     def _poll_loading(self):
@@ -189,7 +188,17 @@ class PygletUI:
         # this is invoked 50 times per second, so zooming/panning is pretty fast
         keys = pyglet.window.key
         ctrl_down = self.key_state[keys.LCTRL] or self.key_state[keys.RCTRL]
-        if not ctrl_down:
+        win_down = self.key_state[keys.LWINDOWS] or self.key_state[keys.RWINDOWS]
+        if win_down:
+            # Clear arrow key state while the Windows key is pressed;
+            # this is needed because Windows appears to be stealing
+            # arrow key release events when the user is rearranging
+            # windows with Win + up/down/left/right.
+            self.key_state[keys.LEFT] = False
+            self.key_state[keys.RIGHT] = False
+            self.key_state[keys.UP] = False
+            self.key_state[keys.DOWN] = False
+        if not ctrl_down and not win_down:
             prev_scale = self.scale
             self.scale *= 1.0 + 0.1 * self.key_state[keys.PLUS]  # zoom in
             self.scale /= 1.0 + 0.1 * self.key_state[keys.MINUS]  # zoom out
@@ -253,6 +262,7 @@ class PygletUI:
 
         @self.window.event
         def on_resize(width, height):
+            self._vprint(f"on_resize({width}, {height})")
             self.winsize = (width, height)
             self.viewports = self._retile(self.numtiles, self.winsize, self.layout)
             self.need_redraw = True
@@ -290,10 +300,26 @@ class PygletUI:
             self.event_loop.has_exit = True
 
         @self.window.event
-        def on_key_press(symbol, modifiers):
+        def on_key_release(symbol, modifiers):
             keys = pyglet.window.key
-            disallowed_keys = keys.MOD_CTRL | keys.MOD_ALT
+            if symbol in [keys.LWINDOWS, keys.RWINDOWS]:
+                # Clear arrow key state when the Windows key is released;
+                # this is needed because Windows appears to be stealing
+                # arrow key release events when the user is rearranging
+                # windows with Win + up/down/left/right.
+                self.key_state[keys.LEFT] = False
+                self.key_state[keys.RIGHT] = False
+                self.key_state[keys.UP] = False
+                self.key_state[keys.DOWN] = False
+            self.key_state[symbol] = False
+            self._vprint(f"on_key_release({keys.symbol_string(symbol)}, modifiers={keys.modifiers_string(modifiers)})")
+
+        @self.window.event
+        def on_key_press(symbol, modifiers):
+            self.key_state[symbol] = True
+            keys = pyglet.window.key
             self._vprint(f"on_key_press({keys.symbol_string(symbol)}, modifiers={keys.modifiers_string(modifiers)})")
+            disallowed_keys = keys.MOD_CTRL | keys.MOD_ALT | keys.MOD_WINDOWS | keys.MOD_COMMAND
             if symbol == keys.C and modifiers == keys.MOD_CTRL:
                 self.running = False
                 self.event_loop.has_exit = True
