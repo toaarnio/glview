@@ -4,6 +4,7 @@ import os                      # built-in library
 import time                    # built-in library
 import struct                  # built-in library
 import threading               # built-in library
+import types                   # built-in library
 import numpy as np             # pip install numpy
 import moderngl                # pip install moderngl
 
@@ -64,7 +65,7 @@ class GLRenderer:
         tile_colors = np.array(tile_colors) / 255.0
         for i in range(self.ui.numtiles):
             imgidx = self.ui.img_per_tile[i]
-            texture = self._load_texture(imgidx)
+            texture = self.upload_texture(imgidx, piecewise=False)
             texture.filter = self.filters[self.ui.texture_filter]
             texture.repeat_x = False
             texture.repeat_y = False
@@ -74,7 +75,7 @@ class GLRenderer:
             texw, texh = texture.width, texture.height
             texw, texh = (texh, texw) if orientation in [90, 270] else (texw, texh)
             _vpx, _vpy, vpw, vph = self.ui.viewports[i]
-            maxval = self.files.metadata[imgidx]['maxval']
+            maxval = texture.extra.maxval
             self.ctx.viewport = self.ui.viewports[i]
             self.ctx.clear(*tile_colors[i], viewport=self.ctx.viewport)
             self.prog['texture'] = 0
@@ -102,6 +103,35 @@ class GLRenderer:
         self.tprev = time.time()
         self._vprint(f"rendering {w} x {h} pixels took {elapsed:.1f} ms, frame-to-frame interval was {interval:.1f} ms", log_level=2)
         return elapsed
+
+    def upload_texture(self, idx, piecewise):
+        """
+        Upload the given image to GPU memory, either all at once or piecewise
+        (100 rows per call). Progressive uploading helps avoid freezing the
+        user interface, although short glitches may still occur with large
+        images.
+        """
+        img = self.loader.get_image(idx)
+        assert isinstance(img, (np.ndarray, str)), type(img)
+        if isinstance(img, np.ndarray):
+            texture = self._create_empty_texture(img)
+            scale = 255 if img.dtype == np.uint8 else 1.0
+            texture.extra.maxval = np.max(img) / scale
+            texture.extra.idx = idx
+            self._vprint(f"Created texture #{idx}, piecewise={piecewise}")
+            nrows = 100 if piecewise else texture.height
+            self._upload_texture_slice(texture, nrows)
+            self.files.textures[idx] = texture
+            self.loader.release_image(idx)
+        else:  # PENDING | INVALID | RELEASED
+            if self.files.textures[idx] is None:
+                texture = self._create_dummy_texture()
+                self.files.textures[idx] = texture
+            else:  # RELEASED
+                texture = self.files.textures[idx]
+                nrows = 100 if piecewise else texture.height
+                self._upload_texture_slice(texture, nrows)
+        return texture
 
     def screenshot(self, dtype=np.uint8):
         """
@@ -199,7 +229,7 @@ class GLRenderer:
         assert np.all(1.01 * scale >= dst_domain), f"{1.01 * scale} vs. {dst_domain}"
         return scale
 
-    def _create_texture(self, img):
+    def _create_empty_texture(self, img):
         # ModernGL texture dtypes that actually work:
         #   'f1': fixed-point [0, 1] internal format (GL_RGB8), uint8 input
         #   'f2': float16 internal format (GL_RGB16F), float16 input
@@ -213,35 +243,73 @@ class GLRenderer:
         h, w = img.shape[:2]
         dtype = f"f{img.itemsize}"  # uint8 => 'f1', float16 => 'f2', float32 => 'f4'
         components = img.shape[2] if img.ndim == 3 else 1  # RGB/RGBA/grayscale
-        texture = self.ctx.texture((w, h), components, img.ravel(), dtype=dtype)
-        texture.build_mipmaps()
+        texture = self.ctx.texture((w, h), components, data=None, dtype=dtype)
+        texture.extra = types.SimpleNamespace()
+        texture.extra.done = False
+        texture.extra.upload_done = False
+        texture.extra.mipmaps_done = False
+        texture.extra.stats_done = False
+        texture.extra.dtype = img.dtype
+        texture.extra.img = img
+        texture.extra.rows_uploaded = 0
+        texture.extra.maxval = 1.0
+        texture.extra.meanval = 1.0
+        texture.extra.pct99 = 1.0
         return texture
 
-    def _create_dummy_texture(self):
-        dummy = self.ctx.texture((32, 32), 3, np.random.random((32, 32, 3)).astype(np.float32), dtype='f4')
-        return dummy
+    def _upload_texture_slice(self, texture, nrows):
+        t0 = time.time()
+        if not texture.extra.done:
+            if not texture.extra.upload_done:
+                vpx = 0
+                vpy = texture.extra.rows_uploaded
+                vpw = texture.width
+                vph = texture.height - vpy
+                vph = min(vph, nrows)
+                img = texture.extra.img
+                texture.write(img[vpy:vpy+vph].ravel(), (vpx, vpy, vpw, vph))
+                vpy += vph
+                texture.extra.rows_uploaded = vpy
+                if vpy >= texture.height:
+                    texture.extra.upload_done = True
+                    texture.extra.img = None
+                    elapsed = (time.time() - t0) * 1000
+                    self._vprint(f"Completed uploading texture #{texture.extra.idx}, took {elapsed:.1f} ms")
+            elif not texture.extra.mipmaps_done:
+                texture.build_mipmaps()
+                texture.extra.mipmaps_done = True
+                elapsed = (time.time() - t0) * 1000
+                self._vprint(f"Generated mipmaps for texture #{texture.extra.idx}, took {elapsed:.1f} ms")
+            elif not texture.extra.stats_done:
+                self._texture_stats(texture)
+                texture.extra.stats_done = True
+                texture.extra.done = True
+                elapsed = (time.time() - t0) * 1000
+                self._vprint(f"Generated stats for texture #{texture.extra.idx}, took {elapsed:.1f} ms")
 
-    def _load_texture(self, idx):
-        img = self.loader.get_image(idx)
-        assert isinstance(img, (np.ndarray, str)), type(img)
-        if isinstance(img, np.ndarray):
-            maxval = 1.0 if img.dtype == np.uint8 else np.max(img)
-            texture = self._create_texture(img)
-            self.files.metadata[idx] = {}
-            self.files.metadata[idx]['maxval'] = maxval
-            self.files.metadata[idx]['gamut_bounds'] = None
-            self.files.textures[idx] = texture
-            self.loader.release_image(idx)
-        else:  # PENDING | INVALID | RELEASED
-            if self.files.textures[idx] is None:
-                texture = self._create_dummy_texture()
-                maxval = 1.0
-                self.files.metadata[idx] = {}
-                self.files.metadata[idx]['maxval'] = maxval
-                self.files.metadata[idx]['gamut_bounds'] = None
-                self.files.textures[idx] = texture
-            else:  # RELEASED
-                texture = self.files.textures[idx]
+    def _texture_stats(self, texture):
+        if texture.extra.mipmaps_done:
+            mip_lvl = 3 if min(texture.size) >= 128 else 0
+            stats = texture.read(level=int(mip_lvl))
+            stats = np.frombuffer(stats, dtype=texture.extra.dtype)
+            stats = stats.reshape(-1, 3)
+            if texture.extra.dtype == np.uint8:
+                meanval = np.mean(np.max(stats, axis=-1)) / 255
+                pct99 = np.percentile(np.max(stats, axis=-1), 99.5) / 255
+            else:
+                meanval = np.mean(np.max(stats, axis=-1))
+                pct99 = np.percentile(np.max(stats, axis=-1), 99.5)
+            texture.extra.meanval = meanval
+            texture.extra.pct99 = pct99
+
+    def _create_dummy_texture(self):
+        texture = self.ctx.texture((32, 32), 3, np.random.random((32, 32, 3)).astype(np.float32), dtype='f4')
+        texture.extra = types.SimpleNamespace()
+        texture.extra.done = True
+        texture.extra.img = None
+        texture.extra.maxval = 1.0
+        texture.extra.meanval = 1.0
+        texture.extra.pct99 = 1.0
         return texture
 
     def _get_aspect_ratio(self, vpw, vph, texw, texh):
