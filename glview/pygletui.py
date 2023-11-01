@@ -91,6 +91,7 @@ class PygletUI:
                 parent._keyboard_zoom_pan()
                 parent._smooth_exposure()
                 parent._poll_loading()
+                parent._upload_textures()
                 self.clock.update_time()
                 window = list(pyglet.app.windows)[0]
                 window.dispatch_event("on_draw")
@@ -125,6 +126,13 @@ class PygletUI:
             if self.images_pending:
                 self.images_pending = False
                 self.need_redraw = True
+
+    def _upload_textures(self):
+        if not self.images_pending and not self.need_redraw:
+            for imgidx in range(self.files.numfiles):
+                texture = self.renderer.upload_texture(imgidx, piecewise=True)
+                if not texture.extra.done:
+                    break
 
     def _caption(self):
         ver = self.version
