@@ -37,6 +37,7 @@ class GLRenderer:
         self.render_thread = None
         self.tprev = None
         self.tile_colors = self.tile_debug_colors if verbose else self.tile_normal_colors
+        self.fps = np.zeros(20)
 
     def init(self):
         """ Initialize an OpenGL context and attach it to an existing window. """
@@ -99,6 +100,8 @@ class GLRenderer:
         self.ctx.finish()
         elapsed = (time.time() - t0) * 1000
         interval = (time.time() - self.tprev) * 1000
+        self.fps[:-1] = self.fps[1:]
+        self.fps[-1] = 1000 / interval
         w, h = self.ui.window.get_size()
         self.tprev = time.time()
         self._vprint(f"rendering {w} x {h} pixels took {elapsed:.1f} ms, frame-to-frame interval was {interval:.1f} ms", log_level=2)
