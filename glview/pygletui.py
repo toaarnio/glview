@@ -92,7 +92,6 @@ class PygletUI:
                 parent._smooth_exposure()
                 parent._poll_loading()
                 parent._upload_textures()
-                self.clock.update_time()
                 window = list(pyglet.app.windows)[0]
                 window.dispatch_event("on_draw")
                 return 1/60  # pan/zoom at max 60 fps
@@ -136,7 +135,7 @@ class PygletUI:
 
     def _caption(self):
         ver = self.version
-        fps = pyglet.clock.get_frequency()
+        fps = np.median(self.renderer.fps)
         cspaces = ["sRGB", "DCI-P3", "Rec2020"]
         csc = f"{cspaces[self.cs_in]} => {cspaces[self.cs_out]}"
         norm = "off" if not self.normalize else "on"
