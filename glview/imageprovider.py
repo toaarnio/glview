@@ -17,9 +17,10 @@ from pqdm.threads import pqdm  # pip install pqdm
 class ImageProvider:
     """ A multithreaded image file loader. """
 
-    def __init__(self, files, downsample, verbose=False):
+    def __init__(self, files, fast_mipmaps, downsample, verbose=False):
         """ Create a new ImageProvider with the given (hardcoded) FileList instance. """
         self.thread_name = "ImageProviderThread"
+        self.fast_mipmaps = fast_mipmaps
         self.downsample = downsample
         self.verbose = verbose
         self.files = files
@@ -86,6 +87,19 @@ class ImageProvider:
         Release the image at the given index to (eventually) free up the memory.
         """
         self.files.images[index] = "RELEASED"
+
+    def _degamma(self, frame: np.ndarray) -> np.ndarray:
+        """
+        Apply standard sRGB inverse gamma on the given frame.
+        """
+        t0 = time.time()
+        srgb_lo = frame / 12.92
+        srgb_hi = np.power((frame + 0.055) / 1.055, 2.4)
+        threshold_mask = (frame > 0.04045)
+        frame = srgb_hi * threshold_mask + srgb_lo * (~threshold_mask)
+        elapsed = (time.time() - t0) * 1000
+        self._vprint(f"applying inverse sRGB gamma took {elapsed:.1f} ms")
+        return frame
 
     def _parallel_loader(self, downsample):
         ram_total = psutil.virtual_memory().total / 1024**2
@@ -187,6 +201,16 @@ class ImageProvider:
                 if img.dtype == np.float64:
                     # float64 is not universally supported yet
                     img = img.astype(np.float32)
+                if self.files.linearize[idx] and not self.fast_mipmaps:
+                    # invert sRGB gamma, as OpenGL texture filtering assumes
+                    # linear colors; float16 precision is the minimum to avoid
+                    # clipping dark colors to black
+                    self.files.linearize[idx] = False
+                    if (dt := img.dtype) == np.uint8:
+                        img = img.astype(np.float32) / 255
+                        dt = np.float16
+                    img = self._degamma(img)
+                    img = img.astype(dt)
                 return img
             except imgio.ImageIOError as e:
                 print(f"\n{e}")

@@ -115,6 +115,7 @@ def main():
     config.numtiles = argv.intval("--split", default=1, accepted=[1, 2, 3, 4])
     config.url = argv.stringval("--url", default=None)
     config.downsample = argv.intval("--downsample", default=1, condition="v >= 1")
+    config.fast_mipmaps = argv.exists("--fast-mipmaps")
     config.smooth = argv.exists("--filter")
     config.debug = argv.intval("--debug", default=1, accepted=[1, 2, 3])
     config.verbose = argv.exists("--verbose")
@@ -133,6 +134,7 @@ def main():
         print("    --split 1|2|3|4         display images in N separate tiles")
         print("    --url <address>         load image from the given web address")
         print("    --downsample N          downsample images N-fold to save memory")
+        print("    --fast-mipmaps          optimize fast loading over image quality")
         print("    --filter                use linear filtering; default = nearest")
         print("    --debug N               select debug rendering mode; default = 1")
         print("    --verbose               print extra traces to the console")
@@ -186,7 +188,7 @@ def main():
     filenames = argv.filenames(filepatterns, IMAGE_TYPES, allowAllCaps=True)
     filenames = natsort.natsorted(natsort.natsorted(filenames), key=lambda p: pathlib.Path(p).parent)
     filenames += [config.url] if config.url is not None else []
-    loader = imageprovider.ImageProvider(FileList(filenames), config.downsample, bool(config.verbose))
+    loader = imageprovider.ImageProvider(FileList(filenames), config.fast_mipmaps, config.downsample, bool(config.verbose))
     enforce(loader.files.numfiles > 0, "No valid images to show. Terminating.")
 
     ui = pygletui.PygletUI(loader.files, config.debug, bool(config.verbose))
