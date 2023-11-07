@@ -155,7 +155,7 @@ def main():
         print("    f                       toggle fullscreen <-> windowed")
         print("    t                       toggle nearest <-> linear filtering")
         print("    g                       toggle output gamma: sRGB/HDR10/HLG")
-        print("    n                       toggle exposure normalization on/off")
+        print("    n                       toggle exposure normalization modes")
         print("    e                       slide exposure from -2EV to +2EV & back")
         print("    b                       toggle between HDR/LDR exposure control")
         print("    i                       toggle input color space: sRGB/P3/Rec2020")

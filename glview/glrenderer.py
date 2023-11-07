@@ -80,6 +80,9 @@ class GLRenderer:
             texw, texh = (texh, texw) if orientation in [90, 270] else (texw, texh)
             _vpx, _vpy, vpw, vph = self.ui.viewports[i]
             maxval = texture.extra.maxval
+            meanval = texture.extra.meanval
+            percentiles = texture.extra.percentiles  # [99.5, 98, 95, 90]
+            norm_choices = np.r_[1.0, maxval, percentiles, meanval / 0.18]
             self.ctx.viewport = self.ui.viewports[i]
             self.ctx.clear(*tile_colors[i], viewport=self.ctx.viewport)
             self.prog['texture'] = 0
@@ -92,7 +95,7 @@ class GLRenderer:
             self.prog['degamma'] = self.files.linearize[imgidx]
             self.prog['cs_in'] = self.ui.cs_in
             self.prog['cs_out'] = self.ui.cs_out
-            self.prog['maxval'] = maxval if self.ui.normalize else 1.0
+            self.prog['maxval'] = norm_choices[self.ui.normalize]
             self.prog['ev'] = self.ui.ev
             self.prog['gamut.compress'] = (self.ui.gamut_fit != 0)
             self.prog['gamut.power'] = self.ui.gamut_pow
@@ -261,7 +264,7 @@ class GLRenderer:
         texture.extra.rows_uploaded = 0
         texture.extra.maxval = 1.0
         texture.extra.meanval = 1.0
-        texture.extra.pct99 = 1.0
+        texture.extra.percentiles = np.ones(4)
         return texture
 
     def _upload_texture_slice(self, texture, nrows):
@@ -302,12 +305,12 @@ class GLRenderer:
             stats = stats.reshape(-1, texture.extra.components)
             if texture.extra.dtype == np.uint8:
                 meanval = np.mean(np.max(stats, axis=-1)) / 255
-                pct99 = np.percentile(np.max(stats, axis=-1), 99.5) / 255
+                pct = np.percentile(np.max(stats, axis=-1), [99.5, 98, 95, 90]) / 255
             else:
                 meanval = np.mean(np.max(stats, axis=-1))
-                pct99 = np.percentile(np.max(stats, axis=-1), 99.5)
+                pct = np.percentile(np.max(stats, axis=-1), [99.5, 98, 95, 90])
             texture.extra.meanval = meanval
-            texture.extra.pct99 = pct99
+            texture.extra.percentiles = pct
 
     def _create_dummy_texture(self):
         texture = self.ctx.texture((32, 32), 3, np.random.random((32, 32, 3)).astype(np.float32), dtype='f4')
@@ -317,7 +320,7 @@ class GLRenderer:
         texture.extra.img = None
         texture.extra.maxval = 1.0
         texture.extra.meanval = 1.0
-        texture.extra.pct99 = 1.0
+        texture.extra.percentiles = np.ones(4)
         return texture
 
     def _get_aspect_ratio(self, vpw, vph, texw, texh):

@@ -47,7 +47,7 @@ class PygletUI:
         self.cs_in = 0
         self.cs_out = 0
         self.gamma = 1
-        self.normalize = False
+        self.normalize = 0  # 0|1|2|...
         self.ev_range = 2
         self.ev_linear = 0.0
         self.ev = 0.0
@@ -138,7 +138,7 @@ class PygletUI:
         fps = np.median(self.renderer.fps)
         cspaces = ["sRGB", "DCI-P3", "Rec2020"]
         csc = f"{cspaces[self.cs_in]} => {cspaces[self.cs_out]}"
-        norm = "off" if not self.normalize else "on"
+        norm = ["off", "max", "99.5%", "98%", "95%", "90%", "mean"][self.normalize]
         gamma = ["off", "sRGB", "HLG", "HDR10"][self.gamma]
         gamut = "clip" if not self.gamut_fit else f"fit p = {self.gamut_pow[0]:.1f}"
         caption = f"glview {ver} | {self.ev:+1.2f}EV | norm {norm} | {csc} | gamut {gamut} | gamma {gamma} | {fps:.0f} fps"
@@ -366,8 +366,8 @@ class PygletUI:
                 if symbol == keys.K: # cycle through gamut compression modes (off/hi/lo)
                     self._switch_gamut_curve()
                     self.need_redraw = True
-                if symbol == keys.N:  # normalize
-                    self.normalize = not self.normalize
+                if symbol == keys.N:  # normalize off/max/...
+                    self.normalize = (self.normalize + 1) % 7
                     self.need_redraw = True
                 if symbol == keys.T:  # texture filtering
                     self.texture_filter = "LINEAR" if self.texture_filter == "NEAREST" else "NEAREST"
