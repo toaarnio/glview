@@ -253,6 +253,7 @@ class GLRenderer:
         texture.extra.mipmaps_done = False
         texture.extra.stats_done = False
         texture.extra.dtype = img.dtype
+        texture.extra.components = components
         texture.extra.img = img
         texture.extra.rows_uploaded = 0
         texture.extra.maxval = 1.0
@@ -295,7 +296,7 @@ class GLRenderer:
             mip_lvl = 3 if min(texture.size) >= 128 else 0
             stats = texture.read(level=int(mip_lvl))
             stats = np.frombuffer(stats, dtype=texture.extra.dtype)
-            stats = stats.reshape(-1, 3)
+            stats = stats.reshape(-1, texture.extra.components)
             if texture.extra.dtype == np.uint8:
                 meanval = np.mean(np.max(stats, axis=-1)) / 255
                 pct99 = np.percentile(np.max(stats, axis=-1), 99.5) / 255
