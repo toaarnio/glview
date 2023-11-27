@@ -90,15 +90,20 @@ class ImageProvider:
 
     def _degamma(self, frame: np.ndarray) -> np.ndarray:
         """
-        Apply standard sRGB inverse gamma on the given frame.
+        Apply standard sRGB inverse gamma on the given uint8/16 frame, returning
+        the result in normalized float16 format.
         """
+        assert frame.dtype in [np.uint8, np.uint16], frame.dtype
         t0 = time.time()
-        srgb_lo = frame / 12.92
-        srgb_hi = np.power((frame + 0.055) / 1.055, 2.4)
-        threshold_mask = (frame > 0.04045)
-        frame = srgb_hi * threshold_mask + srgb_lo * (~threshold_mask)
+        bpp = 8 if frame.dtype == np.uint8 else 16
+        lut = np.linspace(0, 1, 2 ** bpp).astype(np.float16)
+        srgb_lo = lut / 12.92
+        srgb_hi = np.power((lut + 0.055) / 1.055, 2.4)
+        threshold_mask = (lut > 0.04045)
+        lut = srgb_hi * threshold_mask + srgb_lo * (~threshold_mask)
+        frame = lut[frame]
         elapsed = (time.time() - t0) * 1000
-        self._vprint(f"applying inverse sRGB gamma took {elapsed:.1f} ms")
+        self._vprint(f"Applying inverse sRGB gamma took {elapsed:.1f} ms")
         return frame
 
     def _parallel_loader(self, downsample):
@@ -193,6 +198,12 @@ class ImageProvider:
                 img = img[::downsample, ::downsample]
                 img = np.atleast_3d(img)  # {2D, 3D} => 3D
                 img = img[:, :, :3]  # scrap alpha channel, if any
+                if self.files.linearize[idx]:
+                    # invert sRGB gamma, as OpenGL texture filtering assumes
+                    # linear colors; float16 precision is the minimum to avoid
+                    # clipping dark colors to black
+                    self.files.linearize[idx] = False
+                    img = self._degamma(img)
                 if img.dtype == np.uint16:
                     # uint16 still doesn't work in ModernGL as of 5.7.4;
                     # scale to [0, 1] and use float32 instead
@@ -201,16 +212,6 @@ class ImageProvider:
                 if img.dtype == np.float64:
                     # float64 is not universally supported yet
                     img = img.astype(np.float32)
-                if self.files.linearize[idx] and not self.fast_mipmaps:
-                    # invert sRGB gamma, as OpenGL texture filtering assumes
-                    # linear colors; float16 precision is the minimum to avoid
-                    # clipping dark colors to black
-                    self.files.linearize[idx] = False
-                    if (dt := img.dtype) == np.uint8:
-                        img = img.astype(np.float32) / 255
-                        dt = np.float16
-                    img = self._degamma(img)
-                    img = img.astype(dt)
                 return img
             except imgio.ImageIOError as e:
                 print(f"\n{e}")
