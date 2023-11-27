@@ -68,6 +68,9 @@ class GLRenderer:
             imgidx = self.ui.img_per_tile[i]
             texture = self.upload_texture(imgidx, piecewise=False)
             texture.filter = self.filters[self.ui.texture_filter]
+            if not texture.extra.mipmaps_done:
+                texture.filter = self.filters["NEAREST"]
+                self._vprint(f"Texture #{imgidx} not fully uploaded yet, disabling mipmaps")
             texture.repeat_x = False
             texture.repeat_y = False
             texture.swizzle = 'RGB1'
@@ -310,6 +313,7 @@ class GLRenderer:
         texture = self.ctx.texture((32, 32), 3, np.random.random((32, 32, 3)).astype(np.float32), dtype='f4')
         texture.extra = types.SimpleNamespace()
         texture.extra.done = True
+        texture.extra.mipmaps_done = False
         texture.extra.img = None
         texture.extra.maxval = 1.0
         texture.extra.meanval = 1.0
