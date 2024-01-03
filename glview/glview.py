@@ -35,6 +35,8 @@ except ImportError:
 
 IMAGE_TYPES = imgio.RO_FORMATS
 
+NORMS = {"off":0, "max":1, "99":2, "98":3, "95":4, "90":5, "mean":6}
+
 
 class FileList:
     """ An indexed container for images and their source filenames. """
@@ -116,6 +118,7 @@ def main():
     config.url = argv.stringval("--url", default=None)
     config.downsample = argv.intval("--downsample", default=1, condition="v >= 1")
     config.smooth = argv.exists("--filter")
+    config.normalize = argv.stringval("--normalize", default="off", accepted=list(NORMS.keys()))
     config.debug = argv.intval("--debug", default=1, accepted=[1, 2, 3])
     config.verbose = argv.exists("--verbose")
     config.verbose += argv.exists("--verbose")
@@ -133,6 +136,7 @@ def main():
         print("    --split 1|2|3|4         display images in N separate tiles")
         print("    --url <address>         load image from the given web address")
         print("    --downsample N          downsample images N-fold to save memory")
+        print("    --normalize off|max|... exposure normalization mode; default = off")
         print("    --filter                use linear filtering; default = nearest")
         print("    --debug N               select debug rendering mode; default = 1")
         print("    --verbose               print extra traces to the console")
@@ -192,6 +196,7 @@ def main():
     ui = pygletui.PygletUI(loader.files, config.debug, bool(config.verbose))
     ui.version = version.__version__
     ui.texture_filter = "LINEAR" if config.smooth else "NEAREST"
+    ui.normalize = NORMS[config.normalize]
     ui.fullscreen = config.fullscreen
     ui.numtiles = config.numtiles
 
