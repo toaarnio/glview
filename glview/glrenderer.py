@@ -238,6 +238,16 @@ class GLRenderer:
         assert np.all(1.01 * scale >= dst_domain), f"{1.01 * scale} vs. {dst_domain}"
         return scale
 
+    def _create_dummy_texture(self):
+        texture = self.ctx.texture((32, 32), 3, np.random.random((32, 32, 3)).astype(np.float32), dtype='f4')
+        texture.extra = types.SimpleNamespace()
+        texture.extra.done = True
+        texture.extra.img = None
+        texture.extra.maxval = 1.0
+        texture.extra.meanval = 1.0
+        texture.extra.percentiles = np.ones(4)
+        return texture
+
     def _create_empty_texture(self, img):
         # ModernGL texture dtypes that actually work:
         #   'f1': fixed-point [0, 1] internal format (GL_RGB8), uint8 input
@@ -311,17 +321,6 @@ class GLRenderer:
                 pct = np.percentile(np.max(stats, axis=-1), [99.5, 98, 95, 90])
             texture.extra.meanval = meanval
             texture.extra.percentiles = pct
-
-    def _create_dummy_texture(self):
-        texture = self.ctx.texture((32, 32), 3, np.random.random((32, 32, 3)).astype(np.float32), dtype='f4')
-        texture.extra = types.SimpleNamespace()
-        texture.extra.done = True
-        texture.extra.mipmaps_done = False
-        texture.extra.img = None
-        texture.extra.maxval = 1.0
-        texture.extra.meanval = 1.0
-        texture.extra.percentiles = np.ones(4)
-        return texture
 
     def _get_aspect_ratio(self, vpw, vph, texw, texh):
         viewport_aspect = vpw / vph
