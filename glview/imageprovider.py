@@ -70,7 +70,8 @@ class ImageProvider:
         size_on_disk /= 1024 ** 2
         size_in_mem /= 1024 ** 2
         ram_available = psutil.virtual_memory().available / 1024**2
-        print(f"Found {self.files.numfiles} valid images, consuming {size_on_disk:.0f} MB on disk, {size_in_mem:.0f} MB in memory ({ram_available:.0f} MB available).")
+        print(f"Found {self.files.numfiles} valid images, consuming {size_on_disk:.0f} MB on disk, "
+              f"{size_in_mem:.0f} MB in memory ({ram_available:.0f} MB available).")
 
     def get_image(self, index):
         """
