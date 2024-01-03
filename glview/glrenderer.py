@@ -242,6 +242,12 @@ class GLRenderer:
         texture = self.ctx.texture((32, 32), 3, np.random.random((32, 32, 3)).astype(np.float32), dtype='f4')
         texture.extra = types.SimpleNamespace()
         texture.extra.done = True
+        texture.extra.upload_done = False
+        texture.extra.mipmaps_done = False
+        texture.extra.stats_done = False
+        texture.extra.mipmaps_done = False
+        texture.extra.dtype = np.float32
+        texture.extra.components = 3
         texture.extra.img = None
         texture.extra.maxval = 1.0
         texture.extra.meanval = 1.0
