@@ -58,6 +58,15 @@ class FileList:
         self._update()
         self.reindexed = False
 
+    def ready_to_upload(self, idx):
+        """
+        Return True if the given image is ready to be uploaded to OpenGL,
+        or has already been uploaded.
+        """
+        img = self.images[idx]
+        not_ready = isinstance(img, str) and img in ["PENDING", "INVALID"]
+        return not not_ready
+
     def drop(self, indices):
         """ Drop the given images from this FileList, do not delete the files. """
         with self.mutex:
