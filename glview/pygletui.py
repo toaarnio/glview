@@ -116,22 +116,42 @@ class PygletUI:
         self._vprint("Pyglet & native OpenGL initialized")
 
     def _poll_loading(self):
+        """
+        Trigger a redraw event when the currently visible image(s) have been
+        loaded from disk. Otherwise, a placeholder dummy image would remain
+        visible until the user performs some interaction.
+        """
         for imgidx in self.img_per_tile[:self.numtiles]:
             img = self.files.images[imgidx]
             if isinstance(img, str) and img == "PENDING":
                 self.images_pending = True
                 break
         else:
+            # if the for-loop completes without breaking, it means that
+            # all currently visible images have been loaded from disk;
+            # now trigger a redraw, but only if some images were pending
+            # on the previous invocation
             if self.images_pending:
                 self.images_pending = False
                 self.need_redraw = True
 
     def _upload_textures(self):
-        if not self.images_pending and not self.need_redraw:
-            for imgidx in range(self.files.numfiles):
-                texture = self.renderer.upload_texture(imgidx, piecewise=True)
-                if not texture.extra.done:
-                    break
+        """
+        Upload a slice of the first non-completed texture to OpenGL, but only if
+        there are no pending redraw requests (to keep the UI responsive). Textures
+        that are currently visible are prioritized, otherwise uploading proceeds
+        in index order.
+        """
+        if not self.need_redraw:
+            indices = self.img_per_tile[:self.numtiles]
+            indices += range(self.files.numfiles)
+            for imgidx in indices:
+                if self.files.ready_to_upload(imgidx):
+                    texture = self.files.textures[imgidx]
+                    if texture is None or not texture.extra.done:
+                        texture = self.renderer.upload_texture(imgidx, piecewise=True)
+                        self.need_redraw = texture.extra.done
+                        break  # upload only one slice of one texture per call
 
     def _caption(self):
         ver = self.version
