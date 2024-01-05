@@ -144,7 +144,7 @@ class PygletUI:
         """
         if not self.need_redraw:
             indices = self.img_per_tile[:self.numtiles]
-            indices += range(self.files.numfiles)
+            indices = list(indices) + list(range(self.files.numfiles))
             for imgidx in indices:
                 if self.files.ready_to_upload(imgidx):
                     texture = self.files.textures[imgidx]
