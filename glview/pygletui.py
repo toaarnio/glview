@@ -175,9 +175,14 @@ class PygletUI:
             vpw, vph = (w, h)
             viewports[0] = (0, 0, vpw, vph)
         elif numtiles == 2:
-            vpw, vph = (w // 2, h)
-            viewports[0] = (0,   0, vpw, vph)
-            viewports[1] = (vpw, 0, vpw, vph)
+            if layout == "N x 1":
+                vpw, vph = (w // 2, h)
+                viewports[0] = (0,   0, vpw, vph)
+                viewports[1] = (vpw, 0, vpw, vph)
+            elif layout == "1 x N":
+                vpw, vph = (w, h // 2)
+                viewports[0] = (0,   0, vpw, vph)
+                viewports[1] = (0, vph, vpw, vph)
         elif numtiles == 3:
             vpw, vph = (w // 3, h)
             viewports[0] = (0 * vpw, 0, vpw, vph)
@@ -395,6 +400,8 @@ class PygletUI:
                 if symbol == keys.S:  # split
                     if self.numtiles == 4 and self.layout == "N x 1":
                         self.layout = "2 x 2"
+                    elif self.numtiles == 2 and self.layout == "N x 1":
+                        self.layout = "1 x N"
                     else:
                         self.layout = "N x 1"
                         self.numtiles = (self.numtiles % 4) + 1
