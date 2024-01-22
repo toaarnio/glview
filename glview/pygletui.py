@@ -28,7 +28,6 @@ class PygletUI:
         self.was_resized = True
         self.window = None
         self.key_state = None
-        self.screensize = None
         self.winsize = None
         self.tileidx = 0
         self.scale = 1.0
@@ -37,7 +36,7 @@ class PygletUI:
         self.mouse_canvas_width = 1000
         self.keyboard_pan_speed = 100
         self.viewports = None
-        self.layout = "N x 1"
+        self.layout = "N x 1"  # N x 1 | 1 x N | 2 x 2
         self.ui_thread = None
         self.event_loop = None
         self.renderer = None
@@ -104,7 +103,6 @@ class PygletUI:
         pyglet.options['debug_gl'] = self.verbose
         display = pyglet.canvas.get_display()
         screen = display.get_default_screen()
-        self.screensize = (screen.width, screen.height)
         self.winsize = (screen.width // 3, screen.height // 3)
         self.viewports = self._retile(self.numtiles, self.winsize, self.layout)
         self.window = pyglet.window.Window(*self.winsize, resizable=True, vsync=True)
@@ -274,6 +272,15 @@ class PygletUI:
         else:
             self._vprint("Gamut compression off")
 
+    def _crop_borders(self, img):
+        nonzero = np.any(img != 0.0, axis=2)
+        rowmask = np.any(nonzero, axis=1)
+        img = img[rowmask, :]
+        nonzero = np.any(img != 0.0, axis=2)
+        colmask = np.any(nonzero, axis=0)
+        img = img[:, colmask]
+        return img
+
     def _setup_events(self):
         self._vprint("setting up Pyglet window event handlers...")
 
@@ -424,6 +431,8 @@ class PygletUI:
                 if symbol == keys.W:  # take a screenshot
                     screenshot_uint8 = self.renderer.screenshot(np.uint8)
                     screenshot_fp32 = self.renderer.screenshot(np.float32)
+                    screenshot_uint8 = self._crop_borders(screenshot_uint8)
+                    screenshot_fp32 = self._crop_borders(screenshot_fp32)
                     imgio.imwrite(f"screenshot{self.ss_idx:02d}.jpg", screenshot_uint8, maxval=255, verbose=True)
                     imgio.imwrite(f"screenshot{self.ss_idx:02d}.pfm", screenshot_fp32, maxval=1.0, verbose=True)
                     self.ss_idx += 1
