@@ -458,6 +458,9 @@ class PygletUI:
                         self.files.orientations[imgidx] += 90
                         self.files.orientations[imgidx] %= 360
                     self.need_redraw = True
+                if symbol == keys.U:  # reload currently visible images from disk
+                    for imgidx in self.img_per_tile[:self.numtiles]:
+                        self.files.images[imgidx] = "PENDING"
                 if symbol == keys.X:  # EXIF info
                     imgidx = self.img_per_tile[self.tileidx]
                     filespec = self.files.filespecs[imgidx]
