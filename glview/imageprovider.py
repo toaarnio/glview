@@ -52,8 +52,6 @@ class ImageProvider:
             print("Scanning images & estimating memory consumption...")
         invalid = []
         for idx, filespec in enumerate(self.files.filespecs):
-            if Path(filespec).suffix.lower() in [".jpg", ".jpeg", ".png", ".bmp"]:
-                self.files.linearize[idx] = True
             if "://" not in filespec:
                 try:
                     info = imsize.read(filespec)
@@ -186,6 +184,8 @@ class ImageProvider:
         if isinstance(self.files.images[idx], str) and self.files.images[idx] == "PENDING":
             try:
                 filespec = self.files.filespecs[idx]
+                if Path(filespec).suffix.lower() in [".jpg", ".jpeg", ".png", ".bmp", ".ppm"]:
+                    self.files.linearize[idx] = True
                 if not self.files.is_url[idx]:
                     info = imsize.read(filespec)
                     img, maxval = imgio.imread(filespec, width=info.width, height=info.height, bpp=info.bitdepth, verbose=verbose)
