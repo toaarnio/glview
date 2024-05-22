@@ -7,6 +7,7 @@ uniform int cs_in;
 uniform int cs_out;
 uniform bool grayscale;
 uniform bool degamma;
+uniform int tonemap;
 uniform int gamma;
 uniform float ev;
 uniform float maxval;
@@ -454,6 +455,58 @@ vec3 compress_gamut(vec3 rgb) {
 
 /**************************************************************************************/
 /*
+/*    G L O B A L   T O N E   M A P P I N G
+/*
+/**************************************************************************************/
+
+
+vec3 gtm_neutral(vec3 rgb) {
+  /**
+   * Compresses non-negative sRGB colors into the [0, 1] range. See apply_gtm()
+   * for documentation.
+   */
+  const float desaturate = 0.25;
+  const float start = 0.80;
+  const float d = 1.0 - start;
+
+  float peak = max3(rgb);
+  if (peak >= start) {
+    float new_peak = 1.0 - d * d / (1.0  + peak - 2.0 * start);
+    rgb = rgb * new_peak / peak;
+
+    float g = 1.0 / (desaturate * (peak - new_peak) + 1.0);
+    rgb = mix(rgb, vec3(new_peak), 1.0 - g);
+  }
+
+  return rgb;
+}
+
+
+vec3 apply_gtm(vec3 rgb) {
+  /**
+   * Applies the selected global tone mapping function (GTM) on the given HDR
+   * color. The input is assumed to be in a nominal [0, 1] scale, such that
+   * diffuse reflectances are in that range, whereas direct light sources and
+   * specular highlights can exceed 1.0, often by several orders of magnitude.
+   * The output is guaranteed to be in [0, 1] range, if there are no negative
+   * values in the input.
+   *
+   * The following GTM functions are available:
+   *
+   *   0 - none
+   *   1 - neutral
+   */
+  switch (tonemap) {
+    case 1:
+      rgb = gtm_neutral(rgb);
+      break;
+  }
+  return rgb;
+}
+
+
+/**************************************************************************************/
+/*
 /*    I M A G E   R O T A T I O N
 /*
 /**************************************************************************************/
@@ -534,6 +587,7 @@ void main() {
   color.rgb = grayscale ? color.rrr : color.rgb;
   color.rgb = gamut.compress ? compress_gamut(color.rgb) : color.rgb;
   color.rgb = color.rgb * exp(ev);  // exp(x) == 2^x
+  color.rgb = apply_gtm(color.rgb);
   color.rgb = debug_indicators(color.rgb);
   color.rgb = apply_gamma(color.rgb);
 }
