@@ -35,6 +35,15 @@ const vec3 zeros = vec3(0.0);
 const vec3 eps = vec3(5.0 / 256);
 
 
+float min3(vec3 v) {
+  /**
+   * Returns the minimum value of the given vector. Annoyingly, there is no
+   * built-in function in GLSL for this.
+   */
+  return min(min(v.x, v.y), v.z);
+}
+
+
 float max3(vec3 v) {
   /**
    * Returns the maximum value of the given vector. Annoyingly, there is no
