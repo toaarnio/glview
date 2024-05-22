@@ -46,6 +46,7 @@ class PygletUI:
         self.cs_in = 0
         self.cs_out = 0
         self.gamma = 1
+        self.tonemap = False
         self.normalize = 0  # 0|1|2|...
         self.ev_range = 2
         self.ev_linear = 0.0
@@ -157,10 +158,11 @@ class PygletUI:
         cspaces = ["sRGB", "DCI-P3", "Rec2020"]
         csc = f"{cspaces[self.cs_in]} => {cspaces[self.cs_out]}"
         norm = ["off", "max", "99.5%", "98%", "95%", "90%", "mean"][self.normalize]
+        gtm = ["off", "on"][self.tonemap]
         gamma = ["off", "sRGB", "HLG", "HDR10"][self.gamma]
         gamut = "clip" if not self.gamut_fit else f"fit p = {self.gamut_pow[0]:.1f}"
         caption = f"glview {ver} | {self.ev:+1.2f}EV | norm {norm} | {csc} | "
-        caption += f"gamut {gamut} | gamma {gamma} | {fps:.0f} fps"
+        caption += f"gamut {gamut} | tonemap {gtm} | gamma {gamma} | {fps:.0f} fps"
 
         # Show filenames in the title bar such that the first name is displayed
         # in full, the others as deltas with respect to the first, common substrings
@@ -421,6 +423,9 @@ class PygletUI:
                     self.need_redraw = True
                 if symbol == keys.G:  # gamma
                     self.gamma = (self.gamma + 1) % 4
+                    self.need_redraw = True
+                if symbol == keys.C:  # HDR range compression (tone mapping) on/off
+                    self.tonemap = not self.tonemap
                     self.need_redraw = True
                 if symbol == keys.I:  # input color space
                     self.cs_in = (self.cs_in + 1) % 3
