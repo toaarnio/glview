@@ -173,6 +173,7 @@ def main():
         print("    b                       toggle between HDR/LDR exposure control")
         print("    i                       toggle input color space: sRGB/P3/Rec2020")
         print("    o                       toggle output color space: sRGB/P3/Rec2020")
+        print("    c                       toggle HDR -> LDR range compression on/off")
         print("    k                       toggle gamut compression strength")
         print("    x                       print image information (EXIF)")
         print("    w                       write a screenshot as both JPG & PFM")
