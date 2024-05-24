@@ -424,7 +424,7 @@ class PygletUI:
                     self.was_resized = True
                     self.window.set_fullscreen(self.fullscreen)
                     self.window.set_mouse_visible(not self.fullscreen)
-                if symbol == keys.H:  # reset exposure + zoom & pan ("home")
+                if symbol == keys.H:  # reset exposure + zoom & pan + gtm + gamut (global)
                     self.scale = 1.0
                     self.mousepos = np.zeros(2)
                     self.ev_linear = 0.0
@@ -432,32 +432,32 @@ class PygletUI:
                     self.gamut_lin = 0.0
                     self.gamut_fit = 0
                     self.need_redraw = True
-                if symbol == keys.L:  # linearize / degamma
+                if symbol == keys.L:  # toggle linearization on/off (current image)
                     imgidx = self.img_per_tile[self.tileidx]
                     self.files.linearize[imgidx] = not self.files.linearize[imgidx]
                     self.need_redraw = True
-                if symbol == keys.G:  # gamma
+                if symbol == keys.G:  # cycle through gamma modes (global)
                     self.gamma = (self.gamma + 1) % 4
                     self.need_redraw = True
                 if symbol == keys.C:  # toggle tone mapping on/off (current tile)
                     self.tonemap_per_tile[self.tileidx] = not self.tonemap_per_tile[self.tileidx]
                     self.need_redraw = True
-                if symbol == keys.I:  # input color space
+                if symbol == keys.I:  # input color space (global)
                     self.cs_in = (self.cs_in + 1) % 3
                     self.need_redraw = True
-                if symbol == keys.O:  # output color space
+                if symbol == keys.O:  # output color space (global)
                     self.cs_out = (self.cs_out + 1) % 3
                     self.need_redraw = True
-                if symbol == keys.B:  # toggle between narrow/wide (LDR/HDR) exposure control
+                if symbol == keys.B:  # toggle narrow/wide exposure control (global)
                     self.ev_range = (self.ev_range + 6) % 12
                     self.need_redraw = True
-                if symbol == keys.K: # cycle through gamut compression modes (off/hi/lo)
+                if symbol == keys.K: # cycle through gamut compression modes (global)
                     self._switch_gamut_curve()
                     self.need_redraw = True
-                if symbol == keys.N:  # normalize off/max/...
+                if symbol == keys.N:  # normalize off/max/... (global)
                     self.normalize = (self.normalize + 1) % 7
                     self.need_redraw = True
-                if symbol == keys.T:  # texture filtering
+                if symbol == keys.T:  # texture filtering (global)
                     self.texture_filter = "LINEAR" if self.texture_filter == "NEAREST" else "NEAREST"
                     self.need_redraw = True
                 if symbol == keys.S:  # split
@@ -481,7 +481,7 @@ class PygletUI:
                 if symbol == keys.U:  # reload currently visible images from disk
                     for imgidx in self.img_per_tile[:self.numtiles]:
                         self.files.images[imgidx] = "PENDING"
-                if symbol == keys.X:  # EXIF info
+                if symbol == keys.X:  # EXIF info (current image)
                     imgidx = self.img_per_tile[self.tileidx]
                     filespec = self.files.filespecs[imgidx]
                     fileinfo = imsize.read(filespec)
