@@ -93,7 +93,8 @@ class GLRenderer:
             self.prog['grayscale'] = (texture.components == 1)
             self.prog['gamma'] = self.ui.gamma
             self.prog['degamma'] = self.files.linearize[imgidx]
-            self.prog['tonemap'] = int(self.ui.tonemap)
+            self.prog['tonemap'] = self.ui.tonemap_per_tile[i]
+            self.prog['gtm_ymax'] = self.ui.gtm_ymax
             self.prog['cs_in'] = self.ui.cs_in
             self.prog['cs_out'] = self.ui.cs_out
             self.prog['maxval'] = norm_choices[self.ui.normalize]

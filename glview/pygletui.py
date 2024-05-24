@@ -42,11 +42,13 @@ class PygletUI:
         self.renderer = None
         self.texture_filter = "NEAREST"
         self.img_per_tile = [0, 1, 2, 3]
+        self.tonemap_per_tile = [False, False, False, False]
         self.images_pending = True
         self.cs_in = 0
         self.cs_out = 0
         self.gamma = 1
-        self.tonemap = False
+        self.gtm_ymax = 0
+        self.gtm_linear = 0
         self.normalize = 0  # 0|1|2|...
         self.ev_range = 2
         self.ev_linear = 0.0
@@ -158,7 +160,8 @@ class PygletUI:
         cspaces = ["sRGB", "DCI-P3", "Rec2020"]
         csc = f"{cspaces[self.cs_in]} => {cspaces[self.cs_out]}"
         norm = ["off", "max", "99.5%", "98%", "95%", "90%", "mean"][self.normalize]
-        gtm = ["off", "on"][self.tonemap]
+        gtm = np.asarray(["N", "Y"])[np.asarray(self.tonemap_per_tile).astype(int)]
+        gtm = "".join(gtm)[:self.numtiles]  # [False, True, True, False] => "NYYN"
         gamma = ["off", "sRGB", "HLG", "HDR10"][self.gamma]
         gamut = "clip" if not self.gamut_fit else f"fit p = {self.gamut_pow[0]:.1f}"
         caption = f"glview {ver} | {self.ev:+1.2f}EV | norm {norm} | {csc} | "
@@ -285,14 +288,25 @@ class PygletUI:
         y = 4 * amplitude * np.abs((x - 0.25) % 1 - 0.5) - amplitude
         return y
 
+    def _sine_wave(self, x, amplitude):
+        # [0, 1] => [-amplitude, +amplitude]
+        y = np.sin(x * 2 * np.pi) * amplitude
+        return y
+
     def _smooth_exposure(self):
         # this is typically invoked 60 times per second,
         # so exposure control is pretty fast
         keys = pyglet.window.key
-        if self.key_state[keys.E]:
+        shift_down = self.key_state[keys.LSHIFT] or self.key_state[keys.RSHIFT]
+        if not shift_down and self.key_state[keys.E]:
             self.ev_linear += 0.005 * self.key_state[keys.E]
             self.need_redraw = True
         self.ev = self._triangle_wave(self.ev_linear, self.ev_range)
+        # tonemap y-limit control
+        if shift_down and self.key_state[keys.E]:
+            self.gtm_linear += 0.005 * self.key_state[keys.E]
+            self.need_redraw = True
+        self.gtm_ymax = 2 + self._sine_wave(self.gtm_linear, 1)  # [-1, 1] => [1, 3]
 
     def _switch_gamut_curve(self):
         # cycle through a predefined selection of gamut compression modes:
@@ -414,6 +428,7 @@ class PygletUI:
                     self.scale = 1.0
                     self.mousepos = np.zeros(2)
                     self.ev_linear = 0.0
+                    self.gtm_linear = 0.0
                     self.gamut_lin = 0.0
                     self.gamut_fit = 0
                     self.need_redraw = True
@@ -424,8 +439,8 @@ class PygletUI:
                 if symbol == keys.G:  # gamma
                     self.gamma = (self.gamma + 1) % 4
                     self.need_redraw = True
-                if symbol == keys.C:  # HDR range compression (tone mapping) on/off
-                    self.tonemap = not self.tonemap
+                if symbol == keys.C:  # toggle tone mapping on/off (current tile)
+                    self.tonemap_per_tile[self.tileidx] = not self.tonemap_per_tile[self.tileidx]
                     self.need_redraw = True
                 if symbol == keys.I:  # input color space
                     self.cs_in = (self.cs_in + 1) % 3
