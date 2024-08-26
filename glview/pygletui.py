@@ -220,8 +220,8 @@ class PygletUI:
                 viewports[1] = (vpw, 0, vpw, vph)
             elif layout == "1 x N":
                 vpw, vph = (w, h // 2)
-                viewports[0] = (0,   0, vpw, vph)
-                viewports[1] = (0, vph, vpw, vph)
+                viewports[0] = (0, vph, vpw, vph)
+                viewports[1] = (0, 0, vpw, vph)
         elif numtiles == 3:
             vpw, vph = (w // 3, h)
             viewports[0] = (0 * vpw, 0, vpw, vph)
