@@ -161,6 +161,7 @@ def main():
         print("    PageUp / PageDown       cycle through images on active tile")
         print("    ctrl + left / right     cycle through images on all tiles")
         print("    s                       split window into 1/2/3/4 tiles")
+        print("    p                       in 2-tile layouts, flip the image pair")
         print("    r                       rotate current image 90 degrees clockwise")
         print("    l                       toggle current image linearization on/off")
         print("    1 / 2 / 3 / 4           select active tile for PageUp/PageDown/r/l")

@@ -473,6 +473,11 @@ class PygletUI:
                     self.viewports = self._retile(self.numtiles, self.winsize, self.layout)
                     self.window.set_caption(self._caption())
                     self.need_redraw = True
+                if symbol == keys.P:  # flip image pair
+                    if self.numtiles == 2:
+                        self.img_per_tile[:2] = self.img_per_tile[:2][::-1]
+                    self.window.set_caption(self._caption())
+                    self.need_redraw = True
                 if symbol == keys.R:  # rotate (current image)
                     imgidx = self.img_per_tile[self.tileidx]
                     self.files.orientations[imgidx] += 90
