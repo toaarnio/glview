@@ -80,9 +80,11 @@ class GLRenderer:
             texw, texh = (texh, texw) if orientation in [90, 270] else (texw, texh)
             _vpx, _vpy, vpw, vph = self.ui.viewports[i]
             maxval = texture.extra.maxval
+            minval = texture.extra.minval
             meanval = texture.extra.meanval
             percentiles = texture.extra.percentiles  # [99.5, 98, 95, 90]
-            norm_choices = np.r_[1.0, maxval, percentiles, meanval / 0.18]
+            norm_maxvals = np.r_[1, maxval, maxval, percentiles, meanval / 0.18]
+            norm_minvals = np.r_[0, 0, minval, 0, 0, 0, 0, 0]
             self.ctx.viewport = self.ui.viewports[i]
             self.ctx.clear(*tile_colors[i], viewport=self.ctx.viewport)
             self.prog['texture'] = 0
@@ -97,7 +99,8 @@ class GLRenderer:
             self.prog['gtm_ymax'] = self.ui.gtm_ymax
             self.prog['cs_in'] = self.ui.cs_in
             self.prog['cs_out'] = self.ui.cs_out
-            self.prog['maxval'] = norm_choices[self.ui.normalize]
+            self.prog['maxval'] = norm_maxvals[self.ui.normalize]
+            self.prog['minval'] = norm_minvals[self.ui.normalize]
             self.prog['ev'] = self.ui.ev
             self.prog['gamut.compress'] = (self.ui.gamut_fit != 0)
             self.prog['gamut.power'] = self.ui.gamut_pow
@@ -127,7 +130,8 @@ class GLRenderer:
         if isinstance(img, np.ndarray):
             texture = self._create_empty_texture(img)
             scale = 255 if img.dtype == np.uint8 else 1.0
-            texture.extra.maxval = np.max(img) / scale
+            texture.extra.maxval = np.max(img[img >= 0.0]) / scale
+            texture.extra.minval = np.min(img[img >= 0.0]) / scale
             texture.extra.idx = idx
             self._vprint(f"Created texture #{idx}, piecewise={piecewise}")
             nrows = 100 if piecewise else texture.height
@@ -252,6 +256,7 @@ class GLRenderer:
         texture.extra.components = 3
         texture.extra.img = None
         texture.extra.maxval = 1.0
+        texture.extra.minval = 0.0
         texture.extra.meanval = 1.0
         texture.extra.percentiles = np.ones(4)
         return texture
@@ -281,6 +286,7 @@ class GLRenderer:
         texture.extra.img = img
         texture.extra.rows_uploaded = 0
         texture.extra.maxval = 1.0
+        texture.extra.minval = 0.0
         texture.extra.meanval = 1.0
         texture.extra.percentiles = np.ones(4)
         return texture

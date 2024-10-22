@@ -159,7 +159,7 @@ class PygletUI:
         fps = np.median(self.renderer.fps)
         cspaces = ["sRGB", "DCI-P3", "Rec2020"]
         csc = f"{cspaces[self.cs_in]} => {cspaces[self.cs_out]}"
-        norm = ["off", "max", "99.5%", "98%", "95%", "90%", "mean"][self.normalize]
+        norm = ["off", "max", "stretch", "99.5%", "98%", "95%", "90%", "mean"][self.normalize]
         gtm = np.asarray(["N", "Y"])[np.asarray(self.tonemap_per_tile).astype(int)]
         gtm = "".join(gtm)[:self.numtiles]  # [False, True, True, False] => "NYYN"
         gamma = ["off", "sRGB", "HLG", "HDR10"][self.gamma]
@@ -455,7 +455,7 @@ class PygletUI:
                     self._switch_gamut_curve()
                     self.need_redraw = True
                 if symbol == keys.N:  # normalize off/max/... (global)
-                    self.normalize = (self.normalize + 1) % 7
+                    self.normalize = (self.normalize + 1) % 8
                     self.need_redraw = True
                 if symbol == keys.T:  # texture filtering (global)
                     self.texture_filter = "LINEAR" if self.texture_filter == "NEAREST" else "NEAREST"

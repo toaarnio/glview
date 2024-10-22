@@ -35,7 +35,7 @@ except ImportError:
 
 IMAGE_TYPES = imgio.RO_FORMATS
 
-NORMS = {"off":0, "max":1, "99":2, "98":3, "95":4, "90":5, "mean":6}
+NORMS = {"off":0, "max":1, "stretch":2, "99":3, "98":4, "95":5, "90":6, "mean":7}
 
 
 class FileList:

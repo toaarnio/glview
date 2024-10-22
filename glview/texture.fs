@@ -12,6 +12,7 @@ uniform float gtm_ymax;
 uniform int gamma;
 uniform float ev;
 uniform float maxval;
+uniform float minval;
 uniform int orientation;
 uniform sampler2D texture;
 uniform struct {
@@ -583,7 +584,7 @@ vec3 debug_indicators(vec3 rgb) {
 
 void main() {
   color = texture2D(texture, rotate(texcoords, orientation));
-  color.rgb = color.rgb / maxval;
+  color.rgb = (color.rgb - minval) / maxval;
   color.rgb = degamma ? srgb_degamma(color.rgb) : color.rgb;
   color.rgb = csconv(color.rgb);
   color.rgb = grayscale ? color.rrr : color.rgb;
