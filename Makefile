@@ -1,5 +1,5 @@
 lint:
-	ruff check --show-source glview/[^a]*.py
+	ruff check glview/[^a]*.py
 
 install:
 	pip3 uninstall --yes glview || true
