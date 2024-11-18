@@ -94,7 +94,7 @@ class PygletUI:
                 parent._smooth_exposure()
                 parent._poll_loading()
                 parent._upload_textures()
-                window = list(pyglet.app.windows)[0]
+                window = next(iter(pyglet.app.windows))
                 window.dispatch_event("on_draw")
                 return 1/60  # pan/zoom at max 60 fps
 
@@ -200,7 +200,7 @@ class PygletUI:
             return shortened
 
         if len(basenames) > 1:
-            basenames[1:] = shorten(basenames[0], basenames)[1:]
+            basenames[1:] = shorten(basenames[0], basenames[1:])
         for tileidx in range(self.numtiles):
             imgidx = self.img_per_tile[tileidx]
             basename = basenames[tileidx]

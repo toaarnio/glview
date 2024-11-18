@@ -7,7 +7,6 @@ The 'glview' command-line application.
 import sys                     # built-in library
 import os                      # built-in library
 import time                    # built-in library
-import pprint                  # built-in library
 import threading               # built-in library
 import pathlib                 # built-in library
 import types                   # built-in library

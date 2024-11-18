@@ -217,6 +217,7 @@ class ImageProvider:
                 print(f"\n{e}")
                 self._vprint(e)
                 return "INVALID"
+        return None
 
     def _check_ram(self, minimum, wait):
         ram_available = lambda: psutil.virtual_memory().available / 1024**2
