@@ -130,8 +130,8 @@ class GLRenderer:
         if isinstance(img, np.ndarray):
             texture = self._create_empty_texture(img)
             scale = 255 if img.dtype == np.uint8 else 1.0
-            texture.extra.maxval = np.max(img[img >= 0.0]) / scale
-            texture.extra.minval = np.min(img[img >= 0.0]) / scale
+            texture.extra.maxval = np.max(img[img >= 0.0], initial=0.0) / scale
+            texture.extra.minval = np.min(img[img >= 0.0], initial=0.0) / scale
             texture.extra.idx = idx
             self._vprint(f"Created texture #{idx}, piecewise={piecewise}")
             nrows = 100 if piecewise else texture.height
