@@ -118,7 +118,7 @@ class FileList:
         self.reindexed = True
 
 
-def main():
+def main():  # noqa: PLR0915
     """ Parse command-line arguments and run the application. """
     config = types.SimpleNamespace()
     config.fullscreen = argv.exists("--fullscreen")

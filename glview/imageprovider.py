@@ -124,7 +124,7 @@ class ImageProvider:
                         batch = [(idx, downsample, verbose) for idx in chunk]
                         images = pqdm(batch, self._load_single, 8, "args", bounded=True,
                                       exception_behaviour="immediate", disable=True)
-                        for idx, img in zip(chunk, images):
+                        for idx, img in zip(chunk, images, strict=True):
                             if img is not None:
                                 self.files.images[idx] = img
                                 nloaded += 1
@@ -190,7 +190,8 @@ class ImageProvider:
                     info = imsize.read(filespec)
                     img, maxval = imgio.imread(filespec, width=info.width, height=info.height, bpp=info.bitdepth, verbose=verbose)
                 else:
-                    data = urllib.request.urlopen(filespec).read()
+                    assert filespec.startswith(("http:", "https:")), filespec
+                    data = urllib.request.urlopen(filespec).read()  # noqa: S310
                     basename = os.path.basename(filespec)
                     with tempfile.NamedTemporaryFile(suffix=f"_{basename}") as tmpfile:
                         tmpfile.write(data)

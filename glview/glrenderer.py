@@ -14,9 +14,9 @@ class GLRenderer:
 
     filter_nearest = (moderngl.NEAREST, moderngl.NEAREST)
     filter_linear = (moderngl.LINEAR_MIPMAP_LINEAR, moderngl.LINEAR)
-    filters = {"LINEAR": filter_linear, "NEAREST": filter_nearest}
-    tile_debug_colors = [0xE0BBE4, 0x957DAD, 0xD291BC, 0xFEC8D8]  # pastel shades
-    tile_normal_colors = [0, 0, 0, 0]
+    filters = {"LINEAR": filter_linear, "NEAREST": filter_nearest}  # noqa: RUF012
+    tile_debug_colors = (0xE0BBE4, 0x957DAD, 0xD291BC, 0xFEC8D8)  # pastel shades
+    tile_normal_colors = (0, 0, 0, 0)
 
     def __init__(self, ui, files, loader, verbose=False):
         """
@@ -126,7 +126,7 @@ class GLRenderer:
         images.
         """
         img = self.loader.get_image(idx)
-        assert isinstance(img, (np.ndarray, str)), type(img)
+        assert isinstance(img, np.ndarray | str), type(img)
         if isinstance(img, np.ndarray):
             texture = self._create_empty_texture(img)
             scale = 255 if img.dtype == np.uint8 else 1.0
@@ -138,14 +138,13 @@ class GLRenderer:
             self._upload_texture_slice(texture, nrows)
             self.files.textures[idx] = texture
             self.loader.release_image(idx)
-        else:  # PENDING | INVALID | RELEASED
-            if self.files.textures[idx] is None:
-                texture = self._create_dummy_texture()
-                self.files.textures[idx] = texture
-            else:  # RELEASED
-                texture = self.files.textures[idx]
-                nrows = 100 if piecewise else texture.height
-                self._upload_texture_slice(texture, nrows)
+        elif self.files.textures[idx] is None:  # PENDING | INVALID | RELEASED
+            texture = self._create_dummy_texture()
+            self.files.textures[idx] = texture
+        else:  # RELEASED
+            texture = self.files.textures[idx]
+            nrows = 100 if piecewise else texture.height
+            self._upload_texture_slice(texture, nrows)
         return texture
 
     def screenshot(self, dtype=np.uint8):
@@ -245,7 +244,8 @@ class GLRenderer:
         return scale
 
     def _create_dummy_texture(self):
-        texture = self.ctx.texture((32, 32), 3, np.random.random((32, 32, 3)).astype(np.float32), dtype='f4')
+        dummy = np.random.default_rng().random((32, 32, 3), dtype=np.float32)
+        texture = self.ctx.texture((32, 32), 3, dummy, dtype='f4')
         texture.extra = types.SimpleNamespace()
         texture.extra.done = True
         texture.extra.upload_done = False

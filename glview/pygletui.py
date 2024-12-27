@@ -333,7 +333,7 @@ class PygletUI:
         img = img[:, colmask]
         return img
 
-    def _setup_events(self):
+    def _setup_events(self):  # noqa: PLR0915, C901
         self._vprint("setting up Pyglet window event handlers...")
 
         @self.window.event
@@ -413,7 +413,7 @@ class PygletUI:
             self._vprint(f"on_key_release({keys.symbol_string(symbol)}, modifiers={keys.modifiers_string(modifiers)})")
 
         @self.window.event
-        def on_key_press(symbol, modifiers):
+        def on_key_press(symbol, modifiers):  # noqa: PLR0912, PLR0915, C901
             self.key_state[symbol] = True
             keys = pyglet.window.key
             self._vprint(f"on_key_press({keys.symbol_string(symbol)}, modifiers={keys.modifiers_string(modifiers)})")
@@ -422,119 +422,118 @@ class PygletUI:
                 self.running = False
                 self.event_loop.has_exit = True
             if (modifiers & disallowed_keys) == 0:  # ignore NumLock, ScrollLock, CapsLock, Shift
-                if symbol in [keys.ESCAPE, keys.Q]:  # exit
-                    self.running = False
-                    self.event_loop.has_exit = True
-                if symbol == keys.F:  # fullscreen
-                    self.fullscreen = not self.fullscreen
-                    self.need_redraw = True
-                    self.was_resized = True
-                    self.window.set_fullscreen(self.fullscreen)
-                    self.window.set_mouse_visible(not self.fullscreen)
-                if symbol == keys.H:  # reset exposure + zoom & pan + gtm + gamut (global)
-                    self.scale = np.ones(4)
-                    self.mousepos = np.zeros((4, 2))
-                    self.ev_linear = 0.0
-                    self.gtm_linear = 0.0
-                    self.gamut_lin = 0.0
-                    self.gamut_fit = 0
-                    self.need_redraw = True
-                if symbol == keys.L:  # toggle linearization on/off (current image)
-                    imgidx = self.img_per_tile[self.tileidx]
-                    self.files.linearize[imgidx] = not self.files.linearize[imgidx]
-                    self.need_redraw = True
-                if symbol == keys.G:  # cycle through gamma modes (global)
-                    self.gamma = (self.gamma + 1) % 4
-                    self.need_redraw = True
-                if symbol == keys.C:  # toggle tone mapping on/off (current tile)
-                    self.tonemap_per_tile[self.tileidx] = not self.tonemap_per_tile[self.tileidx]
-                    self.need_redraw = True
-                if symbol == keys.I:  # input color space (global)
-                    self.cs_in = (self.cs_in + 1) % 3
-                    self.need_redraw = True
-                if symbol == keys.O:  # output color space (global)
-                    self.cs_out = (self.cs_out + 1) % 3
-                    self.need_redraw = True
-                if symbol == keys.B:  # toggle narrow/wide exposure control (global)
-                    self.ev_range = (self.ev_range + 6) % 12
-                    self.need_redraw = True
-                if symbol == keys.K: # cycle through gamut compression modes (global)
-                    self._switch_gamut_curve()
-                    self.need_redraw = True
-                if symbol == keys.N:  # normalize off/max/... (global)
-                    self.normalize = (self.normalize + 1) % 8
-                    self.need_redraw = True
-                if symbol == keys.T:  # texture filtering (global)
-                    self.texture_filter = "LINEAR" if self.texture_filter == "NEAREST" else "NEAREST"
-                    self.need_redraw = True
-                if symbol == keys.S:  # split
-                    if self.numtiles == 4 and self.layout == "N x 1":
-                        self.layout = "2 x 2"
-                    elif self.numtiles == 2 and self.layout == "N x 1":
-                        self.layout = "1 x N"
-                    else:
-                        self.layout = "N x 1"
-                        self.numtiles = (self.numtiles % 4) + 1
-                        self.tileidx = min(self.tileidx, self.numtiles - 1)
-                        self.img_per_tile = np.clip(self.img_per_tile, 0, self.files.numfiles - 1)
-                    self.viewports = self._retile(self.numtiles, self.winsize, self.layout)
-                    self.window.set_caption(self._caption())
-                    self.need_redraw = True
-                if symbol == keys.P:  # flip image pair
-                    if self.numtiles == 2:
-                        self.img_per_tile[:2] = self.img_per_tile[:2][::-1]
-                    self.window.set_caption(self._caption())
-                    self.need_redraw = True
-                if symbol == keys.R:  # rotate (current image)
-                    imgidx = self.img_per_tile[self.tileidx]
-                    self.files.orientations[imgidx] += 90
-                    self.files.orientations[imgidx] %= 360
-                    self.need_redraw = True
-                if symbol == keys.U:  # reload currently visible images from disk
-                    for imgidx in self.img_per_tile[:self.numtiles]:
-                        self.files.images[imgidx] = "PENDING"
-                if symbol == keys.X:  # EXIF info (current image)
-                    imgidx = self.img_per_tile[self.tileidx]
-                    filespec = self.files.filespecs[imgidx]
-                    fileinfo = imsize.read(filespec)
-                    print(fileinfo)
-                    self._print_exif(filespec)
-                if symbol == keys.W:  # take a screenshot
-                    screenshot_uint8 = self.renderer.screenshot(np.uint8)
-                    screenshot_fp32 = self.renderer.screenshot(np.float32)
-                    screenshot_uint8 = self._crop_borders(screenshot_uint8)
-                    screenshot_fp32 = self._crop_borders(screenshot_fp32)
-                    imgio.imwrite(f"screenshot{self.ss_idx:02d}.jpg", screenshot_uint8, maxval=255, verbose=True)
-                    imgio.imwrite(f"screenshot{self.ss_idx:02d}.pfm", screenshot_fp32, maxval=1.0, verbose=True)
-                    self.ss_idx += 1
-                if symbol == keys.SPACE:  # toggle debug mode on/off
-                    N = self.debug_selected
-                    self.debug_mode = (self.debug_mode + N) % (N * 2)
-                    self._vprint(f"debug rendering mode {self.debug_mode}")
-                    self.need_redraw = True
-                if symbol in [keys.D, keys.DELETE]:
-                    if not self.files.mutex.locked():
-                        if symbol == keys.D:  # drop
-                            indices = self.img_per_tile[:self.numtiles]
-                            self.files.drop(indices)
-                        if symbol == keys.DELETE:  # delete
-                            if self.numtiles == 1:  # only in single-tile mode
-                                imgidx = self.img_per_tile[self.tileidx]
-                                self.files.delete(imgidx)
-                        if self.files.numfiles == 0:
-                            self.running = False
-                            self.event_loop.has_exit = True
+                match symbol:
+                    case keys.ESCAPE | keys.Q:  # exit
+                        self.running = False
+                        self.event_loop.has_exit = True
+                    case keys.F:  # fullscreen
+                        self.fullscreen = not self.fullscreen
+                        self.need_redraw = True
+                        self.was_resized = True
+                        self.window.set_fullscreen(self.fullscreen)
+                        self.window.set_mouse_visible(not self.fullscreen)
+                    case keys.H:  # reset exposure + zoom & pan + gtm + gamut (global)
+                        self.scale = np.ones(4)
+                        self.mousepos = np.zeros((4, 2))
+                        self.ev_linear = 0.0
+                        self.gtm_linear = 0.0
+                        self.gamut_lin = 0.0
+                        self.gamut_fit = 0
+                        self.need_redraw = True
+                    case keys.L:  # toggle linearization on/off (current image)
+                        imgidx = self.img_per_tile[self.tileidx]
+                        self.files.linearize[imgidx] = not self.files.linearize[imgidx]
+                        self.need_redraw = True
+                    case keys.G:  # cycle through gamma modes (global)
+                        self.gamma = (self.gamma + 1) % 4
+                        self.need_redraw = True
+                    case keys.C:  # toggle tone mapping on/off (current tile)
+                        self.tonemap_per_tile[self.tileidx] = not self.tonemap_per_tile[self.tileidx]
+                        self.need_redraw = True
+                    case keys.I:  # input color space (global)
+                        self.cs_in = (self.cs_in + 1) % 3
+                        self.need_redraw = True
+                    case keys.O:  # output color space (global)
+                        self.cs_out = (self.cs_out + 1) % 3
+                        self.need_redraw = True
+                    case keys.B:  # toggle narrow/wide exposure control (global)
+                        self.ev_range = (self.ev_range + 6) % 12
+                        self.need_redraw = True
+                    case keys.K: # cycle through gamut compression modes (global)
+                        self._switch_gamut_curve()
+                        self.need_redraw = True
+                    case keys.N:  # normalize off/max/... (global)
+                        self.normalize = (self.normalize + 1) % 8
+                        self.need_redraw = True
+                    case keys.T:  # texture filtering (global)
+                        self.texture_filter = "LINEAR" if self.texture_filter == "NEAREST" else "NEAREST"
+                        self.need_redraw = True
+                    case keys.S:  # split
+                        if self.numtiles == 4 and self.layout == "N x 1":
+                            self.layout = "2 x 2"
+                        elif self.numtiles == 2 and self.layout == "N x 1":
+                            self.layout = "1 x N"
                         else:
-                            N = self.numtiles
-                            visible_images = np.asarray(self.img_per_tile[:N]) - N
-                            self.img_per_tile[:N] = visible_images % self.files.numfiles
-                            self.window.set_caption(self._caption())
-                            self.need_redraw = True
-                # pylint: disable=protected-access
-                if symbol in [keys._1, keys._2, keys._3, keys._4]:
-                    tileidx = symbol - keys._1
-                    self.tileidx = tileidx if tileidx < self.numtiles else self.tileidx
-                    self.need_redraw = True
+                            self.layout = "N x 1"
+                            self.numtiles = (self.numtiles % 4) + 1
+                            self.tileidx = min(self.tileidx, self.numtiles - 1)
+                            self.img_per_tile = np.clip(self.img_per_tile, 0, self.files.numfiles - 1)
+                        self.viewports = self._retile(self.numtiles, self.winsize, self.layout)
+                        self.window.set_caption(self._caption())
+                        self.need_redraw = True
+                    case keys.P if self.numtiles == 2:  # flip image pair
+                        self.img_per_tile[:2] = self.img_per_tile[:2][::-1]
+                        self.window.set_caption(self._caption())
+                        self.need_redraw = True
+                    case keys.R:  # rotate (current image)
+                        imgidx = self.img_per_tile[self.tileidx]
+                        self.files.orientations[imgidx] += 90
+                        self.files.orientations[imgidx] %= 360
+                        self.need_redraw = True
+                    case keys.U:  # reload currently visible images from disk
+                        for imgidx in self.img_per_tile[:self.numtiles]:
+                            self.files.images[imgidx] = "PENDING"
+                    case keys.X:  # EXIF info (current image)
+                        imgidx = self.img_per_tile[self.tileidx]
+                        filespec = self.files.filespecs[imgidx]
+                        fileinfo = imsize.read(filespec)
+                        print(fileinfo)
+                        self._print_exif(filespec)
+                    case keys.W:  # take a screenshot
+                        screenshot_uint8 = self.renderer.screenshot(np.uint8)
+                        screenshot_fp32 = self.renderer.screenshot(np.float32)
+                        screenshot_uint8 = self._crop_borders(screenshot_uint8)
+                        screenshot_fp32 = self._crop_borders(screenshot_fp32)
+                        imgio.imwrite(f"screenshot{self.ss_idx:02d}.jpg", screenshot_uint8, maxval=255, verbose=True)
+                        imgio.imwrite(f"screenshot{self.ss_idx:02d}.pfm", screenshot_fp32, maxval=1.0, verbose=True)
+                        self.ss_idx += 1
+                    case keys.SPACE:  # toggle debug mode on/off
+                        N = self.debug_selected
+                        self.debug_mode = (self.debug_mode + N) % (N * 2)
+                        self._vprint(f"debug rendering mode {self.debug_mode}")
+                        self.need_redraw = True
+                    case keys.D | keys.DELETE:
+                        if not self.files.mutex.locked():
+                            if symbol == keys.D:  # drop
+                                indices = self.img_per_tile[:self.numtiles]
+                                self.files.drop(indices)
+                            if symbol == keys.DELETE:  # delete
+                                if self.numtiles == 1:  # only in single-tile mode
+                                    imgidx = self.img_per_tile[self.tileidx]
+                                    self.files.delete(imgidx)
+                            if self.files.numfiles == 0:
+                                self.running = False
+                                self.event_loop.has_exit = True
+                            else:
+                                N = self.numtiles
+                                visible_images = np.asarray(self.img_per_tile[:N]) - N
+                                self.img_per_tile[:N] = visible_images % self.files.numfiles
+                                self.window.set_caption(self._caption())
+                                self.need_redraw = True
+                    case keys._1 | keys._2 | keys._3 | keys._4:
+                        tileidx = symbol - keys._1
+                        self.tileidx = tileidx if tileidx < self.numtiles else self.tileidx
+                        self.need_redraw = True
 
         @self.window.event
         def on_text_motion(motion):
