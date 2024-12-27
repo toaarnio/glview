@@ -88,10 +88,10 @@ class GLRenderer:
             self.ctx.viewport = self.ui.viewports[i]
             self.ctx.clear(*tile_colors[i], viewport=self.ctx.viewport)
             self.prog['texture'] = 0
-            self.prog['mousepos'] = tuple(self.ui.mousepos)
+            self.prog['mousepos'] = tuple(self.ui.mousepos[i])
             self.prog['orientation'] = orientation
             self.prog['aspect'] = self._get_aspect_ratio(vpw, vph, texw, texh)
-            self.prog['scale'] = self.ui.scale
+            self.prog['scale'] = self.ui.scale[i]
             self.prog['grayscale'] = (texture.components == 1)
             self.prog['gamma'] = self.ui.gamma
             self.prog['degamma'] = self.files.linearize[imgidx]

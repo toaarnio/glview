@@ -30,8 +30,8 @@ class PygletUI:
         self.key_state = None
         self.winsize = None
         self.tileidx = 0
-        self.scale = 1.0
-        self.mousepos = np.zeros(2)  # always scaled & clipped to [0, 1] x [0, 1]
+        self.scale = np.ones(4)  # per-tile scale
+        self.mousepos = np.zeros((4, 2))  # per-tile (x, y); clipped to [0, 1]
         self.mouse_speed = 4.0
         self.mouse_canvas_width = 1000
         self.keyboard_pan_speed = 100
@@ -270,17 +270,17 @@ class PygletUI:
             self.key_state[keys.UP] = False
             self.key_state[keys.DOWN] = False
         if not ctrl_down and not win_down:
-            prev_scale = self.scale
+            prev_scale = self.scale.copy()
             self.scale *= 1.0 + 0.1 * self.key_state[keys.PLUS]  # zoom in
             self.scale /= 1.0 + 0.1 * self.key_state[keys.MINUS]  # zoom out
             dx = self.key_state[keys.LEFT] - self.key_state[keys.RIGHT]
             dy = self.key_state[keys.DOWN] - self.key_state[keys.UP]
-            dxdy = np.array((dx, dy))
+            dxdy = np.tile((dx, dy), (4, 1))
             dxdy = dxdy * self.keyboard_pan_speed
-            dxdy = dxdy / self.scale
+            dxdy = dxdy / self.scale[:, np.newaxis]
             dxdy = dxdy / self.mouse_canvas_width
             self.mousepos = np.clip(self.mousepos + dxdy, -1.0, 1.0)
-            if np.any(dxdy != 0.0) or self.scale != prev_scale:
+            if np.any(dxdy != 0.0) or np.any(self.scale != prev_scale):
                 self.need_redraw = True
 
     def _triangle_wave(self, x, amplitude):
@@ -370,19 +370,26 @@ class PygletUI:
                 self.window.set_mouse_visible(True)
 
         @self.window.event
-        def on_mouse_drag(_x, _y, dx, dy, buttons, _modifiers):
+        def on_mouse_drag(_x, _y, dx, dy, buttons, modifiers):
             if buttons & pyglet.window.mouse.LEFT:
-                dxdy = np.array((dx, dy))
+                keys = pyglet.window.key
+                shift_down = modifiers & keys.MOD_SHIFT
+                tidx = self.tileidx if shift_down else np.s_[:]
+                dxdy = np.tile((dx, dy), (4, 1))
                 dxdy = dxdy * self.mouse_speed
-                dxdy = dxdy / self.scale
+                dxdy = dxdy / self.scale[tidx, np.newaxis]
                 dxdy = dxdy / self.mouse_canvas_width
-                self.mousepos = np.clip(self.mousepos + dxdy, -1.0, 1.0)
+                mousepos = np.clip(self.mousepos[tidx] + dxdy[tidx], -1.0, 1.0)
+                self.mousepos[tidx] = mousepos
                 self.need_redraw = True
 
         @self.window.event
         def on_mouse_scroll(_x, _y, _scroll_x, scroll_y):
+            keys = pyglet.window.key
+            shift_down = self.key_state[keys.LSHIFT] or self.key_state[keys.RSHIFT]
+            tidx = self.tileidx if shift_down else np.s_[:]
             scale_factor = 1.0 + 0.1 * scroll_y
-            self.scale *= scale_factor
+            self.scale[tidx] *= scale_factor
             self.need_redraw = True
 
         @self.window.event
@@ -425,8 +432,8 @@ class PygletUI:
                     self.window.set_fullscreen(self.fullscreen)
                     self.window.set_mouse_visible(not self.fullscreen)
                 if symbol == keys.H:  # reset exposure + zoom & pan + gtm + gamut (global)
-                    self.scale = 1.0
-                    self.mousepos = np.zeros(2)
+                    self.scale = np.ones(4)
+                    self.mousepos = np.zeros((4, 2))
                     self.ev_linear = 0.0
                     self.gtm_linear = 0.0
                     self.gamut_lin = 0.0
