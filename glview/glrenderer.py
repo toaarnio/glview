@@ -155,10 +155,12 @@ class GLRenderer:
         assert dtype in [np.uint8, np.float32], dtype
         dt = "f4" if dtype == np.float32 else "f1"
         w, h = self.ui.window.get_size()
-        rbo = self.ctx.renderbuffer((w, h), components=3, dtype=dt)
-        fbo = self.ctx.framebuffer([rbo])
+        fbo = self.ctx.simple_framebuffer((w, h), components=3, dtype=dt)
         fbo.use()
+        gamma = self.ui.gamma
+        self.ui.gamma = (dtype == np.uint8)  # float32 => linear RGB
         self.redraw()
+        self.ui.gamma = gamma
         self.ctx.screen.use()
         screenshot = fbo.read(components=3, dtype=dt, clamp=False)
         screenshot = np.frombuffer(screenshot, dtype=dtype)
