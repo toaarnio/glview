@@ -565,7 +565,8 @@ class PygletUI:
             func()
         except Exception as e:
             self.running = False
-            self.event_loop.has_exit = True
+            if self.event_loop is not None:
+                self.event_loop.has_exit = True
             if self.verbose:
                 self._vprint(f"exception in {func.__name__}():")
                 traceback.print_exc()
