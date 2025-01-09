@@ -29,9 +29,12 @@ class GLRenderer:
         self.loader = loader        # <ImageProvider> Still image loader
         self.files = files          # <FileList> Image files + metadata
         self.ctx = None             # <Context> OpenGL rendering context
+        self.fbo = None             # <Framebuffer> Off-screen framebuffer
         self.prog = None            # <Program> image renderer with zoom & pan
         self.vbo = None             # <Buffer> xy vertex coords for 2D rectangle
         self.vao = None             # <VertexArray> 2D rectangle vertices + shader
+        self.postprocess = None     # <Program> screen-space postprocessing shader
+        self.vao_post = None        # <VertexArray> 2D rectangle vertices + shader
         self.texture_filter = None  # filter_nearest or filter_linear
         self.running = None
         self.render_thread = None
@@ -46,24 +49,32 @@ class GLRenderer:
         self.ctx = moderngl.create_context(require=310)
         self.ctx.enable(moderngl.DEPTH_TEST)
         self._vprint("compiling shaders...")
+        # Initialize the main shader
         shader_path = os.path.dirname(os.path.realpath(__file__))
         vshader = open(os.path.join(shader_path, "panzoom.vs"), encoding="utf-8").read()
         fshader = open(os.path.join(shader_path, "texture.fs"), encoding="utf-8").read()
         self.prog = self.ctx.program(vertex_shader=vshader, fragment_shader=fshader)
-        self.prog['scale'] = 1.0
-        self.prog['orientation'] = 0
-        self.prog['mousepos'] = (0.0, 0.0)
         self.vbo = self.ctx.buffer(struct.pack('8f', -1.0, -1.0, -1.0, 1.0, 1.0, -1.0, 1.0, 1.0))
         self.vao = self.ctx.vertex_array(self.prog, [(self.vbo, "2f", "vert")])
+        # Initialize the screen-space postprocessing shader
+        fshader = open(os.path.join(shader_path, "postprocess.fs"), encoding="utf-8").read()
+        self.postprocess = self.ctx.program(vertex_shader=vshader, fragment_shader=fshader)
+        self.vao_post = self.ctx.vertex_array(self.postprocess, [(self.vbo, "2f", "vert")])
         self.tprev = time.time()
         _ = self.ctx.error  # clear the GL error flag (workaround for a bug that prevents interoperability with Pyglet)
 
-    def redraw(self):
+
+    def redraw(self, target: moderngl.Framebuffer | None = None):
         """ Redraw the tiled image view with refreshed pan & zoom, filtering, etc. """
         t0 = time.time()
-        hex_to_rgb = lambda h: [h >> 16, (h >> 8) & 0xff, h & 0xff]
-        tile_colors = [hex_to_rgb(hexrgb) for hexrgb in self.tile_colors]
-        tile_colors = np.array(tile_colors) / 255.0
+        target = target or self.ctx.screen
+        w, h = self.ui.window.get_size()
+        vpw, vph = self.ui.viewports[0][2:]
+
+        if not self.fbo or self.fbo.size != (vpw, vph):
+            offscreen_tile = self.ctx.texture((vpw, vph), components=3, dtype="f4")
+            self.fbo = self.ctx.framebuffer([offscreen_tile])
+
         for i in range(self.ui.numtiles):
             imgidx = self.ui.img_per_tile[i]
             texture = self.upload_texture(imgidx, piecewise=False)
@@ -78,22 +89,25 @@ class GLRenderer:
             orientation = self.files.orientations[imgidx]
             texw, texh = texture.width, texture.height
             texw, texh = (texh, texw) if orientation in [90, 270] else (texw, texh)
-            _vpx, _vpy, vpw, vph = self.ui.viewports[i]
             maxval = texture.extra.maxval
             minval = texture.extra.minval
             meanval = texture.extra.meanval
             percentiles = texture.extra.percentiles  # [99.5, 98, 95, 90]
             norm_maxvals = np.r_[1, maxval, maxval, percentiles, meanval / 0.18]
             norm_minvals = np.r_[0, 0, minval, 0, 0, 0, 0, 0]
-            self.ctx.viewport = self.ui.viewports[i]
-            self.ctx.clear(*tile_colors[i], viewport=self.ctx.viewport)
+
+            # Render the image into an offscreen texture representing the current
+            # tile; note that all tiles are the same size, so we can use the same
+            # texture for as long as window size and tiling scheme are unchanged
+
+            self.fbo.use()
+            self.fbo.clear(*self._get_debug_tile_color(i))
             self.prog['texture'] = 0
             self.prog['mousepos'] = tuple(self.ui.mousepos[i])
-            self.prog['orientation'] = orientation
-            self.prog['aspect'] = self._get_aspect_ratio(vpw, vph, texw, texh)
             self.prog['scale'] = self.ui.scale[i]
+            self.prog['aspect'] = self._get_aspect_ratio(vpw, vph, texw, texh)
+            self.prog['orientation'] = orientation
             self.prog['grayscale'] = (texture.components == 1)
-            self.prog['gamma'] = self.ui.gamma
             self.prog['degamma'] = self.files.linearize[imgidx]
             self.prog['tonemap'] = self.ui.tonemap_per_tile[i]
             self.prog['gtm_ymax'] = self.ui.gtm_ymax
@@ -108,12 +122,27 @@ class GLRenderer:
             self.prog['gamut.scale'] = self._gamut(imgidx)
             self.prog['debug'] = self.ui.debug_mode
             self.vao.render(moderngl.TRIANGLE_STRIP)
+
+            # Render the current tile from an offscreen texture to the screen (or
+            # the given render target), applying any screen-space postprocessing
+            # effects on the fly, plus gamma as the final step
+
+            target.use()
+            target.viewport = self.ui.viewports[i]
+            target.clear(viewport=target.viewport)
+            self.fbo.color_attachments[0].use(location=0)
+            self.postprocess['texture'] = 0
+            self.postprocess['mousepos'] = (0.0, 0.0)
+            self.postprocess['scale'] = 1.0
+            self.postprocess['aspect'] = (1.0, 1.0)
+            self.postprocess['gamma'] = self.ui.gamma
+            self.vao_post.render(moderngl.TRIANGLE_STRIP)
+
         self.ctx.finish()
         elapsed = (time.time() - t0) * 1000
         interval = (time.time() - self.tprev) * 1000
         self.fps[:-1] = self.fps[1:]
         self.fps[-1] = 1000 / interval
-        w, h = self.ui.window.get_size()
         self.tprev = time.time()
         self._vprint(f"rendering {w} x {h} pixels took {elapsed:.1f} ms, frame-to-frame interval was {interval:.1f} ms", log_level=2)
         return elapsed
@@ -153,19 +182,21 @@ class GLRenderer:
         as a NumPy array.
         """
         assert dtype in [np.uint8, np.float32], dtype
+        t0 = time.time()
         dt = "f4" if dtype == np.float32 else "f1"
         w, h = self.ui.window.get_size()
         fbo = self.ctx.simple_framebuffer((w, h), components=3, dtype=dt)
-        fbo.use()
         gamma = self.ui.gamma
         self.ui.gamma = (dtype == np.uint8)  # float32 => linear RGB
-        self.redraw()
+        self.redraw(fbo)
         self.ui.gamma = gamma
         self.ctx.screen.use()
         screenshot = fbo.read(components=3, dtype=dt, clamp=False)
         screenshot = np.frombuffer(screenshot, dtype=dtype)
         screenshot = screenshot.reshape(h, w, 3)
         screenshot = np.ascontiguousarray(screenshot[::-1])
+        elapsed = (time.time() - t0) * 1000
+        self._vprint(f"Taking a screenshot took {elapsed:.1f} ms")
         return screenshot
 
     def _gamut(self, imgidx):
@@ -348,6 +379,12 @@ class GLRenderer:
             # image narrower than window => squeeze x => black sides
             xscale, yscale = (texture_aspect / viewport_aspect, 1.0)
         return xscale, yscale
+
+    def _get_debug_tile_color(self, idx: int) -> np.ndarray:
+        hex_to_rgb = lambda h: [h >> 16, (h >> 8) & 0xff, h & 0xff]
+        tile_colors = [hex_to_rgb(hexrgb) for hexrgb in self.tile_colors]
+        tile_colors = np.array(tile_colors) / 255.0
+        return tile_colors[idx]
 
     def _vprint(self, message, log_level=1):
         if self.verbose >= log_level:
