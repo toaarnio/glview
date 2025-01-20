@@ -6,6 +6,7 @@ import struct                  # built-in library
 import threading               # built-in library
 import types                   # built-in library
 import numpy as np             # pip install numpy
+import scipy                   # pip install scipy
 import moderngl                # pip install moderngl
 
 
@@ -198,6 +199,25 @@ class GLRenderer:
         elapsed = (time.time() - t0) * 1000
         self._vprint(f"Taking a screenshot took {elapsed:.1f} ms")
         return screenshot
+
+    def _sharpen(self, strength):
+        """
+        Generate an unsharp masking kernel with the given strength in [0, 1]. Return the
+        kernel and its width in pixels.
+        """
+        min_sigma = 1.0
+        max_sigma = 2.0
+        sigma = min_sigma + strength * max_sigma  # [0, 1] => [1, 3]
+        strength = 0.25 + strength * (0.75 - 0.25)  # [0, 1] => [0.25, 0.75]
+        k = 2 * int(3.0 * sigma) + 1  # [7, 19]
+        center = k // 2
+        kernel = scipy.signal.windows.gaussian(k, std=sigma)
+        kernel = np.outer(kernel, kernel)
+        kernel = kernel / np.sum(kernel, keepdims=True)
+        kernel = -strength * kernel
+        kernel[center, center] += 1.0  # U = I + S * G
+        kernel = kernel / np.sum(kernel, keepdims=True)
+        return kernel, k
 
     def _gamut(self, imgidx):
         """
