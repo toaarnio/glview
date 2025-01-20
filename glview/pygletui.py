@@ -486,6 +486,8 @@ class PygletUI:
                         self.need_redraw = True
                     case keys.P if self.numtiles == 2:  # flip image pair
                         self.img_per_tile[:2] = self.img_per_tile[:2][::-1]
+                        self.sharpen_per_tile[:2] = self.sharpen_per_tile[:2][::-1]
+                        self.tonemap_per_tile[:2] = self.tonemap_per_tile[:2][::-1]
                         self.window.set_caption(self._caption())
                         self.need_redraw = True
                     case keys.R:  # rotate (current image)
