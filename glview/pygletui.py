@@ -43,6 +43,7 @@ class PygletUI:
         self.texture_filter = "NEAREST"
         self.img_per_tile = [0, 1, 2, 3]
         self.tonemap_per_tile = [False, False, False, False]
+        self.sharpen_per_tile = [False, False, False, False]
         self.images_pending = True
         self.cs_in = 0
         self.cs_out = 0
@@ -162,10 +163,12 @@ class PygletUI:
         norm = ["off", "max", "stretch", "99.5%", "98%", "95%", "90%", "mean"][self.normalize]
         gtm = np.asarray(["N", "Y"])[np.asarray(self.tonemap_per_tile).astype(int)]
         gtm = "".join(gtm)[:self.numtiles]  # [False, True, True, False] => "NYYN"
+        sharpen = np.asarray(["N", "Y"])[np.asarray(self.sharpen_per_tile).astype(int)]
+        sharpen = "".join(sharpen)[:self.numtiles]
         gamma = ["off", "sRGB", "HLG", "HDR10"][self.gamma]
         gamut = "clip" if not self.gamut_fit else f"fit p = {self.gamut_pow[0]:.1f}"
         caption = f"glview {ver} | {self.ev:+1.2f}EV | norm {norm} | {csc} | "
-        caption += f"gamut {gamut} | tonemap {gtm} | gamma {gamma} | {fps:.0f} fps"
+        caption += f"gamut {gamut} | tonemap {gtm} | sharpen {sharpen} | gamma {gamma} | {fps:.0f} fps"
 
         # Show filenames in the title bar such that the first name is displayed
         # in full, the others as deltas with respect to the first, common substrings
@@ -507,6 +510,9 @@ class PygletUI:
                         imgio.imwrite(f"screenshot{self.ss_idx:02d}.jpg", screenshot_uint8, maxval=255, verbose=True)
                         imgio.imwrite(f"screenshot{self.ss_idx:02d}.pfm", screenshot_fp32, maxval=1.0, verbose=True)
                         self.ss_idx += 1
+                    case keys.Z:
+                        self.sharpen_per_tile[self.tileidx] = not self.sharpen_per_tile[self.tileidx]
+                        self.need_redraw = True
                     case keys.SPACE:  # toggle debug mode on/off
                         N = self.debug_selected
                         self.debug_mode = (self.debug_mode + N) % (N * 2)
