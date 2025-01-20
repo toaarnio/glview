@@ -134,10 +134,11 @@ class GLRenderer:
             target.viewport = self.ui.viewports[i]
             target.clear(viewport=target.viewport)
             self.fbo.color_attachments[0].use(location=0)
-            max_kernel_size = self.postprocess['kernel'].array_length
-            kernel, kernw = self._sharpen(strength=0.5)
-            kernel = np.resize(kernel, max_kernel_size)
             magnification = vpw / (texture.width / self.ui.scale[i])
+            sharpen_strength = np.clip(1.0 - magnification, 0.5, 0.9)
+            max_kernel_size = self.postprocess['kernel'].array_length
+            kernel, kernw = self._sharpen(sharpen_strength)
+            kernel = np.resize(kernel, max_kernel_size)
             self.postprocess['texture'] = 0
             self.postprocess['mousepos'] = (0.0, 0.0)
             self.postprocess['scale'] = 1.0
