@@ -2,7 +2,6 @@
 
 precision highp float;
 
-uniform int debug;
 uniform int cs_in;
 uniform int cs_out;
 uniform bool grayscale;
@@ -459,45 +458,6 @@ vec2 rotate(vec2 tc, int degrees) {
 
 /**************************************************************************************/
 /*
-/*    D E B U G G I N G
-/*
-/**************************************************************************************/
-
-
-vec3 debug_indicators(vec3 rgb) {
-  /**
-   * Returns a color-coded debug representation of the given pixel, depending on
-   * its value and a user-defined debug mode. The following modes are available:
-   *
-   *   0 - no-op => keep original pixel color
-   *   1 - overexposed => red; out-of-gamut => blue; magenta => both
-   *   2 - out-of-gamut => shades of green
-   *   3 - normalized color => rgb' = 1.0 - rgb / max(rgb)
-   */
-  float gdist = max3(gamut_distance(rgb));  // [0, >1]
-  float oog_dist = clamp(5.0 * (gdist - 1.0), 0.0, 1.0);  // [1.0, 1.2] => [0, 1]
-  bool overflow = any(greaterThanEqual(rgb, ones));  // 1.0 treated as overflow
-  bool underflow = all(lessThan(abs(rgb), eps));
-  bool oog = gdist >= 1.0;
-  switch (debug) {
-    case 1:  // red/blue/magenta
-      if ((oog && !underflow) || overflow)
-        rgb = vec3(overflow, 0.0, oog);
-      break;
-    case 2:  // shades of green
-      if (oog && !underflow)
-        rgb = vec3(0.0, oog_dist, 0.0);
-      break;
-    case 3:  // normalized color
-      rgb = 1.0 - gamut_distance(rgb);
-      break;
-  }
-  return rgb;
-}
-
-
-/**************************************************************************************/
-/*
 /*    M A I N
 /*
 /**************************************************************************************/
@@ -512,5 +472,4 @@ void main() {
   color.rgb = gamut.compress ? compress_gamut(color.rgb) : color.rgb;
   color.rgb = color.rgb * exp(ev);  // exp(x) == 2^x
   color.rgb = apply_gtm(color.rgb, gtm_ymax);
-  color.rgb = debug_indicators(color.rgb);
 }

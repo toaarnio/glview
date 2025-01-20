@@ -120,7 +120,6 @@ class GLRenderer:
             self.prog['gamut.power'] = self.ui.gamut_pow
             self.prog['gamut.thr'] = self.ui.gamut_thr
             self.prog['gamut.scale'] = self._gamut(imgidx)
-            self.prog['debug'] = self.ui.debug_mode
             self.vao.render(moderngl.TRIANGLE_STRIP)
 
             # Render the current tile from an offscreen texture to the screen (or
@@ -136,6 +135,7 @@ class GLRenderer:
             self.postprocess['scale'] = 1.0
             self.postprocess['aspect'] = (1.0, 1.0)
             self.postprocess['gamma'] = self.ui.gamma
+            self.postprocess['debug'] = self.ui.debug_mode
             self.vao_post.render(moderngl.TRIANGLE_STRIP)
 
         self.ctx.finish()

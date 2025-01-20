@@ -4,9 +4,54 @@ precision highp float;
 
 uniform int gamma;
 uniform sampler2D texture;
+uniform int debug;
 
 in vec2 texcoords;
 out vec4 color;
+
+
+/**************************************************************************************/
+/*
+/*    U T I L I T I E S
+/*
+/**************************************************************************************/
+
+
+const vec3 ones = vec3(1.0);
+const vec3 zeros = vec3(0.0);
+const vec3 eps = vec3(5.0 / 256);
+
+
+float min3(vec3 v) {
+  /**
+   * Returns the minimum value of the given vector. Annoyingly, there is no
+   * built-in function in GLSL for this.
+   */
+  return min(min(v.x, v.y), v.z);
+}
+
+
+float max3(vec3 v) {
+  /**
+   * Returns the maximum value of the given vector. Annoyingly, there is no
+   * built-in function in GLSL for this.
+   */
+  return max(max(v.x, v.y), v.z);
+}
+
+
+vec3 gamut_distance(vec3 rgb) {
+  /**
+   * Returns component-wise relative distances to gamut boundary; >1.0 means out
+   * of gamut.  At least one of the input colors is always non-negative by
+   * definition of homogeneous coordinates -- it's not possible for a point to
+   * be outside of all three sides of a triangle at the same time.
+   */
+  vec3 max_rgb = vec3(max3(rgb));  // [0, maxval]
+  vec3 abs_dist = max_rgb - rgb;  // [0, maxdiff]
+  vec3 rel_dist = abs_dist / max_rgb;  // [0, >1]
+  return rel_dist;
+}
 
 
 /**************************************************************************************/
@@ -121,6 +166,45 @@ vec4 sharpen(sampler2D texture, vec2 texcoords) {
 
 /**************************************************************************************/
 /*
+/*    D E B U G G I N G
+/*
+/**************************************************************************************/
+
+
+vec3 debug_indicators(vec3 rgb) {
+  /**
+   * Returns a color-coded debug representation of the given pixel, depending on
+   * its value and a user-defined debug mode. The following modes are available:
+   *
+   *   0 - no-op => keep original pixel color
+   *   1 - overexposed => red; out-of-gamut => blue; magenta => both
+   *   2 - out-of-gamut => shades of green
+   *   3 - normalized color => rgb' = 1.0 - rgb / max(rgb)
+   */
+  float gdist = max3(gamut_distance(rgb));  // [0, >1]
+  float oog_dist = clamp(5.0 * (gdist - 1.0), 0.0, 1.0);  // [1.0, 1.2] => [0, 1]
+  bool overflow = any(greaterThanEqual(rgb, ones));  // 1.0 treated as overflow
+  bool underflow = all(lessThan(abs(rgb), eps));
+  bool oog = gdist >= 1.0;
+  switch (debug) {
+    case 1:  // red/blue/magenta
+      if ((oog && !underflow) || overflow)
+        rgb = vec3(overflow, 0.0, oog);
+      break;
+    case 2:  // shades of green
+      if (oog && !underflow)
+        rgb = vec3(0.0, oog_dist, 0.0);
+      break;
+    case 3:  // normalized color
+      rgb = 1.0 - gamut_distance(rgb);
+      break;
+  }
+  return rgb;
+}
+
+
+/**************************************************************************************/
+/*
 /*    M A I N
 /*
 /**************************************************************************************/
@@ -128,5 +212,6 @@ vec4 sharpen(sampler2D texture, vec2 texcoords) {
 
 void main() {
   color = sharpen(texture, texcoords);
+  color.rgb = debug_indicators(color.rgb);
   color.rgb = apply_gamma(color.rgb);
 }
