@@ -65,7 +65,7 @@ class GLRenderer:
         _ = self.ctx.error  # clear the GL error flag (workaround for a bug that prevents interoperability with Pyglet)
 
 
-    def redraw(self, target: moderngl.Framebuffer | None = None):
+    def redraw(self, target: moderngl.Framebuffer | None = None):  # noqa: PLR0915
         """ Redraw the tiled image view with refreshed pan & zoom, filtering, etc. """
         t0 = time.time()
         target = target or self.ctx.screen
@@ -74,6 +74,9 @@ class GLRenderer:
 
         if not self.fbo or self.fbo.size != (vpw, vph):
             offscreen_tile = self.ctx.texture((vpw, vph), components=3, dtype="f4")
+            offscreen_tile.repeat_x = False
+            offscreen_tile.repeat_y = False
+            offscreen_tile.filter = self.filters["NEAREST"]
             self.fbo = self.ctx.framebuffer([offscreen_tile])
 
         for i in range(self.ui.numtiles):
@@ -131,10 +134,19 @@ class GLRenderer:
             target.viewport = self.ui.viewports[i]
             target.clear(viewport=target.viewport)
             self.fbo.color_attachments[0].use(location=0)
+            max_kernel_size = self.postprocess['kernel'].array_length
+            kernel, kernw = self._sharpen(strength=0.5)
+            kernel = np.resize(kernel, max_kernel_size)
+            magnification = vpw / (texture.width / self.ui.scale[i])
             self.postprocess['texture'] = 0
             self.postprocess['mousepos'] = (0.0, 0.0)
             self.postprocess['scale'] = 1.0
             self.postprocess['aspect'] = (1.0, 1.0)
+            self.postprocess['resolution'] = (vpw, vph)
+            self.postprocess['magnification'] = magnification
+            self.postprocess['sharpen'] = self.ui.sharpen_per_tile[i]
+            self.postprocess['kernel'] = kernel
+            self.postprocess['kernw'] = kernw
             self.postprocess['gamma'] = self.ui.gamma
             self.postprocess['debug'] = self.ui.debug_mode
             self.vao_post.render(moderngl.TRIANGLE_STRIP)
