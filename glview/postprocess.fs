@@ -1,9 +1,16 @@
 #version 140
 
+const int MAX_KERNEL_WIDTH = 25;
+
 precision highp float;
 
-uniform int gamma;
 uniform sampler2D texture;
+uniform ivec2 resolution;
+uniform float magnification;
+uniform bool sharpen;
+uniform float kernel[MAX_KERNEL_WIDTH * MAX_KERNEL_WIDTH];
+uniform int kernw;
+uniform int gamma;
 uniform int debug;
 
 in vec2 texcoords;
@@ -158,9 +165,42 @@ vec3 apply_gamma(vec3 rgb) {
 /**************************************************************************************/
 
 
-vec4 sharpen(sampler2D texture, vec2 texcoords) {
-  color = texture2D(texture, texcoords);
-  return color;
+vec4 conv2d(sampler2D texture) {
+  /**
+   * Convolves the given texture with a kernel defined in a uniform array. The color
+   * of each pixel is multiplied by a factor proportional to the sum of its weighted
+   * neighbors. The factor lies in [1/5, 5.0], so the pixel may be either darkened or
+   * brightened.
+   *
+   * The convolution kernel is computed in screen space if the texture is minified,
+   * and in texture space if it's magnified. If it's rendered at 1:1 scale (neither
+   * minified nor magnified), screen space and texture space are the same.
+   *
+   * :param texture: the input texture to convolve
+   * :uniform ivec2 resolution: target viewport width and height, in pixels
+   * :uniform float magnification: ratio of screen pixels to texture pixels
+   * :uniform float[] kernel: array of per-pixel weights defining the kernel
+   * :uniform int kernw: width and height of the kernel, in pixels
+   * :returns: the original pixel color boosted by a 2D convolution kernel
+   */
+  float sum = 0.0f;
+  vec2 xy_step = vec2(1.0) / resolution;
+  xy_step *= max(magnification, 1.0);
+  vec2 tc_base = texcoords - floor(kernw / 2.0) * xy_step;
+  for (int x = 0; x < kernw; x++) {
+    for (int y = 0; y < kernw; y++) {
+      float weight = kernel[y * kernw + x];
+      vec2 tc = tc_base + vec2(x, y) * xy_step;
+      vec4 pixel = texture2D(texture, tc);
+      float grayscale = pixel.r + pixel.g + pixel.b;
+      sum += weight * grayscale;
+    }
+  }
+  vec4 org = texture2D(texture, texcoords);
+  float org_gray = org.r + org.g + org.b;
+  float boost = clamp(sum / org_gray, 1.0f / 5.0f, 5.0f);
+  org.rgb = org.rgb * boost;
+  return org;
 }
 
 
@@ -211,7 +251,7 @@ vec3 debug_indicators(vec3 rgb) {
 
 
 void main() {
-  color = sharpen(texture, texcoords);
+  color = sharpen ? conv2d(texture) : texture2D(texture, texcoords);
   color.rgb = debug_indicators(color.rgb);
   color.rgb = apply_gamma(color.rgb);
 }
