@@ -93,6 +93,7 @@ class GLRenderer:
             orientation = self.files.orientations[imgidx]
             texw, texh = texture.width, texture.height
             texw, texh = (texh, texw) if orientation in [90, 270] else (texw, texh)
+            scalex, scaley = self._get_aspect_ratio(vpw, vph, texw, texh)
             maxval = texture.extra.maxval
             minval = texture.extra.minval
             meanval = texture.extra.meanval
@@ -109,7 +110,7 @@ class GLRenderer:
             self.prog['texture'] = 0
             self.prog['mousepos'] = tuple(self.ui.mousepos[i])
             self.prog['scale'] = self.ui.scale[i]
-            self.prog['aspect'] = self._get_aspect_ratio(vpw, vph, texw, texh)
+            self.prog['aspect'] = (scalex, scaley)
             self.prog['orientation'] = orientation
             self.prog['grayscale'] = (texture.components == 1)
             self.prog['degamma'] = self.files.linearize[imgidx]
@@ -134,7 +135,7 @@ class GLRenderer:
             target.viewport = self.ui.viewports[i]
             target.clear(viewport=target.viewport)
             self.fbo.color_attachments[0].use(location=0)
-            magnification = vpw / (texture.width / self.ui.scale[i])
+            magnification = scalex * vpw / (texture.width / self.ui.scale[i])
             sharpen_strength = np.clip(1.0 - magnification, 0.5, 0.9)
             max_kernel_size = self.postprocess['kernel'].array_length
             kernel, kernw = self._sharpen(sharpen_strength)
