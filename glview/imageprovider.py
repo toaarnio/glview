@@ -46,8 +46,8 @@ class ImageProvider:
 
     def validate_files(self):
         """ Quickly validate all image files & estimate their memory consumption. """
-        size_on_disk = 0
-        size_in_mem = 0
+        size_on_disk = 0.0
+        size_in_mem = 0.0
         if len(self.files.filespecs) > 100:
             print("Scanning images & estimating memory consumption...")
         invalid = []
