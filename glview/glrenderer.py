@@ -136,10 +136,8 @@ class GLRenderer:
             target.clear(viewport=target.viewport)
             self.fbo.color_attachments[0].use(location=0)
             magnification = scalex * vpw / (texture.width / self.ui.scale[i])
-            sharpen_strength = np.clip(1.0 - magnification, 0.5, 0.9)
             max_kernel_size = self.postprocess['kernel'].array_length
-            kernel, kernw = self._sharpen(sharpen_strength)
-            kernel = np.resize(kernel, max_kernel_size)
+            kernel = self._sharpen(sigma=0.75, strength=0.5)
             self.postprocess['texture'] = 0
             self.postprocess['mousepos'] = (0.0, 0.0)
             self.postprocess['scale'] = 1.0
@@ -147,8 +145,8 @@ class GLRenderer:
             self.postprocess['resolution'] = (vpw, vph)
             self.postprocess['magnification'] = magnification
             self.postprocess['sharpen'] = self.ui.sharpen_per_tile[i]
-            self.postprocess['kernel'] = kernel
-            self.postprocess['kernw'] = kernw
+            self.postprocess['kernel'] = np.resize(kernel, max_kernel_size)
+            self.postprocess['kernw'] = kernel.shape[0]
             self.postprocess['gamma'] = self.ui.gamma
             self.postprocess['debug'] = self.ui.debug_mode
             self.vao_post.render(moderngl.TRIANGLE_STRIP)
@@ -214,24 +212,30 @@ class GLRenderer:
         self._vprint(f"Taking a screenshot took {elapsed:.1f} ms")
         return screenshot
 
-    def _sharpen(self, strength):
+    def _sharpen(self, sigma: float, strength: float) -> np.ndarray:
         """
-        Generate an unsharp masking kernel with the given strength in [0, 1]. Return the
-        kernel and its width in pixels.
+        Generate an unsharp masking kernel with the given Gaussian blur sigma and
+        sharpening strength. The sigma must be at least 0.25 to have any effect,
+        and at most 4.0 to keep the kernel size within the current limits defined
+        in the postprocessing shader (25 x 25 pixels). For good results, a sigma
+        in [0.5, 1] is recommended.
+
+        :param sigma: Gaussian blur standard deviation; range = [0.25, 4]
+        :param strength: sharpening strength; range = [0, 1]
+        :returns: the generated unsharp masking kernel
         """
-        min_sigma = 1.0
-        max_sigma = 2.0
-        sigma = min_sigma + strength * max_sigma  # [0, 1] => [1, 3]
-        strength = 0.25 + strength * (0.75 - 0.25)  # [0, 1] => [0.25, 0.75]
-        k = 2 * int(3.0 * sigma) + 1  # [7, 19]
+        assert 0.0 <= strength <= 1.0, strength
+        assert 0.25 <= sigma <= 4.0, sigma
+        strength = 0.6 + strength * (0.95 - 0.6)  # [0, 1] => [0.6, 0.95]
+        k = int(2 * np.ceil(3.0 * sigma) + 1)  # [3, 25]
         center = k // 2
         kernel = scipy.signal.windows.gaussian(k, std=sigma)
         kernel = np.outer(kernel, kernel)
         kernel = kernel / np.sum(kernel, keepdims=True)
         kernel = -strength * kernel
-        kernel[center, center] += 1.0  # U = I + S * G
+        kernel[center, center] += 1.0  # U = I - S * G
         kernel = kernel / np.sum(kernel, keepdims=True)
-        return kernel, k
+        return kernel
 
     def _gamut(self, imgidx):
         """
