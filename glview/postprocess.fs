@@ -169,8 +169,8 @@ vec4 conv2d(sampler2D texture) {
   /**
    * Convolves the given texture with a kernel defined in a uniform array. The color
    * of each pixel is multiplied by a factor proportional to the sum of its weighted
-   * neighbors. The factor lies in [1/5, 5.0], so the pixel may be either darkened or
-   * brightened.
+   * neighbors. The factor is clamped to an asymmetric [0.5, 5] range, so the bright
+   * side of an edge is likely to be boosted more than the darker side.
    *
    * The convolution kernel is computed in screen space if the texture is minified,
    * and in texture space if it's magnified. If it's rendered at 1:1 scale (neither
@@ -198,7 +198,7 @@ vec4 conv2d(sampler2D texture) {
   }
   vec4 org = texture2D(texture, texcoords);
   float org_gray = org.r + org.g + org.b;
-  float boost = clamp(sum / org_gray, 1.0f / 5.0f, 5.0f);
+  float boost = clamp(sum / org_gray, 0.5f, 5.0f);
   org.rgb = org.rgb * boost;
   return org;
 }
