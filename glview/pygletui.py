@@ -336,9 +336,15 @@ class PygletUI:
         img = img[:, colmask]
         return img
 
-    def _setup_events(self):  # noqa: PLR0915, C901
+    def _setup_events(self):
         self._vprint("setting up Pyglet window event handlers...")
+        self._setup_draw_event()
+        self._setup_resize_event()
+        self._setup_close_event()
+        self._setup_mouse_events()
+        self._setup_keyboard_events()
 
+    def _setup_draw_event(self):
         @self.window.event
         def on_draw():
             if self.need_redraw:
@@ -354,6 +360,7 @@ class PygletUI:
                     self.was_resized = False
                 self.need_redraw = False
 
+    def _setup_resize_event(self):
         @self.window.event
         def on_resize(width, height):
             self._vprint(f"on_resize({width}, {height})")
@@ -362,6 +369,13 @@ class PygletUI:
             self.need_redraw = True
             self.was_resized = True
 
+    def _setup_close_event(self):
+        @self.window.event
+        def on_close():
+            self.running = False
+            self.event_loop.has_exit = True
+
+    def _setup_mouse_events(self):
         @self.window.event
         def on_mouse_press(_x, _y, button, _modifiers):
             if button == pyglet.window.mouse.LEFT:
@@ -395,11 +409,7 @@ class PygletUI:
             self.scale[tidx] *= scale_factor
             self.need_redraw = True
 
-        @self.window.event
-        def on_close():
-            self.running = False
-            self.event_loop.has_exit = True
-
+    def _setup_keyboard_events(self):  # noqa: PLR0915, C901
         @self.window.event
         def on_key_release(symbol, modifiers):
             keys = pyglet.window.key
