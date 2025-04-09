@@ -44,6 +44,7 @@ class PygletUI:
         self.img_per_tile = [0, 1, 2, 3]
         self.tonemap_per_tile = [False, False, False, False]
         self.sharpen_per_tile = [False, False, False, False]
+        self.mirror_per_tile = [False, False, False, False]
         self.images_pending = True
         self.cs_in = 0
         self.cs_out = 0
@@ -504,6 +505,9 @@ class PygletUI:
                         imgidx = self.img_per_tile[self.tileidx]
                         self.files.orientations[imgidx] += 90
                         self.files.orientations[imgidx] %= 360
+                        self.need_redraw = True
+                    case keys.M:  # mirror (current tile)
+                        self.mirror_per_tile[self.tileidx] = not self.mirror_per_tile[self.tileidx]
                         self.need_redraw = True
                     case keys.U:  # reload currently visible images from disk
                         for imgidx in self.img_per_tile[:self.numtiles]:

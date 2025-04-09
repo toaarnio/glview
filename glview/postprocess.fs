@@ -7,6 +7,7 @@ precision highp float;
 uniform sampler2D texture;
 uniform ivec2 resolution;
 uniform float magnification;
+uniform bool mirror;
 uniform bool sharpen;
 uniform float kernel[MAX_KERNEL_WIDTH * MAX_KERNEL_WIDTH];
 uniform int kernw;
@@ -165,7 +166,7 @@ vec3 apply_gamma(vec3 rgb) {
 /**************************************************************************************/
 
 
-vec4 conv2d(sampler2D texture) {
+vec4 conv2d(sampler2D texture, vec2 tc) {
   /**
    * Convolves the given texture with a kernel defined in a uniform array. The color
    * of each pixel is multiplied by a factor proportional to the sum of its weighted
@@ -177,6 +178,7 @@ vec4 conv2d(sampler2D texture) {
    * minified nor magnified), screen space and texture space are the same.
    *
    * :param texture: the input texture to convolve
+   * :param tc: texture coordinates of the center pixel
    * :uniform ivec2 resolution: target viewport width and height, in pixels
    * :uniform float magnification: ratio of screen pixels to texture pixels
    * :uniform float[] kernel: array of per-pixel weights defining the kernel
@@ -186,7 +188,7 @@ vec4 conv2d(sampler2D texture) {
   float sum = 0.0f;
   vec2 xy_step = vec2(1.0) / resolution;
   xy_step *= max(magnification, 1.0);
-  vec2 tc_base = texcoords - floor(kernw / 2.0) * xy_step;
+  vec2 tc_base = tc - floor(kernw / 2.0) * xy_step;
   for (int x = 0; x < kernw; x++) {
     for (int y = 0; y < kernw; y++) {
       float weight = kernel[y * kernw + x];
@@ -196,7 +198,7 @@ vec4 conv2d(sampler2D texture) {
       sum += weight * grayscale;
     }
   }
-  vec4 org = texture2D(texture, texcoords);
+  vec4 org = texture2D(texture, tc);
   float org_gray = org.r + org.g + org.b;
   float boost = clamp(sum / org_gray, 0.5f, 5.0f);
   org.rgb = org.rgb * boost;
@@ -251,7 +253,8 @@ vec3 debug_indicators(vec3 rgb) {
 
 
 void main() {
-  color = sharpen ? conv2d(texture) : texture2D(texture, texcoords);
+  vec2 tc = mirror ? vec2(1.0 - texcoords.x, texcoords.y) : texcoords;
+  color = sharpen ? conv2d(texture, tc) : texture2D(texture, tc);
   color.rgb = debug_indicators(color.rgb);
   color.rgb = apply_gamma(color.rgb);
 }

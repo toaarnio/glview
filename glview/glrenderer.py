@@ -144,6 +144,7 @@ class GLRenderer:
             self.postprocess['aspect'] = (1.0, 1.0)
             self.postprocess['resolution'] = (vpw, vph)
             self.postprocess['magnification'] = magnification
+            self.postprocess['mirror'] = self.ui.mirror_per_tile[i]
             self.postprocess['sharpen'] = self.ui.sharpen_per_tile[i]
             self.postprocess['kernel'] = np.resize(kernel, max_kernel_size)
             self.postprocess['kernw'] = kernel.shape[0]
