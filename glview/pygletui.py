@@ -3,6 +3,8 @@
 import threading               # built-in library
 import pprint                  # built-in library
 import traceback               # built-in library
+from pathlib import Path       # built-in library
+
 import pyglet                  # pip install pyglet
 import piexif                  # pip install piexif
 import numpy as np             # pip install numpy
@@ -171,44 +173,19 @@ class PygletUI:
         caption = f"glview {ver} | {self.ev:+1.2f}EV | norm {norm} | {csc} | "
         caption += f"gamut {gamut} | tonemap {gtm} | sharpen {sharpen} | gamma {gamma} | {fps:.0f} fps"
 
-        # Show filenames in the title bar such that the first name is displayed
-        # in full, the others as deltas with respect to the first, common substrings
-        # replaced with asterisks. For example, "foobar.jpg" and "foobar.png" would
-        # be displayed as "foobar.jpg" and "*.png".
+        # Filenames and paths are hard to fit into the title bar in multi-tile mode,
+        # so we need to make a compromise: show filenames if all files are in the same
+        # directory; otherwise show the directory name but not the filename
 
-        basenames = []
+        dirnames = [Path(fspec).parent for fspec in self.files.filespecs]
+        basenames = [Path(fspec).name for fspec in self.files.filespecs]
+        hide_dirname = np.unique(dirnames).size == 1
         for tileidx in range(self.numtiles):
             imgidx = self.img_per_tile[tileidx]
-            basename = self.files.filespecs[imgidx]
-            basenames.append(basename)
-
-        def max_substr(strings):
-            """ Return the longest common substring. """
-            subs = lambda x: {x[i:i+j] for i in range(len(x)) for j in range(len(x) - i + 1)}
-            s = subs(strings[0])
-            for val in strings[1:]:
-                s.intersection_update(subs(val))
-            return max(s, key=len)
-
-        def shorten(ref, strings):
-            """ Replace common substrings with an asterisk. """
-            shortened = [ref]
-            for string in strings[1:]:
-                pair = [ref, string]
-                substr = max_substr(pair)
-                substr = substr.lstrip(".").rstrip(".")
-                while len(substr) >= 8:
-                    pair = [s.replace(substr, "*") for s in pair]
-                    substr = max_substr(pair)
-                shortened.append(pair[1])
-            return shortened
-
-        if len(basenames) > 1:
-            basenames[1:] = shorten(basenames[0], basenames[1:])
-        for tileidx in range(self.numtiles):
-            imgidx = self.img_per_tile[tileidx]
-            basename = basenames[tileidx]
-            caption = f"{caption} | {basename} [{imgidx+1}/{self.files.numfiles}]"
+            label = Path(self.files.filespecs[imgidx])
+            if self.numtiles > 1:  # show folder name or filename but not both
+                label = basenames[imgidx] if hide_dirname else dirnames[imgidx]
+            caption = f"{caption} | {label} [{imgidx+1}/{self.files.numfiles}]"
         return caption
 
     def _retile(self, numtiles, winsize, layout):
