@@ -7,7 +7,7 @@ precision highp float;
 uniform sampler2D texture;
 uniform ivec2 resolution;
 uniform float magnification;
-uniform bool mirror;
+uniform int mirror;
 uniform bool sharpen;
 uniform float kernel[MAX_KERNEL_WIDTH * MAX_KERNEL_WIDTH];
 uniform int kernw;
@@ -59,6 +59,31 @@ vec3 gamut_distance(vec3 rgb) {
   vec3 abs_dist = max_rgb - rgb;  // [0, maxdiff]
   vec3 rel_dist = abs_dist / max_rgb;  // [0, >1]
   return rel_dist;
+}
+
+
+/**************************************************************************************/
+/*
+/*    I M A G E   O R I E N T A T I O N
+/*
+/**************************************************************************************/
+
+
+vec2 flip(vec2 tc, int mirror) {
+  /**
+   * Flips the given texture coordinates in the horizontal or vertical or both
+   * directions.
+   */
+  if ((mirror & 3) == 1) {  // horizontal only
+    tc = vec2(1.0 - tc.x, tc.y);
+  }
+  if ((mirror & 3) == 2) {  // both directions
+    tc = vec2(1.0 - tc.x, 1.0 - tc.y);
+  }
+  if ((mirror & 3) == 3) {  // vertical only
+    tc = vec2(tc.x, 1.0 - tc.y);
+  }
+  return tc;
 }
 
 
@@ -253,7 +278,7 @@ vec3 debug_indicators(vec3 rgb) {
 
 
 void main() {
-  vec2 tc = mirror ? vec2(1.0 - texcoords.x, texcoords.y) : texcoords;
+  vec2 tc = flip(texcoords, mirror);
   color = sharpen ? conv2d(texture, tc) : texture2D(texture, tc);
   color.rgb = debug_indicators(color.rgb);
   color.rgb = apply_gamma(color.rgb);

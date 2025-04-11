@@ -175,7 +175,7 @@ def main():  # noqa: PLR0915
         print("    o                       toggle output color space: sRGB/P3/Rec2020")
         print("    r                       [per-image] rotate 90 degrees clockwise")
         print("    l                       [per-image] toggle linearization on/off")
-        print("    m                       [per-tile] toggle mirroring on/off")
+        print("    m                       [per-tile] toggle mirroring x/y/both/none")
         print("    z                       [per-tile] toggle sharpening on/off")
         print("    c                       [per-tile] toggle tonemapping on/off")
         print("    x                       [per-tile] print image information (EXIF)")
