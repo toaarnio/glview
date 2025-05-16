@@ -57,6 +57,9 @@ class ImageProvider:
                     info = imsize.read(filespec)
                     size_on_disk += info.filesize
                     size_in_mem += info.nbytes
+                except imsize.ImageFileError as e:
+                    print(f"{os.path.basename(filespec)}: Skipping: {e}")
+                    invalid.append(idx)
                 except RuntimeError as e:
                     print(f"{os.path.basename(filespec)}: Skipping: {e}")
                     invalid.append(idx)
