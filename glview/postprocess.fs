@@ -220,11 +220,12 @@ vec4 conv2d(sampler2D texture, vec2 tc) {
       vec2 tc = tc_base + vec2(x, y) * xy_step;
       vec4 pixel = texture2D(texture, tc);
       float grayscale = pixel.r + pixel.g + pixel.b;
+      grayscale = max(grayscale, 0.0f);
       sum += weight * grayscale;
     }
   }
   vec4 org = texture2D(texture, tc);
-  float org_gray = org.r + org.g + org.b;
+  float org_gray = max(org.r + org.g + org.b, 0.0f);
   float boost = clamp(sum / org_gray, 0.5f, 5.0f);
   org.rgb = org.rgb * boost;
   return org;
