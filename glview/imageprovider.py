@@ -187,8 +187,8 @@ class ImageProvider:
         if isinstance(self.files.images[idx], str) and self.files.images[idx] == "PENDING":
             try:
                 filespec = self.files.filespecs[idx]
-                if Path(filespec).suffix.lower() in [".jpg", ".jpeg", ".png", ".bmp", ".ppm"]:
-                    self.files.linearize[idx] = True
+                suffix = Path(filespec).suffix.lower()
+                self.files.linearize[idx] = suffix in [".jpg", ".jpeg", ".png", ".bmp", ".ppm"]
                 if not self.files.is_url[idx]:
                     info = imsize.read(filespec)
                     img, maxval = imgio.imread(filespec, width=info.width, height=info.height, bpp=info.bitdepth, verbose=verbose)
