@@ -171,15 +171,11 @@ class GLRenderer:
         img = self.loader.get_image(idx)
         assert isinstance(img, np.ndarray | str), type(img)
         if isinstance(img, np.ndarray):
-            texture = self._create_empty_texture(img)
-            scale = 255 if img.dtype == np.uint8 else 1.0
-            texture.extra.maxval = np.max(img[img >= 0.0], initial=0.0) / scale
-            texture.extra.minval = np.min(img[img >= 0.0], initial=0.0) / scale
+            texture = self._init_empty_texture(self.files.textures[idx], img)
             texture.extra.idx = idx
-            self._vprint(f"Created texture #{idx}, piecewise={piecewise}")
+            self.files.textures[idx] = texture
             nrows = 100 if piecewise else texture.height
             self._upload_texture_slice(texture, nrows)
-            self.files.textures[idx] = texture
             self.loader.release_image(idx)
         elif self.files.textures[idx] is None:  # PENDING | INVALID | RELEASED
             texture = self._create_dummy_texture()
@@ -333,6 +329,27 @@ class GLRenderer:
         texture.extra.percentiles = np.ones(4)
         return texture
 
+    def _init_empty_texture(self, texture, img):
+        # create an empty texture or reuse an existing one
+        if texture:
+            components = img.shape[2] if img.ndim == 3 else 1
+            sizes_match = texture.size[::-1] == img.shape[:2]
+            dtypes_match = texture.extra.dtype == img.dtype
+            nchans_match = texture.components == components
+            if sizes_match and dtypes_match and nchans_match:
+                scale = 255 if img.dtype == np.uint8 else 1.0
+                texture.extra.maxval = np.max(img[img >= 0.0], initial=0.0) / scale
+                texture.extra.minval = np.min(img[img >= 0.0], initial=0.0) / scale
+                texture.extra.done = False
+                texture.extra.upload_done = False
+                texture.extra.mipmaps_done = False
+                texture.extra.stats_done = False
+                texture.extra.img = img
+                texture.extra.rows_uploaded = 0
+                return texture
+        texture = self._create_empty_texture(img)
+        return texture
+
     def _create_empty_texture(self, img):
         # ModernGL texture dtypes that actually work:
         #   'f1': fixed-point [0, 1] internal format (GL_RGB8), uint8 input
@@ -348,7 +365,10 @@ class GLRenderer:
         dtype = f"f{img.itemsize}"  # uint8 => 'f1', float16 => 'f2', float32 => 'f4'
         components = img.shape[2] if img.ndim == 3 else 1  # RGB/RGBA/grayscale
         texture = self.ctx.texture((w, h), components, data=None, dtype=dtype)
+        scale = 255 if img.dtype == np.uint8 else 1.0
         texture.extra = types.SimpleNamespace()
+        texture.extra.maxval = np.max(img[img >= 0.0], initial=0.0) / scale
+        texture.extra.minval = np.min(img[img >= 0.0], initial=0.0) / scale
         texture.extra.done = False
         texture.extra.upload_done = False
         texture.extra.mipmaps_done = False
@@ -357,10 +377,8 @@ class GLRenderer:
         texture.extra.components = components
         texture.extra.img = img
         texture.extra.rows_uploaded = 0
-        texture.extra.maxval = 1.0
-        texture.extra.minval = 0.0
-        texture.extra.meanval = 1.0
-        texture.extra.percentiles = np.ones(4)
+        texture.extra.meanval = 1.0  # compute later from mipmaps
+        texture.extra.percentiles = np.ones(4)  # compute later from mipmaps
         return texture
 
     def _upload_texture_slice(self, texture, nrows):
@@ -373,7 +391,8 @@ class GLRenderer:
                 vph = texture.height - vpy
                 vph = min(vph, nrows)
                 img = texture.extra.img
-                texture.write(img[vpy:vpy+vph].ravel(), (vpx, vpy, vpw, vph))
+                rows = img[vpy:vpy + vph]
+                texture.write(rows.ravel(), (vpx, vpy, vpw, vph))
                 vpy += vph
                 texture.extra.rows_uploaded = vpy
                 if vpy >= texture.height:
