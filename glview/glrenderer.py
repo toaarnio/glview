@@ -208,108 +208,6 @@ class GLRenderer:
         self._vprint(f"Taking a screenshot took {elapsed:.1f} ms")
         return screenshot
 
-    def _sharpen(self, sigma: float, strength: float) -> np.ndarray:
-        """
-        Generate an unsharp masking kernel with the given Gaussian blur sigma and
-        sharpening strength. The sigma must be at least 0.25 to have any effect,
-        and at most 4.0 to keep the kernel size within the current limits defined
-        in the postprocessing shader (25 x 25 pixels). For good results, a sigma
-        in [0.5, 1] is recommended.
-
-        :param sigma: Gaussian blur standard deviation; range = [0.25, 4]
-        :param strength: sharpening strength; range = [0, 1]
-        :returns: the generated unsharp masking kernel
-        """
-        assert 0.0 <= strength <= 1.0, strength
-        assert 0.25 <= sigma <= 4.0, sigma
-        strength = 0.6 + strength * (0.95 - 0.6)  # [0, 1] => [0.6, 0.95]
-        k = int(2 * np.ceil(3.0 * sigma) + 1)  # [3, 25]
-        center = k // 2
-        kernel = scipy.signal.windows.gaussian(k, std=sigma)
-        kernel = np.outer(kernel, kernel)
-        kernel = kernel / np.sum(kernel, keepdims=True)
-        kernel = -strength * kernel
-        kernel[center, center] += 1.0  # U = I - S * G
-        kernel = kernel / np.sum(kernel, keepdims=True)
-        return kernel
-
-    def _gamut(self, imgidx):
-        """
-        Calculate per-color-channel scale factors as required by the shader for gamut
-        compression. The calculation is based on three user-defined parameters (power,
-        limit, and threshold) that control the shape of the compression curve. Per-image
-        control of the 'limit' parameter is supported, but not currently used.
-        """
-        if (gamut_lim := self.ui.gamut_lim) is None:  # use global limits by default
-            gamut_lim = self.files.metadata[imgidx]['gamut_bounds']  # per-image limit
-        gamut_lim = np.clip(gamut_lim, 1.01, np.inf)  # >1.01 to ensure no overflows
-        scale = self._gamut_curve(self.ui.gamut_pow, self.ui.gamut_thr, gamut_lim)
-        return scale
-
-    def _gamut_curve(self, power, thr, lim):
-        """
-        Calculate a curve shaping scale factor for each color channel, based on the given
-        power, threshold and limit.
-
-        Arguments:
-          - power: curve exponent; higher value = steeper curve
-          - thr: percentage of core gamut to leave unmodified
-          - lim: upper bound for values to compress into gamut
-
-        Returns:
-          - scale: compression curve global scale factor, required by the shader
-        """
-
-        assert np.all(thr <= 0.95), thr  # must be < 1.0 to avoid infs and nans
-        assert np.all(lim >= 1.01), lim  # must be > 1.0 to avoid infs and nans
-        assert np.all(thr >= 0.0), thr  # not strictly necessary, but helps range analysis
-        assert np.all(lim <= 3.0), lim  # not an exact bound, but safe at float32
-        assert np.all(power >= 1.0), power  # not an exact bound, but safe at float32
-        assert np.all(power <= 20.0), power  # not an exact bound, but safe at float32
-
-        # range analysis for inputs yielding the smallest scale (~0.05):
-        #   thr = 0.95
-        #   lim = 3.0
-        #   pow = 1.0
-        #   src_domain = 3.0 - 0.95 = 2.05
-        #   dst_domain = 1.0 - 0.95 = 0.05
-        #   rel_domain = 2.05 / 0.05 = 2.05 * 20 = 41
-        #   pow_domain = 41 ^ 1 = 41
-        #   ipow_domain = (41 - 1) ^ (1 / 1) = 40
-        #   scale = 2.05 / 40 = 0.05125 > 0.05 = dst_domain
-
-        # range analysis for inputs yielding the largest intermediate value (~1e32):
-        #   thr = 0.95
-        #   lim = 3.0
-        #   pow = 20.0
-        #   src_domain = 2.05
-        #   dst_domain = 0.05
-        #   rel_domain = 2.05 / 0.05 = 41
-        #   pow_domain = 41 ^ 20 < 1e33 < inf
-        #   ipow_domain = (41 ^ 20 - 1) / (1 / 20) ~ 41
-        #   scale = 2.05 / 41 = 0.05 = dst_domain
-
-        # range analysis for inputs minimizing ipow_domain (0.2):
-        #   thr = 0.95
-        #   lim = 1.01
-        #   pow = 1.0
-        #   src_domain = 1.01 - 0.95 = 0.06
-        #   dst_domain = 1.00 - 0.95 = 0.05
-        #   rel_domain = 0.06 / 0.05 = 1.2
-        #   pow_domain = 1.2 ^ 1 = 1.2
-        #   ipow_domain = 1.2 - 1 = 0.2
-        #   scale = 0.06 / 0.2 = 0.30 >> dst_domain
-
-        invp = 1 / power  # [1/20, 1]
-        src_domain = lim - thr  # range on the x axis to compress from; [0.06, 3.0]
-        dst_domain = 1.0 - thr  # range on the x axis to compress to; [0.05, 1.0]
-        rel_domain = src_domain / dst_domain  # [1.01, 41]
-        pow_domain = rel_domain ** power  # max = 41^20 < 1e33 < inf
-        ipow_domain = (pow_domain - 1) ** invp  # [0.01, 41]
-        scale = src_domain / ipow_domain  # [dst_domain, 101 * dst_domain]
-        assert np.all(1.01 * scale >= dst_domain), f"{1.01 * scale} vs. {dst_domain}"
-        return scale
-
     def _create_dummy_texture(self):
         dummy = np.random.default_rng().random((32, 32, 3), dtype=np.float32)
         texture = self.ctx.texture((32, 32), 3, dummy, dtype='f4')
@@ -425,6 +323,108 @@ class GLRenderer:
                 pct = np.percentile(np.max(stats, axis=-1), [99.5, 98, 95, 90])
             texture.extra.meanval = meanval
             texture.extra.percentiles = pct
+
+    def _sharpen(self, sigma: float, strength: float) -> np.ndarray:
+        """
+        Generate an unsharp masking kernel with the given Gaussian blur sigma and
+        sharpening strength. The sigma must be at least 0.25 to have any effect,
+        and at most 4.0 to keep the kernel size within the current limits defined
+        in the postprocessing shader (25 x 25 pixels). For good results, a sigma
+        in [0.5, 1] is recommended.
+
+        :param sigma: Gaussian blur standard deviation; range = [0.25, 4]
+        :param strength: sharpening strength; range = [0, 1]
+        :returns: the generated unsharp masking kernel
+        """
+        assert 0.0 <= strength <= 1.0, strength
+        assert 0.25 <= sigma <= 4.0, sigma
+        strength = 0.6 + strength * (0.95 - 0.6)  # [0, 1] => [0.6, 0.95]
+        k = int(2 * np.ceil(3.0 * sigma) + 1)  # [3, 25]
+        center = k // 2
+        kernel = scipy.signal.windows.gaussian(k, std=sigma)
+        kernel = np.outer(kernel, kernel)
+        kernel = kernel / np.sum(kernel, keepdims=True)
+        kernel = -strength * kernel
+        kernel[center, center] += 1.0  # U = I - S * G
+        kernel = kernel / np.sum(kernel, keepdims=True)
+        return kernel
+
+    def _gamut(self, imgidx):
+        """
+        Calculate per-color-channel scale factors as required by the shader for gamut
+        compression. The calculation is based on three user-defined parameters (power,
+        limit, and threshold) that control the shape of the compression curve. Per-image
+        control of the 'limit' parameter is supported, but not currently used.
+        """
+        if (gamut_lim := self.ui.gamut_lim) is None:  # use global limits by default
+            gamut_lim = self.files.metadata[imgidx]['gamut_bounds']  # per-image limit
+        gamut_lim = np.clip(gamut_lim, 1.01, np.inf)  # >1.01 to ensure no overflows
+        scale = self._gamut_curve(self.ui.gamut_pow, self.ui.gamut_thr, gamut_lim)
+        return scale
+
+    def _gamut_curve(self, power, thr, lim):
+        """
+        Calculate a curve shaping scale factor for each color channel, based on the given
+        power, threshold and limit.
+
+        Arguments:
+          - power: curve exponent; higher value = steeper curve
+          - thr: percentage of core gamut to leave unmodified
+          - lim: upper bound for values to compress into gamut
+
+        Returns:
+          - scale: compression curve global scale factor, required by the shader
+        """
+
+        assert np.all(thr <= 0.95), thr  # must be < 1.0 to avoid infs and nans
+        assert np.all(lim >= 1.01), lim  # must be > 1.0 to avoid infs and nans
+        assert np.all(thr >= 0.0), thr  # not strictly necessary, but helps range analysis
+        assert np.all(lim <= 3.0), lim  # not an exact bound, but safe at float32
+        assert np.all(power >= 1.0), power  # not an exact bound, but safe at float32
+        assert np.all(power <= 20.0), power  # not an exact bound, but safe at float32
+
+        # range analysis for inputs yielding the smallest scale (~0.05):
+        #   thr = 0.95
+        #   lim = 3.0
+        #   pow = 1.0
+        #   src_domain = 3.0 - 0.95 = 2.05
+        #   dst_domain = 1.0 - 0.95 = 0.05
+        #   rel_domain = 2.05 / 0.05 = 2.05 * 20 = 41
+        #   pow_domain = 41 ^ 1 = 41
+        #   ipow_domain = (41 - 1) ^ (1 / 1) = 40
+        #   scale = 2.05 / 40 = 0.05125 > 0.05 = dst_domain
+
+        # range analysis for inputs yielding the largest intermediate value (~1e32):
+        #   thr = 0.95
+        #   lim = 3.0
+        #   pow = 20.0
+        #   src_domain = 2.05
+        #   dst_domain = 0.05
+        #   rel_domain = 2.05 / 0.05 = 41
+        #   pow_domain = 41 ^ 20 < 1e33 < inf
+        #   ipow_domain = (41 ^ 20 - 1) / (1 / 20) ~ 41
+        #   scale = 2.05 / 41 = 0.05 = dst_domain
+
+        # range analysis for inputs minimizing ipow_domain (0.2):
+        #   thr = 0.95
+        #   lim = 1.01
+        #   pow = 1.0
+        #   src_domain = 1.01 - 0.95 = 0.06
+        #   dst_domain = 1.00 - 0.95 = 0.05
+        #   rel_domain = 0.06 / 0.05 = 1.2
+        #   pow_domain = 1.2 ^ 1 = 1.2
+        #   ipow_domain = 1.2 - 1 = 0.2
+        #   scale = 0.06 / 0.2 = 0.30 >> dst_domain
+
+        invp = 1 / power  # [1/20, 1]
+        src_domain = lim - thr  # range on the x axis to compress from; [0.06, 3.0]
+        dst_domain = 1.0 - thr  # range on the x axis to compress to; [0.05, 1.0]
+        rel_domain = src_domain / dst_domain  # [1.01, 41]
+        pow_domain = rel_domain ** power  # max = 41^20 < 1e33 < inf
+        ipow_domain = (pow_domain - 1) ** invp  # [0.01, 41]
+        scale = src_domain / ipow_domain  # [dst_domain, 101 * dst_domain]
+        assert np.all(1.01 * scale >= dst_domain), f"{1.01 * scale} vs. {dst_domain}"
+        return scale
 
     def _get_aspect_ratio(self, vpw, vph, texw, texh):
         viewport_aspect = vpw / vph
