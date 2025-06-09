@@ -1,4 +1,4 @@
-#version 140
+#version 300 es
 
 precision highp float;
 
@@ -6,13 +6,11 @@ uniform int cs_in;
 uniform int cs_out;
 uniform bool grayscale;
 uniform bool degamma;
-uniform int tonemap;
-uniform float gtm_ymax;
 uniform float ev;
 uniform float maxval;
 uniform float minval;
 uniform int orientation;
-uniform sampler2D texture;
+uniform sampler2D img;
 uniform struct {
   bool compress;
   vec3 power;
@@ -33,7 +31,7 @@ out vec4 color;
 
 const vec3 ones = vec3(1.0);
 const vec3 zeros = vec3(0.0);
-const vec3 eps = vec3(5.0 / 256);
+const vec3 eps = vec3(5.0 / 256.0);
 
 
 float min3(vec3 v) {
@@ -333,8 +331,8 @@ vec3 csconv(vec3 rgb) {
 
 vec3 gamut_distance(vec3 rgb) {
   /**
-   * Returns component-wise relative distances to gamut boundary; >1.0 means out
-   * of gamut.  At least one of the input colors is always non-negative by
+   * Returns component-wise relative distances to gamut boundary; >1.0 means
+   * out of gamut. At least one of the input colors is always non-negative by
    * definition of homogeneous coordinates -- it's not possible for a point to
    * be outside of all three sides of a triangle at the same time.
    */
@@ -348,7 +346,7 @@ vec3 gamut_distance(vec3 rgb) {
 vec3 compress_distance(vec3 dist) {
   /**
    * Compresses the given component-wise distances from [0, limit] to [0, 1],
-   * where limit is a user-defined value greater than 1.0.  Extreme out-of-gamut
+   * where limit is a user-defined value greater than 1.0. Extreme out-of-gamut
    * colors with distances above the limit will be >1.0 even after compression.
    */
   vec3 denom = (dist - gamut.thr) / gamut.scale;  // may be negative or large
@@ -372,59 +370,6 @@ vec3 compress_gamut(vec3 rgb) {
   vec3 cdist = compress_distance(rel_dist);  // [0, >1] => [0, 1]
   vec3 crgb = (1.0 - cdist) * max_rgb;  // [0, 1] * [0, maxval] = [0, maxval]
   return crgb;
-}
-
-
-/**************************************************************************************/
-/*
-/*    G L O B A L   T O N E   M A P P I N G
-/*
-/**************************************************************************************/
-
-
-vec3 gtm_neutral(vec3 rgb, float ymax) {
-  /**
-   * Compresses RGB colors into [0, ymax]. See apply_gtm() for documentation.
-   */
-  const float desaturate = 0.1;
-  const float ystart = 0.5;
-  float d = ymax - ystart;
-
-  float peak = max3(rgb);
-  if (peak >= ystart) {
-    // Compress the peak value from [ystart, inf] to [ystart, ymax],
-    // scaling all RGB components by the same factor
-    float new_peak = ymax - d * d / (ymax  + peak - 2.0 * ystart);
-    rgb = rgb * new_peak / peak;
-
-    // Interpolate towards the gray axis
-    float g = ymax / (desaturate * (peak - new_peak) + ymax);
-    rgb = mix(rgb, vec3(new_peak), 1.0 - g);
-  }
-
-  return rgb;
-}
-
-
-vec3 apply_gtm(vec3 rgb, float ymax) {
-  /**
-   * Applies the selected global tone mapping function (GTM) on the given HDR
-   * color. The input is assumed to be in a nominal [0, 1] scale, such that
-   * diffuse reflectances are in that range, whereas direct light sources and
-   * specular highlights can exceed 1.0, often by several orders of magnitude.
-   * For non-negative inputs, the output is guaranteed to be in [0, ymax].
-   *
-   * The following GTM functions are available:
-   *
-   *   0 - none
-   *   1 - neutral
-   */
-  switch (tonemap) {
-    case 1:
-      rgb = gtm_neutral(rgb, ymax);
-      break;
-  }
-  return rgb;
 }
 
 
@@ -464,12 +409,11 @@ vec2 rotate(vec2 tc, int degrees) {
 
 
 void main() {
-  color = texture2D(texture, rotate(texcoords, orientation));
+  color = texture(img, rotate(texcoords, orientation));
   color.rgb = (color.rgb - minval) / maxval;
   color.rgb = degamma ? srgb_degamma(color.rgb) : color.rgb;
   color.rgb = csconv(color.rgb);
   color.rgb = grayscale ? color.rrr : color.rgb;
   color.rgb = gamut.compress ? compress_gamut(color.rgb) : color.rgb;
   color.rgb = color.rgb * exp(ev);  // exp(x) == 2^x
-  color.rgb = apply_gtm(color.rgb, gtm_ymax);
 }

@@ -107,15 +107,13 @@ class GLRenderer:
 
             self.fbo.use()
             self.fbo.clear(*self._get_debug_tile_color(i))
-            self.prog['texture'] = 0
+            self.prog['img'] = 0
             self.prog['mousepos'] = tuple(self.ui.mousepos[i])
             self.prog['scale'] = self.ui.scale[i]
             self.prog['aspect'] = (scalex, scaley)
             self.prog['orientation'] = orientation
             self.prog['grayscale'] = (texture.components == 1)
             self.prog['degamma'] = self.files.linearize[imgidx]
-            self.prog['tonemap'] = self.ui.tonemap_per_tile[i]
-            self.prog['gtm_ymax'] = self.ui.gtm_ymax
             self.prog['cs_in'] = self.ui.cs_in
             self.prog['cs_out'] = self.ui.cs_out
             self.prog['maxval'] = norm_maxvals[self.ui.normalize]
@@ -138,7 +136,7 @@ class GLRenderer:
             magnification = scalex * vpw / (texture.width / self.ui.scale[i])
             max_kernel_size = self.postprocess['kernel'].array_length
             kernel = self._sharpen(sigma=0.75, strength=0.5)
-            self.postprocess['texture'] = 0
+            self.postprocess['img'] = 0
             self.postprocess['mousepos'] = (0.0, 0.0)
             self.postprocess['scale'] = 1.0
             self.postprocess['aspect'] = (1.0, 1.0)
@@ -148,6 +146,8 @@ class GLRenderer:
             self.postprocess['sharpen'] = self.ui.sharpen_per_tile[i]
             self.postprocess['kernel'] = np.resize(kernel, max_kernel_size)
             self.postprocess['kernw'] = kernel.shape[0]
+            self.postprocess['tonemap'] = self.ui.tonemap_per_tile[i]
+            self.postprocess['gtm_ymax'] = 1.0
             self.postprocess['gamma'] = self.ui.gamma
             self.postprocess['debug'] = self.ui.debug_mode
             self.vao_post.render(moderngl.TRIANGLE_STRIP)

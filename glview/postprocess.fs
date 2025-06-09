@@ -1,16 +1,18 @@
-#version 140
+#version 300 es
 
 const int MAX_KERNEL_WIDTH = 25;
 
 precision highp float;
 
-uniform sampler2D texture;
+uniform sampler2D img;
 uniform ivec2 resolution;
 uniform float magnification;
 uniform int mirror;
 uniform bool sharpen;
 uniform float kernel[MAX_KERNEL_WIDTH * MAX_KERNEL_WIDTH];
 uniform int kernw;
+uniform int tonemap;
+uniform float gtm_ymax;
 uniform int gamma;
 uniform int debug;
 
@@ -27,7 +29,7 @@ out vec4 color;
 
 const vec3 ones = vec3(1.0);
 const vec3 zeros = vec3(0.0);
-const vec3 eps = vec3(5.0 / 256);
+const vec3 eps = vec3(5.0 / 256.0);
 
 
 float min3(vec3 v) {
@@ -128,14 +130,14 @@ vec3 st2084_gamma(vec3 rgb) {
    * https://en.wikipedia.org/wiki/Perceptual_quantizer.
    */
   rgb = max(rgb, 0.0);
-  float m1 = 2610.0 / 16384;
-  float m2 = 2523.0 / 4096 * 128;
-  float c1 = 3424.0 / 4096;
-  float c2 = 2413.0 / 4096 * 32;
-  float c3 = 2392.0 / 4096 * 32;
-  vec3 y = rgb / 10000;
+  float m1 = 2610.0 / 16384.0;
+  float m2 = 2523.0 / 4096.0 * 128.0;
+  float c1 = 3424.0 / 4096.0;
+  float c2 = 2413.0 / 4096.0 * 32.0;
+  float c3 = 2392.0 / 4096.0 * 32.0;
+  vec3 y = rgb / 10000.0;
   y = pow(y, vec3(m1));
-  rgb = (c1 + c2 * y) / (1 + c3 * y);
+  rgb = (c1 + c2 * y) / (1.0 + c3 * y);
   rgb = pow(rgb, vec3(m2));
   return rgb;
 }
@@ -191,7 +193,7 @@ vec3 apply_gamma(vec3 rgb) {
 /**************************************************************************************/
 
 
-vec4 conv2d(sampler2D texture, vec2 tc) {
+vec4 conv2d(sampler2D img, vec2 tc) {
   /**
    * Convolves the given texture with a kernel defined in a uniform array. The color
    * of each pixel is multiplied by a factor proportional to the sum of its weighted
@@ -202,7 +204,7 @@ vec4 conv2d(sampler2D texture, vec2 tc) {
    * and in texture space if it's magnified. If it's rendered at 1:1 scale (neither
    * minified nor magnified), screen space and texture space are the same.
    *
-   * :param texture: the input texture to convolve
+   * :param img: the input texture to convolve
    * :param tc: texture coordinates of the center pixel
    * :uniform ivec2 resolution: target viewport width and height, in pixels
    * :uniform float magnification: ratio of screen pixels to texture pixels
@@ -211,24 +213,77 @@ vec4 conv2d(sampler2D texture, vec2 tc) {
    * :returns: the original pixel color boosted by a 2D convolution kernel
    */
   float sum = 0.0f;
-  vec2 xy_step = vec2(1.0) / resolution;
+  vec2 xy_step = vec2(1.0) / vec2(resolution);
   xy_step *= max(magnification, 1.0);
-  vec2 tc_base = tc - floor(kernw / 2.0) * xy_step;
+  vec2 tc_base = tc - floor(float(kernw) / 2.0) * xy_step;
   for (int x = 0; x < kernw; x++) {
     for (int y = 0; y < kernw; y++) {
       float weight = kernel[y * kernw + x];
       vec2 tc = tc_base + vec2(x, y) * xy_step;
-      vec4 pixel = texture2D(texture, tc);
+      vec4 pixel = texture(img, tc);
       float grayscale = pixel.r + pixel.g + pixel.b;
       grayscale = max(grayscale, 0.0f);
       sum += weight * grayscale;
     }
   }
-  vec4 org = texture2D(texture, tc);
+  vec4 org = texture(img, tc);
   float org_gray = max(org.r + org.g + org.b, 0.0f);
   float boost = clamp(sum / org_gray, 0.5f, 5.0f);
   org.rgb = org.rgb * boost;
   return org;
+}
+
+
+/**************************************************************************************/
+/*
+/*    G L O B A L   T O N E   M A P P I N G
+/*
+/**************************************************************************************/
+
+
+vec3 gtm_neutral(vec3 rgb, float ymax) {
+  /**
+   * Compresses RGB colors into [0, ymax]. See apply_gtm() for documentation.
+   */
+  const float desaturate = 0.1;
+  const float ystart = 0.5;
+  float d = ymax - ystart;
+
+  float peak = max3(rgb);
+  if (peak >= ystart) {
+    // Compress the peak value from [ystart, inf] to [ystart, ymax],
+    // scaling all RGB components by the same factor
+    float new_peak = ymax - d * d / (ymax  + peak - 2.0 * ystart);
+    rgb = rgb * new_peak / peak;
+
+    // Interpolate towards the gray axis
+    float g = ymax / (desaturate * (peak - new_peak) + ymax);
+    rgb = mix(rgb, vec3(new_peak), 1.0 - g);
+  }
+
+  return rgb;
+}
+
+
+vec3 apply_gtm(vec3 rgb, float ymax) {
+  /**
+   * Applies the selected global tone mapping function (GTM) on the given HDR
+   * color. The input is assumed to be in a nominal [0, 1] scale, such that
+   * diffuse reflectances are in that range, whereas direct light sources and
+   * specular highlights can exceed 1.0, often by several orders of magnitude.
+   * For non-negative inputs, the output is guaranteed to be in [0, ymax].
+   *
+   * The following GTM functions are available:
+   *
+   *   0 - none
+   *   1 - neutral
+   */
+  switch (tonemap) {
+    case 1:
+      rgb = gtm_neutral(rgb, ymax);
+      break;
+  }
+  return rgb;
 }
 
 
@@ -280,7 +335,8 @@ vec3 debug_indicators(vec3 rgb) {
 
 void main() {
   vec2 tc = flip(texcoords, mirror);
-  color = sharpen ? conv2d(texture, tc) : texture2D(texture, tc);
+  color = sharpen ? conv2d(img, tc) : texture(img, tc);
+  color.rgb = apply_gtm(color.rgb, gtm_ymax);
   color.rgb = debug_indicators(color.rgb);
   color.rgb = apply_gamma(color.rgb);
 }
