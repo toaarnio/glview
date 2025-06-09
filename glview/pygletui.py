@@ -34,7 +34,7 @@ class PygletUI:
         self.tileidx = 0
         self.scale = np.ones(4)  # per-tile scale
         self.mousepos = np.zeros((4, 2))  # per-tile (x, y); clipped to [0, 1]
-        self.mouse_speed = 4.0
+        self.mouse_speed = 2.0
         self.mouse_canvas_width = 1000
         self.keyboard_pan_speed = 100
         self.viewports = None
