@@ -169,7 +169,6 @@ def main():  # noqa: PLR0915
         print("    k                       cycle through gamut compression models")
         print("    t                       toggle nearest <-> linear filtering")
         print("    e                       adjust exposure within [-2EV, +2EV]")
-        print("    shift+e                 adjust tonemap output range within [1, 3]")
         print("    b                       toggle between HDR/LDR exposure control")
         print("    i                       toggle input color space: sRGB/P3/Rec2020")
         print("    o                       toggle output color space: sRGB/P3/Rec2020")

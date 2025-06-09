@@ -12,7 +12,6 @@ uniform bool sharpen;
 uniform float kernel[MAX_KERNEL_WIDTH * MAX_KERNEL_WIDTH];
 uniform int kernw;
 uniform int tonemap;
-uniform float gtm_ymax;
 uniform int gamma;
 uniform int debug;
 
@@ -336,7 +335,7 @@ vec3 debug_indicators(vec3 rgb) {
 void main() {
   vec2 tc = flip(texcoords, mirror);
   color = sharpen ? conv2d(img, tc) : texture(img, tc);
-  color.rgb = apply_gtm(color.rgb, gtm_ymax);
+  color.rgb = apply_gtm(color.rgb, 1.0);
   color.rgb = debug_indicators(color.rgb);
   color.rgb = apply_gamma(color.rgb);
 }

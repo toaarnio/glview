@@ -147,7 +147,6 @@ class GLRenderer:
             self.postprocess['kernel'] = np.resize(kernel, max_kernel_size)
             self.postprocess['kernw'] = kernel.shape[0]
             self.postprocess['tonemap'] = self.ui.tonemap_per_tile[i]
-            self.postprocess['gtm_ymax'] = 1.0
             self.postprocess['gamma'] = self.ui.gamma
             self.postprocess['debug'] = self.ui.debug_mode
             self.vao_post.render(moderngl.TRIANGLE_STRIP)

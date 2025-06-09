@@ -51,8 +51,6 @@ class PygletUI:
         self.cs_in = 0
         self.cs_out = 0
         self.gamma = 1
-        self.gtm_ymax = 0
-        self.gtm_linear = 0
         self.normalize = 0  # 0|1|2|...
         self.ev_range = 2
         self.ev_linear = 0.0
@@ -283,11 +281,6 @@ class PygletUI:
             self.ev_linear += 0.005 * self.key_state[keys.E]
             self.need_redraw = True
         self.ev = self._triangle_wave(self.ev_linear, self.ev_range)
-        # tonemap y-limit control
-        if shift_down and self.key_state[keys.E]:
-            self.gtm_linear += 0.005 * self.key_state[keys.E]
-            self.need_redraw = True
-        self.gtm_ymax = 2 + self._sine_wave(self.gtm_linear, 1)  # [-1, 1] => [1, 3]
 
     def _switch_gamut_curve(self):
         # cycle through a predefined selection of gamut compression modes:
@@ -427,7 +420,6 @@ class PygletUI:
                         self.scale = np.ones(4)
                         self.mousepos = np.zeros((4, 2))
                         self.ev_linear = 0.0
-                        self.gtm_linear = 0.0
                         self.gamut_lin = 0.0
                         self.gamut_fit = 0
                         self.need_redraw = True
