@@ -159,7 +159,7 @@ class PygletUI:
     def _caption(self):
         ver = self.version
         fps = np.median(self.renderer.fps)
-        cspaces = ["sRGB", "DCI-P3", "Rec2020"]
+        cspaces = ["sRGB", "DCI-P3", "Rec2020", "XYZ"]
         csc = f"{cspaces[self.cs_in]} => {cspaces[self.cs_out]}"
         norm = ["off", "max", "stretch", "99.5%", "98%", "95%", "90%", "mean"][self.normalize]
         gtm = np.asarray(["N", "Y"])[np.asarray(self.tonemap_per_tile).astype(int)]
@@ -434,10 +434,10 @@ class PygletUI:
                         self.tonemap_per_tile[self.tileidx] = not self.tonemap_per_tile[self.tileidx]
                         self.need_redraw = True
                     case keys.I:  # input color space (global)
-                        self.cs_in = (self.cs_in + 1) % 3
+                        self.cs_in = (self.cs_in + 1) % 4
                         self.need_redraw = True
                     case keys.O:  # output color space (global)
-                        self.cs_out = (self.cs_out + 1) % 3
+                        self.cs_out = (self.cs_out + 1) % 4
                         self.need_redraw = True
                     case keys.B:  # toggle narrow/wide exposure control (global)
                         self.ev_range = (self.ev_range + 6) % 12

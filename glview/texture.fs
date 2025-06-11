@@ -281,6 +281,7 @@ vec3 csconv(vec3 rgb) {
    *   0 - sRGB
    *   1 - DCI-P3
    *   2 - Rec2020
+   *   3 - CIEXYZ
    *
    * As a concrete example, to display a P3-JPEG captured by a modern smartphone
    * on a high-quality wide-gamut monitor, you would set the input color space to
@@ -299,6 +300,9 @@ vec3 csconv(vec3 rgb) {
       case 2:
         xyz = rec2020_to_xyz(rgb);
         break;
+      case 3:
+        xyz = rgb;
+        break;
       default:
         xyz = rgb;
         break;
@@ -312,6 +316,9 @@ vec3 csconv(vec3 rgb) {
         break;
       case 2:
         rgb = xyz_to_rec2020(xyz);
+        break;
+      case 3:
+        rgb = xyz;
         break;
       default:
         rgb = xyz;
