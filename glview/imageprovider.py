@@ -217,7 +217,7 @@ class ImageProvider:
                     # float64 is not universally supported yet
                     img = img.astype(np.float32)
                 return img
-            except imgio.ImageIOError as e:
+            except (imgio.ImageIOError, imsize.ImageFileError) as e:
                 print(f"\n{e}")
                 self._vprint(e)
                 return "INVALID"
