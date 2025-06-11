@@ -34,7 +34,9 @@ except ImportError:
 
 IMAGE_TYPES = imgio.RO_FORMATS
 
-NORMS = {"off":0, "max":1, "stretch":2, "99":3, "98":4, "95":5, "90":6, "mean":7}
+COLORSPACES = {"sRGB": 0, "P3": 1, "Rec2020": 2, "XYZ": 3}
+
+NORMS = {"off": 0, "max": 1, "stretch": 2, "99": 3, "98": 4, "95": 5, "90": 6, "mean": 7}
 
 
 class FileList:
@@ -127,6 +129,8 @@ def main():  # noqa: PLR0915
     config.downsample = argv.intval("--downsample", default=1, condition="v >= 1")
     config.smooth = argv.exists("--filter")
     config.normalize = argv.stringval("--normalize", default="off", accepted=list(NORMS.keys()))
+    config.idt = argv.stringval("--idt", default="sRGB", accepted=list(COLORSPACES.keys()))
+    config.odt = argv.stringval("--odt", default="sRGB", accepted=list(COLORSPACES.keys()))
     config.debug = argv.intval("--debug", default=1, accepted=[1, 2, 3])
     config.verbose = argv.exists("--verbose")
     config.verbose += argv.exists("--verbose")
@@ -146,6 +150,8 @@ def main():  # noqa: PLR0915
         print("    --downsample N          downsample images N-fold to save memory")
         print("    --normalize off|max|... exposure normalization mode; default = off")
         print("    --filter                use linear filtering; default = nearest")
+        print("    --idt sRGB|P3|...       input image color space; default = sRGB")
+        print("    --odt sRGB|P3|...       output device color space; default = sRGB")
         print("    --debug N               select debug rendering mode; default = 1")
         print("    --verbose               print extra traces to the console")
         print("    --verbose               print even more traces to the console")
@@ -210,6 +216,8 @@ def main():  # noqa: PLR0915
     ui.version = version.__version__
     ui.texture_filter = "LINEAR" if config.smooth else "NEAREST"
     ui.normalize = NORMS[config.normalize]
+    ui.cs_in = COLORSPACES[config.idt]
+    ui.cs_out = COLORSPACES[config.odt]
     ui.fullscreen = config.fullscreen
     ui.numtiles = config.numtiles
 
