@@ -44,8 +44,8 @@ class PygletUI:
         self.renderer = None
         self.texture_filter = "NEAREST"
         self.img_per_tile = [0, 1, 2, 3]
-        self.tonemap_per_tile = [False, False, False, False]
         self.ae_per_tile = [False, False, False, False]
+        self.tonemap_per_tile = [False, False, False, False]
         self.sharpen_per_tile = [False, False, False, False]
         self.mirror_per_tile = [0, 0, 0, 0]
         self.images_pending = True
@@ -163,10 +163,10 @@ class PygletUI:
         cspaces = ["sRGB", "DCI-P3", "Rec2020", "XYZ"]
         csc = f"{cspaces[self.cs_in]} => {cspaces[self.cs_out]}"
         norm = ["off", "max", "stretch", "99.5%", "98%", "95%", "90%", "mean"][self.normalize]
-        gtm = np.asarray(["N", "Y"])[np.asarray(self.tonemap_per_tile).astype(int)]
-        gtm = "".join(gtm)[:self.numtiles]  # [False, True, True, False] => "NYYN"
         ae = np.asarray(["N", "Y"])[np.asarray(self.ae_per_tile).astype(int)]
         ae = "".join(ae)[:self.numtiles]  # [False, True, True, False] => "NYYN"
+        gtm = np.asarray(["N", "Y"])[np.asarray(self.tonemap_per_tile).astype(int)]
+        gtm = "".join(gtm)[:self.numtiles]  # [False, True, True, False] => "NYYN"
         sharpen = np.asarray(["N", "Y"])[np.asarray(self.sharpen_per_tile).astype(int)]
         sharpen = "".join(sharpen)[:self.numtiles]  # [False, True, True, False] => "NYYN"
         gamma = ["off", "sRGB", "HLG", "HDR10"][self.gamma]

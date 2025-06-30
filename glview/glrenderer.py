@@ -164,7 +164,7 @@ class GLRenderer:
             self.postprocess['kernw'] = kernel.shape[0]
             self.postprocess['autoexpose'] = self.ui.ae_per_tile[i]
             self.postprocess['ae_gain'] = self.ae_gain_per_tile[i]
-            self.postprocess['tonemap'] = self.ui.tonemap_per_tile[i]
+            self.postprocess['tonemap'] = int(self.ui.tonemap_per_tile[i]) * 2
             self.postprocess['gamma'] = self.ui.gamma
             self.postprocess['debug'] = self.ui.debug_mode
             self.vao_post.render(moderngl.TRIANGLE_STRIP)

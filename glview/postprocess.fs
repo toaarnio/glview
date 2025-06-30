@@ -189,6 +189,105 @@ vec3 apply_gamma(vec3 rgb) {
 
 /**************************************************************************************/
 /*
+/*    C O L O R   S P A C E   C O N V E R S I O N S
+/*
+/**************************************************************************************/
+
+
+vec3 xy_to_xyz(vec2 xy) {
+  /**
+   * Transforms the given color coordinates from CIE xy to CIE XYZ.
+   */
+  vec3 xyz;
+  xyz.x = xy.x / xy.y;
+  xyz.y = 1.0;
+  xyz.z = (1.0 - xy.x - xy.y) / xy.y;
+  return xyz;
+}
+
+
+mat3 rgb_to_xyz_mtx(vec2 xy_r, vec2 xy_g, vec2 xy_b, vec2 xy_w) {
+  /**
+   * Returns a 3 x 3 conversion matrix from RGB to XYZ, given the (x, y) chromaticity
+   * coordinates of the RGB primaries and the reference white. Conversion formula taken
+   * from http://www.brucelindbloom.com/index.html?Eqn_RGB_XYZ_Matrix.html.
+   */
+  vec3 XYZ_r = xy_to_xyz(xy_r);
+  vec3 XYZ_g = xy_to_xyz(xy_g);
+  vec3 XYZ_b = xy_to_xyz(xy_b);
+  vec3 XYZ_w = xy_to_xyz(xy_w);
+  mat3 M = mat3(XYZ_r, XYZ_g, XYZ_b);
+
+  // Scale each column of the RGB-to-XYZ matrix with a scalar such
+  // that [1, 1, 1] gets transformed to the given whitepoint (XYZ_w);
+  // for example, M * [1, 1, 1] = [0.9504, 1.0, 1.0888] in case of D65.
+
+  vec3 S = inverse(M) * XYZ_w;  // whitepoint in RGB
+  M[0] *= S[0];  // R column vector scale
+  M[1] *= S[1];  // G column vector scale
+  M[2] *= S[2];  // B column vector scale
+  return M;
+}
+
+
+mat3 xyz_to_rgb_mtx(vec2 xy_r, vec2 xy_g, vec2 xy_b, vec2 xy_w) {
+  /**
+   * Returns a 3 x 3 conversion matrix from XYZ to RGB, given the (x, y) chromaticity
+   * coordinates of the RGB primaries and the reference white. Conversion formula taken
+   * from http://www.brucelindbloom.com/index.html?Eqn_RGB_XYZ_Matrix.html.
+   */
+  mat3 M = rgb_to_xyz_mtx(xy_r, xy_g, xy_b, xy_w);
+  M = inverse(M);
+  return M;
+}
+
+
+mat3 p3_to_xyz_mtx() {
+  /**
+   * Returns the exact DCI-P3 to XYZ conversion matrix defined by the P3 specification.
+   * Note that the matrix is computed from limited-precision primaries and whitepoint,
+   * as per the specification.
+   */
+  vec2 D65_WP = vec2(0.3127, 0.3290);
+  vec2 xy_r = vec2(0.680, 0.320);
+  vec2 xy_g = vec2(0.265, 0.690);
+  vec2 xy_b = vec2(0.150, 0.060);
+  mat3 M = rgb_to_xyz_mtx(xy_r, xy_g, xy_b, D65_WP);
+  return M;
+}
+
+
+mat3 xyz_to_p3_mtx() {
+  /**
+   * Returns the exact XYZ to DCI-P3 conversion matrix defined by the P3 specification.
+   * Note that the matrix is computed from limited-precision primaries and whitepoint,
+   * as per the specification.
+   */
+  mat3 M = inverse(p3_to_xyz_mtx());
+  return M;
+}
+
+
+vec3 p3_to_xyz(vec3 rgb) {
+  /**
+   * Transforms the given DCI-P3 color to CIE XYZ.
+   */
+  vec3 xyz = p3_to_xyz_mtx() * rgb;
+  return xyz;
+}
+
+
+vec3 xyz_to_p3(vec3 xyz) {
+  /**
+   * Transforms the given CIE XYZ color to DCI-P3.
+   */
+  vec3 rgb = xyz_to_p3_mtx() * xyz;
+  return rgb;
+}
+
+
+/**************************************************************************************/
+/*
 /*    S H A R P E N I N G
 /*
 /**************************************************************************************/
@@ -244,7 +343,8 @@ vec4 conv2d(sampler2D img, vec2 tc) {
 
 vec3 gtm_neutral(vec3 rgb, float ymax) {
   /**
-   * Compresses RGB colors into [0, ymax]. See apply_gtm() for documentation.
+   * Compresses RGB colors from [0, inf] to [0, ymax]. See apply_gtm() for
+   * documentation.
    */
   const float desaturate = 0.1;
   const float ystart = 0.5;
@@ -266,6 +366,19 @@ vec3 gtm_neutral(vec3 rgb, float ymax) {
 }
 
 
+vec3 gtm_reinhard(vec3 rgb) {
+  /**
+   * Compresses RGB colors from [0, inf] to [0, 1]. See apply_gtm() for
+   * documentation.
+   */
+  vec3 xyz = p3_to_xyz(rgb);
+  float y_new = xyz.y / (1.0 + xyz.y);
+  float ratio = y_new / xyz.y;
+  rgb = rgb * ratio;
+  return rgb;
+}
+
+
 vec3 apply_gtm(vec3 rgb, float ymax) {
   /**
    * Applies the selected global tone mapping function (GTM) on the given HDR
@@ -278,10 +391,14 @@ vec3 apply_gtm(vec3 rgb, float ymax) {
    *
    *   0 - none
    *   1 - neutral
+   *   2 - reinhard
    */
   switch (tonemap) {
     case 1:
       rgb = gtm_neutral(rgb, ymax);
+      break;
+    case 2:
+      rgb = gtm_reinhard(rgb);
       break;
   }
   return rgb;
