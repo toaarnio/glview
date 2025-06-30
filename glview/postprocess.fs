@@ -8,14 +8,24 @@ uniform sampler2D img;
 uniform ivec2 resolution;
 uniform float magnification;
 uniform int mirror;
+uniform int cs_in;
+uniform int cs_out;
 uniform bool sharpen;
 uniform float kernel[MAX_KERNEL_WIDTH * MAX_KERNEL_WIDTH];
 uniform int kernw;
 uniform bool autoexpose;
 uniform float ae_gain;
+uniform float ev;
 uniform int tonemap;
 uniform int gamma;
 uniform int debug;
+
+uniform struct {
+  bool compress;
+  vec3 power;
+  vec3 thr;
+  vec3 scale;
+} gamut;
 
 in vec2 texcoords;
 out vec4 color;
@@ -26,6 +36,12 @@ out vec4 color;
 /*    U T I L I T I E S
 /*
 /**************************************************************************************/
+
+
+const int sRGB = 0;
+const int P3 = 1;
+const int Rec2020 = 2;
+const int XYZ = 3;
 
 
 const vec3 ones = vec3(1.0);
@@ -51,17 +67,15 @@ float max3(vec3 v) {
 }
 
 
-vec3 gamut_distance(vec3 rgb) {
+mat3 mround(mat3 mtx) {
   /**
-   * Returns component-wise relative distances to gamut boundary; >1.0 means out
-   * of gamut.  At least one of the input colors is always non-negative by
-   * definition of homogeneous coordinates -- it's not possible for a point to
-   * be outside of all three sides of a triangle at the same time.
+   * Rounds the elements of the given matrix to the nearest integer. Annoyingly,
+   * the built-in round() function does not work with matrices.
    */
-  vec3 max_rgb = vec3(max3(rgb));  // [0, maxval]
-  vec3 abs_dist = max_rgb - rgb;  // [0, maxdiff]
-  vec3 rel_dist = abs_dist / max_rgb;  // [0, >1]
-  return rel_dist;
+  mtx[0] = round(mtx[0]);
+  mtx[1] = round(mtx[1]);
+  mtx[2] = round(mtx[2]);
+  return mtx;
 }
 
 
@@ -242,6 +256,34 @@ mat3 xyz_to_rgb_mtx(vec2 xy_r, vec2 xy_g, vec2 xy_b, vec2 xy_w) {
 }
 
 
+mat3 srgb_to_xyz_mtx() {
+  /**
+   * Returns the exact sRGB to XYZ conversion matrix defined by the sRGB specification.
+   * Note that the matrix is computed from limited-precision primaries and whitepoint,
+   * and rounded to four decimals at the end, as per the specification.
+   */
+  vec2 D65_WP = vec2(0.3127, 0.3290);
+  vec2 xy_r = vec2(0.640, 0.330);
+  vec2 xy_g = vec2(0.300, 0.600);
+  vec2 xy_b = vec2(0.150, 0.060);
+  mat3 M = rgb_to_xyz_mtx(xy_r, xy_g, xy_b, D65_WP);
+  M = mround(M * 10000.0) / 10000.0;
+  return M;
+}
+
+
+mat3 xyz_to_srgb_mtx() {
+  /**
+   * Returns the exact XYZ to sRGB conversion matrix defined by the sRGB specification.
+   * Note that the matrix is computed from limited-precision primaries and whitepoint,
+   * and rounded to four decimals at the end, as per the specification.
+   */
+  mat3 M = inverse(srgb_to_xyz_mtx());
+  M = mround(M * 10000.0) / 10000.0;
+  return M;
+}
+
+
 mat3 p3_to_xyz_mtx() {
   /**
    * Returns the exact DCI-P3 to XYZ conversion matrix defined by the P3 specification.
@@ -268,6 +310,50 @@ mat3 xyz_to_p3_mtx() {
 }
 
 
+mat3 rec2020_to_xyz_mtx() {
+  /**
+   * Returns the exact Rec2020 to XYZ conversion matrix defined by the Rec2020
+   * specification. Note that the matrix is computed from limited-precision
+   * primaries and whitepoint, as per the specification.
+   */
+  vec2 D65_WP = vec2(0.3127, 0.3290);
+  vec2 xy_r = vec2(0.708, 0.292);
+  vec2 xy_g = vec2(0.170, 0.797);
+  vec2 xy_b = vec2(0.131, 0.046);
+  mat3 M = rgb_to_xyz_mtx(xy_r, xy_g, xy_b, D65_WP);
+  return M;
+}
+
+
+mat3 xyz_to_rec2020_mtx() {
+  /**
+   * Returns the exact XYZ to Rec2020 conversion matrix defined by the Rec2020
+   * specification. Note that the matrix is computed from limited-precision
+   * primaries and whitepoint, as per the specification.
+   */
+  mat3 M = inverse(rec2020_to_xyz_mtx());
+  return M;
+}
+
+
+vec3 srgb_to_xyz(vec3 rgb) {
+  /**
+   * Transforms the given sRGB color to CIE XYZ.
+   */
+  vec3 xyz = srgb_to_xyz_mtx() * rgb;
+  return xyz;
+}
+
+
+vec3 xyz_to_srgb(vec3 xyz) {
+  /**
+   * Transforms the given CIE XYZ color to sRGB.
+   */
+  vec3 rgb = xyz_to_srgb_mtx() * xyz;
+  return rgb;
+}
+
+
 vec3 p3_to_xyz(vec3 rgb) {
   /**
    * Transforms the given DCI-P3 color to CIE XYZ.
@@ -282,6 +368,81 @@ vec3 xyz_to_p3(vec3 xyz) {
    * Transforms the given CIE XYZ color to DCI-P3.
    */
   vec3 rgb = xyz_to_p3_mtx() * xyz;
+  return rgb;
+}
+
+
+vec3 rec2020_to_xyz(vec3 rgb) {
+  /**
+   * Transforms the given Rec2020 color to CIE XYZ.
+   */
+  vec3 xyz = rec2020_to_xyz_mtx() * rgb;
+  return xyz;
+}
+
+
+vec3 xyz_to_rec2020(vec3 xyz) {
+  /**
+   * Transforms the given CIE XYZ color to Rec2020.
+   */
+  vec3 rgb = xyz_to_rec2020_mtx() * xyz;
+  return rgb;
+}
+
+
+vec3 csconv(vec3 rgb, int cs_in, int cs_out) {
+  /**
+   * Transforms the given color from a given input color space to a given output
+   * color space. If the input and output color spaces are the same, the color is
+   * unchanged. The following color spaces are available as both input & output:
+   *
+   *   0 - sRGB
+   *   1 - DCI-P3
+   *   2 - Rec2020
+   *   3 - CIEXYZ
+   *
+   * As a concrete example, to display a P3-JPEG captured by a modern smartphone
+   * on a high-quality wide-gamut monitor, you would set the input color space to
+   * DCI-P3 and the output to Rec2020, while making sure that the monitor is set
+   * to Rec2020 mode.
+   */
+  if (cs_in != cs_out) {
+    vec3 xyz;
+    switch (cs_in) {
+      case sRGB:
+        xyz = srgb_to_xyz(rgb);
+        break;
+      case P3:
+        xyz = p3_to_xyz(rgb);
+        break;
+      case Rec2020:
+        xyz = rec2020_to_xyz(rgb);
+        break;
+      case XYZ:
+        xyz = rgb;
+        break;
+      default:
+        xyz = rgb;
+        break;
+    }
+    switch (cs_out) {
+      case sRGB:
+        rgb = xyz_to_srgb(xyz);
+        break;
+      case P3:
+        rgb = xyz_to_p3(xyz);
+        break;
+      case Rec2020:
+        rgb = xyz_to_rec2020(xyz);
+        break;
+      case XYZ:
+        rgb = xyz;
+        break;
+      default:
+        rgb = xyz;
+        break;
+    }
+  }
   return rgb;
 }
 
@@ -336,6 +497,57 @@ vec4 conv2d(sampler2D img, vec2 tc) {
 
 /**************************************************************************************/
 /*
+/*    G A M U T   C O M P R E S S I O N
+/*
+/**************************************************************************************/
+
+
+vec3 gamut_distance(vec3 rgb) {
+  /**
+   * Returns component-wise relative distances to gamut boundary; >1.0 means
+   * out of gamut. At least one of the input colors is always non-negative by
+   * definition of homogeneous coordinates -- it's not possible for a point to
+   * be outside of all three sides of a triangle at the same time.
+   */
+  vec3 max_rgb = vec3(max3(rgb));  // [0, maxval]
+  vec3 abs_dist = max_rgb - rgb;  // [0, maxdiff]
+  vec3 rel_dist = abs_dist / max_rgb;  // [0, >1]
+  return rel_dist;
+}
+
+
+vec3 compress_distance(vec3 dist) {
+  /**
+   * Compresses the given component-wise distances from [0, limit] to [0, 1],
+   * where limit is a user-defined value greater than 1.0. Extreme out-of-gamut
+   * colors with distances above the limit will be >1.0 even after compression.
+   */
+  vec3 denom = (dist - gamut.thr) / gamut.scale;  // may be negative or large
+  denom = max(denom, 0.0);  // >= 0.0, may be large
+  denom = 1.0 + pow(denom, gamut.power);  // >= 1.0, may be inf
+  denom = pow(denom, 1.0 / gamut.power);  // >= 1.0, may be inf
+  vec3 cdist = gamut.thr + (dist - gamut.thr) / denom;  // [0, 1]
+  return cdist;
+}
+
+
+vec3 compress_gamut(vec3 rgb) {
+  /**
+   * Compresses out-of-gamut (negative) RGB colors into the gamut. As a a side
+   * effect, in-gamut colors that are close to the gamut boundary are also
+   * compressed by some amount, depending on the user-defined compression curve
+   * shape.
+   */
+  vec3 max_rgb = vec3(max3(rgb));  // [0, maxval]
+  vec3 rel_dist = gamut_distance(rgb);  // >1.0 means out of gamut
+  vec3 cdist = compress_distance(rel_dist);  // [0, >1] => [0, 1]
+  vec3 crgb = (1.0 - cdist) * max_rgb;  // [0, 1] * [0, maxval] = [0, maxval]
+  return crgb;
+}
+
+
+/**************************************************************************************/
+/*
 /*    G L O B A L   T O N E   M A P P I N G
 /*
 /**************************************************************************************/
@@ -366,12 +578,12 @@ vec3 gtm_neutral(vec3 rgb, float ymax) {
 }
 
 
-vec3 gtm_reinhard(vec3 rgb) {
+vec3 gtm_reinhard(vec3 rgb, int cspace) {
   /**
    * Compresses RGB colors from [0, inf] to [0, 1]. See apply_gtm() for
    * documentation.
    */
-  vec3 xyz = p3_to_xyz(rgb);
+  vec3 xyz = csconv(rgb, cspace, XYZ);
   float y_new = xyz.y / (1.0 + xyz.y);
   float ratio = y_new / xyz.y;
   rgb = rgb * ratio;
@@ -379,13 +591,14 @@ vec3 gtm_reinhard(vec3 rgb) {
 }
 
 
-vec3 apply_gtm(vec3 rgb, float ymax) {
+vec3 apply_gtm(vec3 rgb, int cspace) {
   /**
    * Applies the selected global tone mapping function (GTM) on the given HDR
-   * color. The input is assumed to be in a nominal [0, 1] scale, such that
-   * diffuse reflectances are in that range, whereas direct light sources and
-   * specular highlights can exceed 1.0, often by several orders of magnitude.
-   * For non-negative inputs, the output is guaranteed to be in [0, ymax].
+   * color. The input is assumed to be in the given color space, in a nominal
+   * [0, 1] scale, such that diffuse reflectances are in that range, whereas
+   * direct light sources and specular highlights can exceed 1.0, often by
+   * several orders of magnitude. For non-negative inputs, the output is
+   * guaranteed to be in [0, 1].
    *
    * The following GTM functions are available:
    *
@@ -395,10 +608,10 @@ vec3 apply_gtm(vec3 rgb, float ymax) {
    */
   switch (tonemap) {
     case 1:
-      rgb = gtm_neutral(rgb, ymax);
+      rgb = gtm_neutral(rgb, 1.0);
       break;
     case 2:
-      rgb = gtm_reinhard(rgb);
+      rgb = gtm_reinhard(rgb, cspace);
       break;
   }
   return rgb;
@@ -455,7 +668,10 @@ void main() {
   vec2 tc = flip(texcoords, mirror);
   color = sharpen ? conv2d(img, tc) : texture(img, tc);
   color.rgb *= autoexpose ? ae_gain : 1.0;
-  color.rgb = apply_gtm(color.rgb, 1.0);
+  color.rgb = color.rgb * exp(ev);  // exp(x) == 2^x
+  color.rgb = csconv(color.rgb, cs_in, cs_out);
+  color.rgb = apply_gtm(color.rgb, cs_out);
+  color.rgb = gamut.compress ? compress_gamut(color.rgb) : color.rgb;
   color.rgb = debug_indicators(color.rgb);
   color.rgb = apply_gamma(color.rgb);
 }

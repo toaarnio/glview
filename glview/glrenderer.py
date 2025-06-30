@@ -115,15 +115,8 @@ class GLRenderer:
             self.prog['orientation'] = orientation
             self.prog['grayscale'] = (texture.components == 1)
             self.prog['degamma'] = self.files.linearize[imgidx]
-            self.prog['cs_in'] = self.ui.cs_in
-            self.prog['cs_out'] = self.ui.cs_out
             self.prog['maxval'] = norm_maxvals[self.ui.normalize]
             self.prog['minval'] = norm_minvals[self.ui.normalize]
-            self.prog['ev'] = self.ui.ev
-            self.prog['gamut.compress'] = (self.ui.gamut_fit != 0)
-            self.prog['gamut.power'] = self.ui.gamut_pow
-            self.prog['gamut.thr'] = self.ui.gamut_thr
-            self.prog['gamut.scale'] = self._gamut(imgidx)
             self.vao.render(moderngl.TRIANGLE_STRIP)
 
             # Derive autoexposure gain for the current tile
@@ -159,11 +152,18 @@ class GLRenderer:
             self.postprocess['resolution'] = (vpw, vph)
             self.postprocess['magnification'] = magnification
             self.postprocess['mirror'] = self.ui.mirror_per_tile[i]
+            self.postprocess['cs_in'] = self.ui.cs_in
+            self.postprocess['cs_out'] = self.ui.cs_out
             self.postprocess['sharpen'] = self.ui.sharpen_per_tile[i]
             self.postprocess['kernel'] = np.resize(kernel, max_kernel_size)
             self.postprocess['kernw'] = kernel.shape[0]
             self.postprocess['autoexpose'] = self.ui.ae_per_tile[i]
             self.postprocess['ae_gain'] = self.ae_gain_per_tile[i]
+            self.postprocess['ev'] = self.ui.ev
+            self.postprocess['gamut.compress'] = (self.ui.gamut_fit != 0)
+            self.postprocess['gamut.power'] = self.ui.gamut_pow
+            self.postprocess['gamut.thr'] = self.ui.gamut_thr
+            self.postprocess['gamut.scale'] = self._gamut(imgidx)
             self.postprocess['tonemap'] = int(self.ui.tonemap_per_tile[i]) * 2
             self.postprocess['gamma'] = self.ui.gamma
             self.postprocess['debug'] = self.ui.debug_mode
