@@ -42,6 +42,8 @@ class GLRenderer:
         self.tprev = None
         self.tile_colors = self.tile_debug_colors if verbose else self.tile_normal_colors
         self.fps = np.zeros(20)
+        self.ae_gain_per_tile = np.ones(4)
+        self.ae_converged = [True, True, True, True]
 
     def init(self):
         """ Initialize an OpenGL context and attach it to an existing window. """
@@ -63,7 +65,6 @@ class GLRenderer:
         self.vao_post = self.ctx.vertex_array(self.postprocess, [(self.vbo, "2f", "vert")])
         self.tprev = time.time()
         _ = self.ctx.error  # clear the GL error flag (workaround for a bug that prevents interoperability with Pyglet)
-
 
     def redraw(self, target: moderngl.Framebuffer | None = None):  # noqa: PLR0915
         """ Redraw the tiled image view with refreshed pan & zoom, filtering, etc. """
@@ -125,6 +126,21 @@ class GLRenderer:
             self.prog['gamut.scale'] = self._gamut(imgidx)
             self.vao.render(moderngl.TRIANGLE_STRIP)
 
+            # Derive autoexposure gain for the current tile
+
+            if self.ui.ae_per_tile[i]:
+                imgw = scalex * vpw * self.ui.scale[i]
+                imgh = scaley * vph * self.ui.scale[i]
+                imgw = min(int(imgw), vpw)
+                imgh = min(int(imgh), vph)
+                ae_gain = self.autoexposure(self.fbo.color_attachments[0], imgw, imgh)
+                if ae_gain is not None:
+                    self.ae_gain_per_tile[i] = ae_gain * 0.2 + self.ae_gain_per_tile[i] * 0.8
+                    self.ae_converged[i] = np.isclose(ae_gain, self.ae_gain_per_tile[i])
+            else:
+                self.ae_gain_per_tile[i] = 1.0
+                self.ae_converged[i] = False
+
             # Render the current tile from an offscreen texture to the screen (or
             # the given render target), applying any screen-space postprocessing
             # effects on the fly, plus gamma as the final step
@@ -146,6 +162,8 @@ class GLRenderer:
             self.postprocess['sharpen'] = self.ui.sharpen_per_tile[i]
             self.postprocess['kernel'] = np.resize(kernel, max_kernel_size)
             self.postprocess['kernw'] = kernel.shape[0]
+            self.postprocess['autoexpose'] = self.ui.ae_per_tile[i]
+            self.postprocess['ae_gain'] = self.ae_gain_per_tile[i]
             self.postprocess['tonemap'] = self.ui.tonemap_per_tile[i]
             self.postprocess['gamma'] = self.ui.gamma
             self.postprocess['debug'] = self.ui.debug_mode
@@ -159,6 +177,59 @@ class GLRenderer:
         self.tprev = time.time()
         self._vprint(f"rendering {w} x {h} pixels took {elapsed:.1f} ms, frame-to-frame interval was {interval:.1f} ms", log_level=2)
         return elapsed
+
+    def autoexposure(self, texture: moderngl.Texture, imgw: int, imgh: int) -> float:
+        """
+        Calculate a gain factor to apply to the image to achieve a certain
+        target brightness. The calculation is based on the log-average
+        luminance of the image, which is a good approximation of how the
+        human eye perceives brightness.
+
+        To speed up the calculation, the image is first downscaled to a
+        small thumbnail using mipmaps. The thumbnail is then read back
+        from the GPU and the log-average luminance is calculated on the CPU.
+
+        :param texture: texture to analyze
+        :param imgw: width of the image in the viewport
+        :param imgh: height of the image in the viewport
+        :returns: autoexposure gain factor to apply to the image, or None
+                  if the size of the image in the viewport is too small to
+                  compute the gain
+        """
+        ae_gain = None
+        if imgw * imgh >= 16:
+            texw, texh = texture.size
+            stats_level = np.log2(max(texw, texh) / 128)
+            stats_level = int(max(stats_level, 0))
+            texture.build_mipmaps(max_level=stats_level)
+            statsw = texw // 2 ** stats_level
+            statsh = texh // 2 ** stats_level
+            stats = texture.read(stats_level)
+            stats = np.frombuffer(stats, dtype="f4")
+            stats = stats.reshape(statsh, statsw, 3)[::-1]
+            stats_vp = self.crop_borders(stats)
+            stats_vp = stats_vp[1:-1, 1:-1]  # crop 1-pixel borders tainted by mipmapping
+            if stats_vp.size >= 1:
+                ae_gain = self.logarithmic_autoexposure(stats_vp)
+                return ae_gain
+        return ae_gain
+
+    def logarithmic_autoexposure(self, img):
+        luma = np.mean(img, axis=2)
+        log_luma = np.log(luma + 1e-7)
+        avg_luma = np.mean(log_luma)
+        scene_luma = np.exp(avg_luma)
+        ae_gain = 0.18 / scene_luma
+        return ae_gain
+
+    def crop_borders(self, img):
+        nonzero = np.any(img != 0.0, axis=2)
+        rowmask = np.any(nonzero, axis=1)
+        img = img[rowmask, :]
+        nonzero = np.any(img != 0.0, axis=2)
+        colmask = np.any(nonzero, axis=0)
+        img = img[:, colmask]
+        return img
 
     def upload_texture(self, idx, piecewise):
         """

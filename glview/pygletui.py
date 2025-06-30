@@ -45,6 +45,7 @@ class PygletUI:
         self.texture_filter = "NEAREST"
         self.img_per_tile = [0, 1, 2, 3]
         self.tonemap_per_tile = [False, False, False, False]
+        self.ae_per_tile = [False, False, False, False]
         self.sharpen_per_tile = [False, False, False, False]
         self.mirror_per_tile = [0, 0, 0, 0]
         self.images_pending = True
@@ -164,12 +165,14 @@ class PygletUI:
         norm = ["off", "max", "stretch", "99.5%", "98%", "95%", "90%", "mean"][self.normalize]
         gtm = np.asarray(["N", "Y"])[np.asarray(self.tonemap_per_tile).astype(int)]
         gtm = "".join(gtm)[:self.numtiles]  # [False, True, True, False] => "NYYN"
+        ae = np.asarray(["N", "Y"])[np.asarray(self.ae_per_tile).astype(int)]
+        ae = "".join(ae)[:self.numtiles]  # [False, True, True, False] => "NYYN"
         sharpen = np.asarray(["N", "Y"])[np.asarray(self.sharpen_per_tile).astype(int)]
-        sharpen = "".join(sharpen)[:self.numtiles]
+        sharpen = "".join(sharpen)[:self.numtiles]  # [False, True, True, False] => "NYYN"
         gamma = ["off", "sRGB", "HLG", "HDR10"][self.gamma]
         gamut = "clip" if not self.gamut_fit else f"fit p = {self.gamut_pow[0]:.1f}"
         caption = f"glview {ver} | {self.ev:+1.2f}EV | norm {norm} | {csc} | "
-        caption += f"gamut {gamut} | tonemap {gtm} | sharpen {sharpen} | gamma {gamma} | {fps:.0f} fps"
+        caption += f"gamut {gamut} | ae {ae} | tonemap {gtm} | sharpen {sharpen} | gamma {gamma} | {fps:.0f} fps"
 
         # Filenames and paths are hard to fit into the title bar in multi-tile mode,
         # so we need to make a compromise: show filenames if all files are in the same
@@ -318,7 +321,7 @@ class PygletUI:
     def _setup_draw_event(self):
         @self.window.event
         def on_draw():
-            if self.need_redraw:
+            if self.need_redraw or not np.all(self.renderer.ae_converged):
                 self.renderer.redraw()
                 self.window.set_caption(self._caption())
                 self.window.flip()
@@ -430,6 +433,9 @@ class PygletUI:
                     case keys.G:  # cycle through gamma modes (global)
                         self.gamma = (self.gamma + 1) % 4
                         self.need_redraw = True
+                    case keys.A:  # toggle autoexposure on/off (current tile)
+                        self.ae_per_tile[self.tileidx] = not self.ae_per_tile[self.tileidx]
+                        self.need_redraw = True
                     case keys.C:  # toggle tone mapping on/off (current tile)
                         self.tonemap_per_tile[self.tileidx] = not self.tonemap_per_tile[self.tileidx]
                         self.need_redraw = True
@@ -466,8 +472,9 @@ class PygletUI:
                         self.need_redraw = True
                     case keys.P if self.numtiles == 2:  # flip image pair
                         self.img_per_tile[:2] = self.img_per_tile[:2][::-1]
-                        self.sharpen_per_tile[:2] = self.sharpen_per_tile[:2][::-1]
+                        self.ae_per_tile[:2] = self.ae_per_tile[:2][::-1]
                         self.tonemap_per_tile[:2] = self.tonemap_per_tile[:2][::-1]
+                        self.sharpen_per_tile[:2] = self.sharpen_per_tile[:2][::-1]
                         self.window.set_caption(self._caption())
                         self.need_redraw = True
                     case keys.R:  # rotate (current image)

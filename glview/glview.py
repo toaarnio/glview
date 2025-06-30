@@ -181,6 +181,7 @@ def main():  # noqa: PLR0915
         print("    r                       [per-image] rotate 90 degrees clockwise")
         print("    l                       [per-image] toggle linearization on/off")
         print("    m                       [per-tile] toggle mirroring x/y/both/none")
+        print("    a                       [per-tile] toggle autoexposure on/off")
         print("    z                       [per-tile] toggle sharpening on/off")
         print("    c                       [per-tile] toggle tonemapping on/off")
         print("    x                       [per-tile] print image information (EXIF)")
