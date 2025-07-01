@@ -8,14 +8,16 @@ uniform sampler2D img;
 uniform ivec2 resolution;
 uniform float magnification;
 uniform int mirror;
-uniform int cs_in;
-uniform int cs_out;
 uniform bool sharpen;
 uniform float kernel[MAX_KERNEL_WIDTH * MAX_KERNEL_WIDTH];
 uniform int kernw;
+uniform float maxval;
+uniform float minval;
 uniform bool autoexpose;
 uniform float ae_gain;
 uniform float ev;
+uniform int cs_in;
+uniform int cs_out;
 uniform int tonemap;
 uniform int gamma;
 uniform int debug;
@@ -667,6 +669,7 @@ vec3 debug_indicators(vec3 rgb) {
 void main() {
   vec2 tc = flip(texcoords, mirror);
   color = sharpen ? conv2d(img, tc) : texture(img, tc);
+  color.rgb = (color.rgb - minval) / maxval;
   color.rgb *= autoexpose ? ae_gain : 1.0;
   color.rgb = color.rgb * exp(ev);  // exp(x) == 2^x
   color.rgb = csconv(color.rgb, cs_in, cs_out);

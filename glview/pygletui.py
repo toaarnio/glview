@@ -45,6 +45,7 @@ class PygletUI:
         self.texture_filter = "NEAREST"
         self.img_per_tile = [0, 1, 2, 3]
         self.ae_per_tile = [False, False, False, False]
+        self.ae_reset_per_tile = [False, False, False, False]
         self.tonemap_per_tile = [False, False, False, False]
         self.sharpen_per_tile = [False, False, False, False]
         self.mirror_per_tile = [0, 0, 0, 0]
@@ -425,6 +426,7 @@ class PygletUI:
                         self.ev_linear = 0.0
                         self.gamut_lin = 0.0
                         self.gamut_fit = 0
+                        self.ae_reset_per_tile = [True, True, True, True]
                         self.need_redraw = True
                     case keys.L:  # toggle linearization on/off (current image)
                         imgidx = self.img_per_tile[self.tileidx]
@@ -435,6 +437,7 @@ class PygletUI:
                         self.need_redraw = True
                     case keys.A:  # toggle autoexposure on/off (current tile)
                         self.ae_per_tile[self.tileidx] = not self.ae_per_tile[self.tileidx]
+                        self.ae_reset_per_tile[self.tileidx] = True
                         self.need_redraw = True
                     case keys.C:  # toggle tone mapping on/off (current tile)
                         self.tonemap_per_tile[self.tileidx] = not self.tonemap_per_tile[self.tileidx]
@@ -453,6 +456,7 @@ class PygletUI:
                         self.need_redraw = True
                     case keys.N:  # normalize off/max/... (global)
                         self.normalize = (self.normalize + 1) % 8
+                        self.ae_reset_per_tile = [True, True, True, True]
                         self.need_redraw = True
                     case keys.T:  # texture filtering (global)
                         self.texture_filter = "LINEAR" if self.texture_filter == "NEAREST" else "NEAREST"
@@ -543,6 +547,7 @@ class PygletUI:
                 imgidx = self.img_per_tile[self.tileidx]
                 imgidx = (imgidx + incr) % self.files.numfiles
                 self.img_per_tile[self.tileidx] = imgidx
+                self.ae_reset_per_tile[self.tileidx] = True
                 self.window.set_caption(self._caption())
                 self.need_redraw = True
             if motion in [keys.MOTION_NEXT_WORD, keys.MOTION_PREVIOUS_WORD]:
@@ -556,6 +561,7 @@ class PygletUI:
                 active_tiles = active_tiles % self.files.numfiles
                 self.img_per_tile[:self.numtiles] = active_tiles
                 self.window.set_caption(self._caption())
+                self.ae_reset_per_tile = [True, True, True, True]
                 self.need_redraw = True
 
     def _try(self, func):

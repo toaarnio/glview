@@ -2,12 +2,12 @@
 
 precision highp float;
 
-uniform bool grayscale;
-uniform bool degamma;
+uniform sampler2D img;
+uniform int orientation;
 uniform float maxval;
 uniform float minval;
-uniform int orientation;
-uniform sampler2D img;
+uniform bool degamma;
+uniform bool grayscale;
 
 in vec2 texcoords;
 out vec4 color;
