@@ -270,8 +270,11 @@ class GLRenderer:
             nchans_match = texture.components == components
             if sizes_match and dtypes_match and nchans_match:
                 scale = 255 if img.dtype == np.uint8 else 1.0
-                texture.extra.maxval = np.max(img[img >= 0.0], initial=0.0) / scale
-                texture.extra.minval = np.min(img[img >= 0.0], initial=0.0) / scale
+                stats = np.max(img[::16, ::16], axis=-1) / scale
+                texture.extra.minval = np.min(stats, initial=0.0)
+                texture.extra.maxval = np.max(stats, initial=0.0)
+                texture.extra.meanval = np.mean(stats)
+                texture.extra.percentiles = np.percentile(stats, [99.5, 98, 95, 90])
                 texture.extra.done = False
                 texture.extra.upload_done = False
                 texture.extra.mipmaps_done = False
@@ -298,9 +301,12 @@ class GLRenderer:
         components = img.shape[2] if img.ndim == 3 else 1  # RGB/RGBA/grayscale
         texture = self.ctx.texture((w, h), components, data=None, dtype=dtype)
         scale = 255 if img.dtype == np.uint8 else 1.0
+        stats = np.max(img[::16, ::16], axis=-1) / scale
         texture.extra = types.SimpleNamespace()
-        texture.extra.maxval = np.max(img[img >= 0.0], initial=0.0) / scale
-        texture.extra.minval = np.min(img[img >= 0.0], initial=0.0) / scale
+        texture.extra.minval = np.min(stats, initial=0.0)
+        texture.extra.maxval = np.max(stats, initial=0.0)
+        texture.extra.meanval = np.mean(stats)
+        texture.extra.percentiles = np.percentile(stats, [99.5, 98, 95, 90])
         texture.extra.done = False
         texture.extra.upload_done = False
         texture.extra.mipmaps_done = False
@@ -309,8 +315,6 @@ class GLRenderer:
         texture.extra.components = components
         texture.extra.img = img
         texture.extra.rows_uploaded = 0
-        texture.extra.meanval = 1.0  # compute later from mipmaps
-        texture.extra.percentiles = np.ones(4)  # compute later from mipmaps
         return texture
 
     def _upload_texture_slice(self, texture, nrows):
@@ -346,18 +350,16 @@ class GLRenderer:
 
     def _texture_stats(self, texture):
         if texture.extra.mipmaps_done:
-            mip_lvl = 3 if min(texture.size) >= 128 else 0
+            mip_lvl = 4 if min(texture.size) >= 128 else 0
             stats = texture.read(level=int(mip_lvl))
             stats = np.frombuffer(stats, dtype=texture.extra.dtype)
             stats = stats.reshape(-1, texture.extra.components)
-            if texture.extra.dtype == np.uint8:
-                meanval = np.mean(np.max(stats, axis=-1)) / 255
-                pct = np.percentile(np.max(stats, axis=-1), [99.5, 98, 95, 90]) / 255
-            else:
-                meanval = np.mean(np.max(stats, axis=-1))
-                pct = np.percentile(np.max(stats, axis=-1), [99.5, 98, 95, 90])
-            texture.extra.meanval = meanval
-            texture.extra.percentiles = pct
+            scale = 255 if texture.extra.dtype == np.uint8 else 1.0
+            pixel_max = np.max(stats, axis=-1) / scale
+            texture.extra.minval = np.min(pixel_max)
+            texture.extra.maxval = np.max(pixel_max)
+            texture.extra.meanval = np.mean(pixel_max)
+            texture.extra.percentiles = np.percentile(pixel_max, [99.5, 98, 95, 90])
 
     def _sharpen(self, sigma: float, strength: float) -> np.ndarray:
         """
