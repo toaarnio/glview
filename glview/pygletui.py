@@ -441,6 +441,7 @@ class PygletUI:
                         self.need_redraw = True
                     case keys.C:  # toggle tone mapping on/off (current tile)
                         self.tonemap_per_tile[self.tileidx] = not self.tonemap_per_tile[self.tileidx]
+                        self.ae_reset_per_tile[self.tileidx] = True
                         self.need_redraw = True
                     case keys.I:  # input color space (global)
                         self.cs_in = (self.cs_in + 1) % 4
@@ -477,6 +478,7 @@ class PygletUI:
                     case keys.P if self.numtiles == 2:  # flip image pair
                         self.img_per_tile[:2] = self.img_per_tile[:2][::-1]
                         self.ae_per_tile[:2] = self.ae_per_tile[:2][::-1]
+                        self.ae_reset_per_tile[:2] = [True, True]
                         self.tonemap_per_tile[:2] = self.tonemap_per_tile[:2][::-1]
                         self.sharpen_per_tile[:2] = self.sharpen_per_tile[:2][::-1]
                         self.window.set_caption(self._caption())

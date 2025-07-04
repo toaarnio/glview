@@ -177,7 +177,7 @@ class GLRenderer:
             self.postprocess['ev'] = self.ui.ev
             self.postprocess['cs_in'] = self.ui.cs_in
             self.postprocess['cs_out'] = self.ui.cs_out
-            self.postprocess['tonemap'] = int(self.ui.tonemap_per_tile[i]) * 2
+            self.postprocess['tonemap'] = int(self.ui.tonemap_per_tile[i]) * 3
             self.postprocess['gamut.compress'] = (self.ui.gamut_fit != 0)
             self.postprocess['gamut.power'] = self.ui.gamut_pow
             self.postprocess['gamut.thr'] = self.ui.gamut_thr

@@ -593,20 +593,55 @@ vec3 gtm_reinhard(vec3 rgb, int cspace) {
 }
 
 
-vec3 apply_gtm(vec3 rgb, int cspace) {
+vec3 filmic_curve(vec3 x) {
+  float A = 0.15;  // shoulder strength (default: 0.15)
+  float B = 0.50;  // linear strength (default: 0.50)
+  float C = 0.10;  // linear angle (default: 0.10)
+  float D = 0.20;  // toe strength (default: 0.20)
+  float E = 0.02;  // toe numerator (default: 0.02)
+  float F = 0.30;  // toe denominator (default: 0.30)
+  // smooth non-linear curve for x > 0
+  vec3 numerator = x * (A * x + C * B) + D * E;
+  vec3 denominator = x * (A * x + B) + D * F;
+  float bias = E / F;
+  vec3 pos = numerator / denominator - bias;
+  // linear extension for x < 0
+  float slope = B * (C * F - E) / (D * F * F);
+  vec3 neg = x * slope;
+  vec3 y = mix(pos, neg, lessThan(x, zeros));
+  return y;
+}
+
+
+vec3 gtm_filmic(vec3 rgb, vec3 whitelevel) {
   /**
-   * Applies the selected global tone mapping function (GTM) on the given HDR
-   * color. The input is assumed to be in the given color space, in a nominal
-   * [0, 1] scale, such that diffuse reflectances are in that range, whereas
-   * direct light sources and specular highlights can exceed 1.0, often by
-   * several orders of magnitude. For non-negative inputs, the output is
-   * guaranteed to be in [0, 1].
+   * A filmic tonemapping operator based on the Uncharted 2 curve with
+   * a smooth linear extension for negative (out-of-gamut) inputs. This
+   * provides a more cinematic and perceptually pleasing result than
+   * simple Reinhard, with better saturation and highlight rolloff.
+   *
+   * See http://filmicworlds.com/blog/filmic-tonemapping-operators/ for
+   * background and https://www.desmos.com/calculator/jimezytyho for an
+   * interactive visualization.
+   */
+  rgb = filmic_curve(rgb) / filmic_curve(whitelevel);
+  return rgb;
+}
+
+
+vec3 apply_gtm(vec3 rgb, int cspace, float whitelevel) {
+  /**
+   * Applies the selected global tone mapping (GTM) function on the given HDR
+   * color. The input is assumed to be in an RGB color space wherein (1, 1, 1)
+   * represents diffuse white. Specular highlights may exceed the [0, 1] range
+   * by orders of magnitude.
    *
    * The following GTM functions are available:
    *
    *   0 - none
-   *   1 - neutral
-   *   2 - reinhard
+   *   1 - neutral - `cspace` and `whitelevel` are not needed
+   *   2 - reinhard - `cspace` is required for computing luminance
+   *   3 - filmic - [0, whitelevel] gets mapped to [0, 1]
    */
   switch (tonemap) {
     case 1:
@@ -614,6 +649,9 @@ vec3 apply_gtm(vec3 rgb, int cspace) {
       break;
     case 2:
       rgb = gtm_reinhard(rgb, cspace);
+      break;
+    case 3:
+      rgb = gtm_filmic(rgb, vec3(whitelevel));
       break;
   }
   return rgb;
@@ -668,12 +706,12 @@ vec3 debug_indicators(vec3 rgb) {
 
 void main() {
   vec2 tc = flip(texcoords, mirror);
+  float gain = autoexpose ? ae_gain * exp(ev) : exp(ev);  // exp(x) == 2^x
   color = sharpen ? conv2d(img, tc) : texture(img, tc);
-  color.rgb = (color.rgb - minval) / maxval;
-  color.rgb *= autoexpose ? ae_gain : 1.0;
-  color.rgb = color.rgb * exp(ev);  // exp(x) == 2^x
+  color.rgb = (color.rgb - minval) / maxval;  // [minval, maxval] => [0, 1]
+  color.rgb *= gain;
   color.rgb = csconv(color.rgb, cs_in, cs_out);
-  color.rgb = apply_gtm(color.rgb, cs_out);
+  color.rgb = apply_gtm(color.rgb, cs_out, maxval * gain);
   color.rgb = gamut.compress ? compress_gamut(color.rgb) : color.rgb;
   color.rgb = debug_indicators(color.rgb);
   color.rgb = apply_gamma(color.rgb);
