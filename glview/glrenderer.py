@@ -122,8 +122,6 @@ class GLRenderer:
             self.prog['orientation'] = orientation
             self.prog['grayscale'] = (texture.components == 1)
             self.prog['degamma'] = self.files.linearize[imgidx]
-            self.prog['maxval'] = 1.0
-            self.prog['minval'] = 0.0
             self.vao.render(moderngl.TRIANGLE_STRIP)
 
             # Derive autoexposure gain for the current tile

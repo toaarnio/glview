@@ -4,8 +4,6 @@ precision highp float;
 
 uniform sampler2D img;
 uniform int orientation;
-uniform float maxval;
-uniform float minval;
 uniform bool degamma;
 uniform bool grayscale;
 
@@ -69,7 +67,6 @@ vec2 rotate(vec2 tc, int degrees) {
 
 void main() {
   color = texture(img, rotate(texcoords, orientation));
-  color.rgb = (color.rgb - minval) / maxval;
   color.rgb = degamma ? srgb_degamma(color.rgb) : color.rgb;
   color.rgb = grayscale ? color.rrr : color.rgb;
 }
