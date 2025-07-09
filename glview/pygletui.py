@@ -47,6 +47,7 @@ class PygletUI:
         self.ae_per_tile = [False, False, False, False]
         self.ae_reset_per_tile = [False, False, False, False]
         self.tonemap_per_tile = [False, False, False, False]
+        self.gamutmap_per_tile = [False, False, False, False]
         self.sharpen_per_tile = [False, False, False, False]
         self.mirror_per_tile = [0, 0, 0, 0]
         self.images_pending = True
@@ -57,11 +58,9 @@ class PygletUI:
         self.ev_range = 2
         self.ev_linear = 0.0
         self.ev = 0.0
-        self.gamut_fit = 0  # 0|1|2...
+        self.gamut_pow = np.ones(3) * 5.0
         self.gamut_lim = np.ones(3) * 1.1
-        self.gamut_pow = np.ones(3) * 1.5
         self.gamut_thr = np.ones(3) * 0.8
-        self.gamut_lin = 0.0
         self.ss_idx = 0
 
     def start(self, renderer):
@@ -168,12 +167,13 @@ class PygletUI:
         ae = "".join(ae)[:self.numtiles]  # [False, True, True, False] => "NYYN"
         gtm = np.asarray(["N", "Y"])[np.asarray(self.tonemap_per_tile).astype(int)]
         gtm = "".join(gtm)[:self.numtiles]  # [False, True, True, False] => "NYYN"
+        gmap = np.asarray(["N", "Y"])[np.asarray(self.gamutmap_per_tile).astype(int)]
+        gmap = "".join(gmap)[:self.numtiles]  # [False, True, True, False] => "NYYN"
         sharpen = np.asarray(["N", "Y"])[np.asarray(self.sharpen_per_tile).astype(int)]
         sharpen = "".join(sharpen)[:self.numtiles]  # [False, True, True, False] => "NYYN"
         gamma = ["off", "sRGB", "HLG", "HDR10"][self.gamma]
-        gamut = "clip" if not self.gamut_fit else f"fit p = {self.gamut_pow[0]:.1f}"
         caption = f"glview {ver} | {self.ev:+1.2f}EV | norm {norm} | {csc} | "
-        caption += f"gamut {gamut} | ae {ae} | tonemap {gtm} | sharpen {sharpen} | gamma {gamma} | {fps:.0f} fps"
+        caption += f"ae {ae} | tonemap {gtm} | gamut {gmap} | sharpen {sharpen} | gamma {gamma} | {fps:.0f} fps"
 
         # Filenames and paths are hard to fit into the title bar in multi-tile mode,
         # so we need to make a compromise: show filenames if all files are in the same
@@ -285,22 +285,6 @@ class PygletUI:
             self.ev_linear += 0.005 * self.key_state[keys.E]
             self.need_redraw = True
         self.ev = self._triangle_wave(self.ev_linear, self.ev_range)
-
-    def _switch_gamut_curve(self):
-        # cycle through a predefined selection of gamut compression modes:
-        #  0 - off
-        #  1 - steep curve, almost like clipping
-        #  2 - shallow curve, strong desaturation
-        presets = [None, (10.0, 1.1, 0.8), (3.0, 1.2, 0.8)]
-        self.gamut_fit = (self.gamut_fit + 1) % len(presets)
-        if (selection := presets[self.gamut_fit]) is not None:
-            power, limit, threshold = selection
-            self.gamut_pow = np.ones(3) * power
-            self.gamut_lim = np.ones(3) * limit
-            self.gamut_thr = np.ones(3) * threshold
-            self._vprint(f"Gamut curve shape: pow = {power}, lim = {limit}, thr = {threshold}")
-        else:
-            self._vprint("Gamut compression off")
 
     def _crop_borders(self, img):
         nonzero = np.any(img != 0.0, axis=2)
@@ -420,12 +404,10 @@ class PygletUI:
                         self.was_resized = True
                         self.window.set_fullscreen(self.fullscreen)
                         self.window.set_mouse_visible(not self.fullscreen)
-                    case keys.H:  # reset exposure + zoom & pan + gtm + gamut (global)
+                    case keys.H:  # reset exposure + zoom & pan
                         self.scale = np.ones(4)
                         self.mousepos = np.zeros((4, 2))
                         self.ev_linear = 0.0
-                        self.gamut_lin = 0.0
-                        self.gamut_fit = 0
                         self.ae_reset_per_tile = [True, True, True, True]
                         self.need_redraw = True
                     case keys.L:  # toggle linearization on/off (current image)
@@ -443,6 +425,12 @@ class PygletUI:
                         self.tonemap_per_tile[self.tileidx] = not self.tonemap_per_tile[self.tileidx]
                         self.ae_reset_per_tile[self.tileidx] = True
                         self.need_redraw = True
+                    case keys.K:  # toggle gamut mapping on/off (current tile)
+                        self.gamutmap_per_tile[self.tileidx] = not self.gamutmap_per_tile[self.tileidx]
+                        self.need_redraw = True
+                    case keys.Z:  # toggle sharpening on/off (current tile)
+                        self.sharpen_per_tile[self.tileidx] = not self.sharpen_per_tile[self.tileidx]
+                        self.need_redraw = True
                     case keys.I:  # input color space (global)
                         self.cs_in = (self.cs_in + 1) % 4
                         self.need_redraw = True
@@ -451,9 +439,6 @@ class PygletUI:
                         self.need_redraw = True
                     case keys.B:  # toggle narrow/wide exposure control (global)
                         self.ev_range = (self.ev_range + 6) % 12
-                        self.need_redraw = True
-                    case keys.K: # cycle through gamut compression modes (global)
-                        self._switch_gamut_curve()
                         self.need_redraw = True
                     case keys.N:  # normalize off/max/... (global)
                         self.normalize = (self.normalize + 1) % 8
@@ -508,9 +493,6 @@ class PygletUI:
                         imgio.imwrite(f"screenshot{self.ss_idx:02d}.jpg", screenshot_uint8, maxval=255, verbose=True)
                         imgio.imwrite(f"screenshot{self.ss_idx:02d}.pfm", screenshot_fp32, maxval=1.0, verbose=True)
                         self.ss_idx += 1
-                    case keys.Z:
-                        self.sharpen_per_tile[self.tileidx] = not self.sharpen_per_tile[self.tileidx]
-                        self.need_redraw = True
                     case keys.SPACE:  # toggle debug mode on/off
                         N = self.debug_selected
                         self.debug_mode = (self.debug_mode + N) % (N * 2)

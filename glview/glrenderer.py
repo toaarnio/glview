@@ -178,7 +178,7 @@ class GLRenderer:
             self.postprocess['cs_in'] = self.ui.cs_in
             self.postprocess['cs_out'] = self.ui.cs_out
             self.postprocess['tonemap'] = int(self.ui.tonemap_per_tile[i]) * 3
-            self.postprocess['gamut.compress'] = (self.ui.gamut_fit != 0)
+            self.postprocess['gamut.compress'] = self.ui.gamutmap_per_tile[i]
             self.postprocess['gamut.power'] = self.ui.gamut_pow
             self.postprocess['gamut.thr'] = self.ui.gamut_thr
             self.postprocess['gamut.scale'] = self._gamut(imgidx)
