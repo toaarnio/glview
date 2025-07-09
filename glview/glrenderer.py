@@ -4,7 +4,6 @@ import os                      # built-in library
 import time                    # built-in library
 import struct                  # built-in library
 import threading               # built-in library
-import types                   # built-in library
 import numpy as np             # pip install numpy
 import scipy                   # pip install scipy
 import moderngl                # pip install moderngl
@@ -12,9 +11,11 @@ import moderngl                # pip install moderngl
 try:
     # package mode
     from glview import ae
+    from glview.texture import Texture
 except ImportError:
     # stand-alone mode
     import ae
+    from texture import Texture
 
 
 class GLRenderer:
@@ -90,16 +91,17 @@ class GLRenderer:
         for i in range(self.ui.numtiles):
             imgidx = self.ui.img_per_tile[i]
             texture = self.upload_texture(imgidx, piecewise=False)
-            texture.filter = self.filters[self.ui.texture_filter]
-            if not texture.extra.mipmaps_done:
-                texture.filter = self.filters["NEAREST"]
+            gpu_texture = texture.texture
+            gpu_texture.filter = self.filters[self.ui.texture_filter]
+            if not texture.mipmaps_done:
+                gpu_texture.filter = self.filters["NEAREST"]
                 self._vprint(f"Texture #{imgidx} not fully uploaded yet, disabling mipmaps")
-            texture.repeat_x = False
-            texture.repeat_y = False
-            texture.swizzle = 'RGB1'
-            texture.use(location=0)
+            gpu_texture.repeat_x = False
+            gpu_texture.repeat_y = False
+            gpu_texture.swizzle = 'RGB1'
+            gpu_texture.use(location=0)
             orientation = self.files.orientations[imgidx]
-            texw, texh = texture.width, texture.height
+            texw, texh = gpu_texture.width, gpu_texture.height
             texw, texh = (texh, texw) if orientation in [90, 270] else (texw, texh)
             scalex, scaley = self._get_aspect_ratio(vpw, vph, texw, texh)
 
@@ -116,11 +118,11 @@ class GLRenderer:
             self.prog['scale'] = self.ui.scale[i]
             self.prog['aspect'] = (scalex, scaley)
             self.prog['orientation'] = orientation
-            self.prog['grayscale'] = (texture.components == 1)
+            self.prog['grayscale'] = (gpu_texture.components == 1)
             self.prog['degamma'] = self.files.linearize[imgidx]
             self.vao.render(moderngl.TRIANGLE_STRIP)
 
-            # Derive an exposure gain for the current tile, to be applied in the
+            # Derive exposure parameters for the current tile, to be applied in the
             # second rendering pass
 
             if self.ui.ae_per_tile[i]:
@@ -129,7 +131,7 @@ class GLRenderer:
                 imgw = min(int(imgw), vpw)
                 imgh = min(int(imgh), vph)
                 blacklevel = 0.0
-                whitelevel = texture.extra.percentiles[0]  # global whitelevel = 99.5th percentile
+                whitelevel = texture.percentiles[0]  # global whitelevel = 99.5th percentile
                 ae_gain = ae.autoexposure(self.fbo.color_attachments[0], whitelevel, imgw, imgh)
                 if ae_gain is not None:
                     if self.ui.ae_reset_per_tile[i]:
@@ -139,10 +141,10 @@ class GLRenderer:
                         self.ae_gain_per_tile[i] = ae_gain * 0.1 + self.ae_gain_per_tile[i] * 0.9
                     self.ae_converged[i] = np.isclose(ae_gain, self.ae_gain_per_tile[i], rtol=0.01)
             else:
-                maxval = texture.extra.maxval
-                minval = texture.extra.minval
-                meanval = texture.extra.meanval
-                percentiles = texture.extra.percentiles  # [99.5, 98, 95, 90]
+                maxval = texture.maxval
+                minval = texture.minval
+                meanval = texture.meanval
+                percentiles = texture.percentiles
                 norm_maxvals = np.r_[1, maxval, maxval, percentiles, meanval / 0.18]
                 norm_minvals = np.r_[0, 0, minval, 0, 0, 0, 0, 0]
                 whitelevel = norm_maxvals[self.ui.normalize]
@@ -159,7 +161,7 @@ class GLRenderer:
             target.viewport = self.ui.viewports[i]
             target.clear(viewport=target.viewport)
             self.fbo.color_attachments[0].use(location=0)
-            magnification = scalex * vpw / (texture.width / self.ui.scale[i])
+            magnification = scalex * vpw / (gpu_texture.width / self.ui.scale[i])
             max_kernel_size = self.postprocess['kernel'].array_length
             kernel = self._sharpen(sigma=0.75, strength=0.5)
             self.postprocess['img'] = 0
@@ -206,163 +208,60 @@ class GLRenderer:
         images.
         """
         img = self.loader.get_image(idx)
-        assert isinstance(img, np.ndarray | str), type(img)
+        texture = self.files.textures[idx]
+
         if isinstance(img, np.ndarray):
-            texture = self._init_empty_texture(self.files.textures[idx], img)
-            texture.extra.idx = idx
+            if texture:
+                tex = texture.texture
+                sizes_match = tex.size[::-1] == img.shape[:2]
+                dtypes_match = texture.dtype == img.dtype
+                nchans_match = tex.components == (img.shape[2] if img.ndim == 3 else 1)
+                if sizes_match and dtypes_match and nchans_match:
+                    texture.img = img
+                    texture.rows_uploaded = 0
+                    texture.upload_done = False
+                    texture.mipmaps_done = False
+                    texture.stats_done = False
+                    texture._precompute_stats()
+                else:
+                    texture.release()
+                    texture = Texture(self.ctx, img, idx)
+            else:
+                texture = Texture(self.ctx, img, idx)
+
             self.files.textures[idx] = texture
-            nrows = 100 if piecewise else texture.height
-            self._upload_texture_slice(texture, nrows)
             self.loader.release_image(idx)
-        elif self.files.textures[idx] is None:  # PENDING | INVALID | RELEASED
-            texture = self._create_dummy_texture()
+
+        elif texture is None:
+            texture = Texture(self.ctx, idx=idx)
             self.files.textures[idx] = texture
-        else:  # RELEASED
-            texture = self.files.textures[idx]
-            nrows = 100 if piecewise else texture.height
-            self._upload_texture_slice(texture, nrows)
+
+        self.process_texture(texture, piecewise)
         return texture
 
-    def screenshot(self, dtype=np.uint8):
+    def process_texture(self, texture: Texture, piecewise: bool):
         """
-        Render the current on-screen view into an offscreen buffer and return the image
-        as a NumPy array.
+        Handles progressive upload, mipmap generation, and stats calculation.
         """
-        assert dtype in [np.uint8, np.float32], dtype
-        t0 = time.time()
-        dt = "f4" if dtype == np.float32 else "f1"
-        w, h = self.ui.window.get_size()
-        fbo = self.ctx.simple_framebuffer((w, h), components=3, dtype=dt)
-        gamma = self.ui.gamma
-        self.ui.gamma = (dtype == np.uint8)  # float32 => linear RGB
-        self.redraw(fbo)
-        self.ui.gamma = gamma
-        self.ctx.screen.use()
-        screenshot = fbo.read(components=3, dtype=dt, clamp=False)
-        screenshot = np.frombuffer(screenshot, dtype=dtype)
-        screenshot = screenshot.reshape(h, w, 3)
-        screenshot = np.ascontiguousarray(screenshot[::-1])
-        elapsed = (time.time() - t0) * 1000
-        self._vprint(f"Taking a screenshot took {elapsed:.1f} ms")
-        return screenshot
-
-    def _create_dummy_texture(self):
-        dummy = np.random.default_rng().random((32, 32, 3), dtype=np.float32)
-        texture = self.ctx.texture((32, 32), 3, dummy, dtype='f4')
-        texture.extra = types.SimpleNamespace()
-        texture.extra.done = True
-        texture.extra.upload_done = False
-        texture.extra.mipmaps_done = False
-        texture.extra.stats_done = False
-        texture.extra.mipmaps_done = False
-        texture.extra.dtype = np.float32
-        texture.extra.components = 3
-        texture.extra.img = None
-        texture.extra.maxval = 1.0
-        texture.extra.minval = 0.0
-        texture.extra.meanval = 1.0
-        texture.extra.percentiles = np.ones(4)
-        return texture
-
-    def _init_empty_texture(self, texture, img):
-        # create an empty texture or reuse an existing one
-        if texture:
-            components = img.shape[2] if img.ndim == 3 else 1
-            sizes_match = texture.size[::-1] == img.shape[:2]
-            dtypes_match = texture.extra.dtype == img.dtype
-            nchans_match = texture.components == components
-            if sizes_match and dtypes_match and nchans_match:
-                scale = 255 if img.dtype == np.uint8 else 1.0
-                stats = np.max(img[::16, ::16], axis=-1) / scale
-                texture.extra.minval = np.min(stats, initial=0.0)
-                texture.extra.maxval = np.max(stats, initial=0.0)
-                texture.extra.meanval = np.mean(stats)
-                texture.extra.percentiles = np.percentile(stats, [99.5, 98, 95, 90])
-                texture.extra.done = False
-                texture.extra.upload_done = False
-                texture.extra.mipmaps_done = False
-                texture.extra.stats_done = False
-                texture.extra.img = img
-                texture.extra.rows_uploaded = 0
-                return texture
-        texture = self._create_empty_texture(img)
-        return texture
-
-    def _create_empty_texture(self, img):
-        # ModernGL texture dtypes that actually work:
-        #   'f1': fixed-point [0, 1] internal format (GL_RGB8), uint8 input
-        #   'f2': float16 internal format (GL_RGB16F), float16 input
-        #   'f4': float32 internal format (GL_RGB32F), float32 input
-        #
-        # dtypes yielding constant zero in fragment shader (as of ModernGL 5.7.4):
-        #   'u1': integer [0, 255] internal format (GL_RGB8UI), uint8 input
-        #   'u2': integer [0, 65535] internal format (GL_RGB16UI), uint16 input
-        #   'u4': integer [0, 2^32-1] internal format (GL_RGB32UI), uint32 input
-        #
-        h, w = img.shape[:2]
-        dtype = f"f{img.itemsize}"  # uint8 => 'f1', float16 => 'f2', float32 => 'f4'
-        components = img.shape[2] if img.ndim == 3 else 1  # RGB/RGBA/grayscale
-        texture = self.ctx.texture((w, h), components, data=None, dtype=dtype)
-        scale = 255 if img.dtype == np.uint8 else 1.0
-        stats = np.max(img[::16, ::16], axis=-1) / scale
-        texture.extra = types.SimpleNamespace()
-        texture.extra.minval = np.min(stats, initial=0.0)
-        texture.extra.maxval = np.max(stats, initial=0.0)
-        texture.extra.meanval = np.mean(stats)
-        texture.extra.percentiles = np.percentile(stats, [99.5, 98, 95, 90])
-        texture.extra.done = False
-        texture.extra.upload_done = False
-        texture.extra.mipmaps_done = False
-        texture.extra.stats_done = False
-        texture.extra.dtype = img.dtype
-        texture.extra.components = components
-        texture.extra.img = img
-        texture.extra.rows_uploaded = 0
-        return texture
-
-    def _upload_texture_slice(self, texture, nrows):
-        t0 = time.time()
-        if not texture.extra.done:
-            if not texture.extra.upload_done:
-                vpx = 0
-                vpy = texture.extra.rows_uploaded
-                vpw = texture.width
-                vph = texture.height - vpy
-                vph = min(vph, nrows)
-                img = texture.extra.img
-                rows = img[vpy:vpy + vph]
-                texture.write(rows.ravel(), (vpx, vpy, vpw, vph))
-                vpy += vph
-                texture.extra.rows_uploaded = vpy
-                if vpy >= texture.height:
-                    texture.extra.upload_done = True
-                    texture.extra.img = None
-                    elapsed = (time.time() - t0) * 1000
-                    self._vprint(f"Completed uploading texture #{texture.extra.idx}, took {elapsed:.1f} ms")
-            elif not texture.extra.mipmaps_done:
-                texture.build_mipmaps()
-                texture.extra.mipmaps_done = True
+        if texture.done:
+            return
+        if not texture.upload_done:
+            nrows = 100 if piecewise else texture.texture.height
+            t0 = time.time()
+            texture.upload_slice(nrows)
+            if texture.upload_done:
                 elapsed = (time.time() - t0) * 1000
-                self._vprint(f"Generated mipmaps for texture #{texture.extra.idx}, took {elapsed:.1f} ms")
-            elif not texture.extra.stats_done:
-                self._texture_stats(texture)
-                texture.extra.stats_done = True
-                texture.extra.done = True
-                elapsed = (time.time() - t0) * 1000
-                self._vprint(f"Generated stats for texture #{texture.extra.idx}, took {elapsed:.1f} ms")
-
-    def _texture_stats(self, texture):
-        if texture.extra.mipmaps_done:
-            mip_lvl = 4 if min(texture.size) >= 128 else 0
-            stats = texture.read(level=int(mip_lvl))
-            stats = np.frombuffer(stats, dtype=texture.extra.dtype)
-            stats = stats.reshape(-1, texture.extra.components)
-            scale = 255 if texture.extra.dtype == np.uint8 else 1.0
-            pixel_max = np.max(stats, axis=-1) / scale
-            texture.extra.minval = np.min(pixel_max)
-            texture.extra.maxval = np.max(pixel_max)
-            texture.extra.meanval = np.mean(pixel_max)
-            texture.extra.percentiles = np.percentile(pixel_max, [99.5, 98, 95, 90])
+                self._vprint(f"Completed uploading texture #{texture.idx}, took {elapsed:.1f} ms")
+        elif not texture.mipmaps_done:
+            t0 = time.time()
+            texture.build_mipmaps()
+            elapsed = (time.time() - t0) * 1000
+            self._vprint(f"Generated mipmaps for texture #{texture.idx}, took {elapsed:.1f} ms")
+        elif not texture.stats_done:
+            t0 = time.time()
+            texture.calculate_stats_from_mipmaps()
+            elapsed = (time.time() - t0) * 1000
+            self._vprint(f"Generated stats for texture #{texture.idx}, took {elapsed:.1f} ms")
 
     def _sharpen(self, sigma: float, strength: float) -> np.ndarray:
         """

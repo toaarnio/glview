@@ -153,9 +153,9 @@ class PygletUI:
             for imgidx in indices:
                 if self.files.ready_to_upload(imgidx):
                     texture = self.files.textures[imgidx]
-                    if texture is None or not texture.extra.done:
+                    if texture is None or not texture.done:
                         texture = self.renderer.upload_texture(imgidx, piecewise=True)
-                        self.need_redraw = texture.extra.done
+                        self.need_redraw = texture.done
                         break  # upload only one slice of one texture per call
 
     def _caption(self):
