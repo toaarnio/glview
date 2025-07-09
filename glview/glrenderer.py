@@ -111,7 +111,9 @@ class GLRenderer:
 
             # Render the image into an offscreen texture representing the current
             # tile; note that all tiles are the same size, so we can use the same
-            # texture for as long as window size and tiling scheme are unchanged
+            # texture for as long as window size and tiling scheme are unchanged.
+            # The second rendering pass expects linear colors, so it's important
+            # to remove sRGB gamma in the first pass.
 
             self.fbo.use()
             self.fbo.clear(*self._get_debug_tile_color(i))
@@ -124,7 +126,8 @@ class GLRenderer:
             self.prog['degamma'] = self.files.linearize[imgidx]
             self.vao.render(moderngl.TRIANGLE_STRIP)
 
-            # Derive autoexposure gain for the current tile
+            # Derive an exposure gain for the current tile, to be applied in the
+            # second rendering pass
 
             if self.ui.ae_per_tile[i]:
                 imgw = scalex * vpw * self.ui.scale[i]
@@ -149,7 +152,8 @@ class GLRenderer:
 
             # Render the current tile from an offscreen texture to the screen (or
             # the given render target), applying any screen-space postprocessing
-            # effects on the fly, plus gamma as the final step
+            # effects on the fly, plus gamma as the final step. The input must be
+            # in a linear color space.
 
             target.use()
             target.viewport = self.ui.viewports[i]
