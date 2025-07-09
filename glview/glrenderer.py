@@ -102,12 +102,6 @@ class GLRenderer:
             texw, texh = texture.width, texture.height
             texw, texh = (texh, texw) if orientation in [90, 270] else (texw, texh)
             scalex, scaley = self._get_aspect_ratio(vpw, vph, texw, texh)
-            maxval = texture.extra.maxval
-            minval = texture.extra.minval
-            meanval = texture.extra.meanval
-            percentiles = texture.extra.percentiles  # [99.5, 98, 95, 90]
-            norm_maxvals = np.r_[1, maxval, maxval, percentiles, meanval / 0.18]
-            norm_minvals = np.r_[0, 0, minval, 0, 0, 0, 0, 0]
 
             # Render the image into an offscreen texture representing the current
             # tile; note that all tiles are the same size, so we can use the same
@@ -134,8 +128,8 @@ class GLRenderer:
                 imgh = scaley * vph * self.ui.scale[i]
                 imgw = min(int(imgw), vpw)
                 imgh = min(int(imgh), vph)
-                whitelevel = percentiles[0]  # global whitelevel = 99.5th percentile
                 blacklevel = 0.0
+                whitelevel = texture.extra.percentiles[0]  # global whitelevel = 99.5th percentile
                 ae_gain = ae.autoexposure(self.fbo.color_attachments[0], whitelevel, imgw, imgh)
                 if ae_gain is not None:
                     if self.ui.ae_reset_per_tile[i]:
@@ -145,6 +139,12 @@ class GLRenderer:
                         self.ae_gain_per_tile[i] = ae_gain * 0.1 + self.ae_gain_per_tile[i] * 0.9
                     self.ae_converged[i] = np.isclose(ae_gain, self.ae_gain_per_tile[i], rtol=0.01)
             else:
+                maxval = texture.extra.maxval
+                minval = texture.extra.minval
+                meanval = texture.extra.meanval
+                percentiles = texture.extra.percentiles  # [99.5, 98, 95, 90]
+                norm_maxvals = np.r_[1, maxval, maxval, percentiles, meanval / 0.18]
+                norm_minvals = np.r_[0, 0, minval, 0, 0, 0, 0, 0]
                 whitelevel = norm_maxvals[self.ui.normalize]
                 blacklevel = norm_minvals[self.ui.normalize]
                 self.ae_gain_per_tile[i] = 1.0
@@ -169,11 +169,11 @@ class GLRenderer:
             self.postprocess['resolution'] = (vpw, vph)
             self.postprocess['magnification'] = magnification
             self.postprocess['mirror'] = self.ui.mirror_per_tile[i]
-            self.postprocess['maxval'] = whitelevel
-            self.postprocess['minval'] = blacklevel
             self.postprocess['sharpen'] = self.ui.sharpen_per_tile[i]
             self.postprocess['kernel'] = np.resize(kernel, max_kernel_size)
             self.postprocess['kernw'] = kernel.shape[0]
+            self.postprocess['maxval'] = whitelevel
+            self.postprocess['minval'] = blacklevel
             self.postprocess['autoexpose'] = self.ui.ae_per_tile[i]
             self.postprocess['ae_gain'] = self.ae_gain_per_tile[i]
             self.postprocess['ev'] = self.ui.ev
