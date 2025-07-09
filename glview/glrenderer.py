@@ -182,6 +182,7 @@ class GLRenderer:
             self.postprocess['gamut.power'] = self.ui.gamut_pow
             self.postprocess['gamut.thr'] = self.ui.gamut_thr
             self.postprocess['gamut.scale'] = self._gamut(imgidx)
+            self.postprocess['contrast'] = self.ui.contrast_per_tile[i]
             self.postprocess['gamma'] = self.ui.gamma
             self.postprocess['debug'] = self.ui.debug_mode
             self.vao_post.render(moderngl.TRIANGLE_STRIP)

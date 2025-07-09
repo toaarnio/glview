@@ -49,6 +49,7 @@ class PygletUI:
         self.tonemap_per_tile = [False, False, False, False]
         self.gamutmap_per_tile = [False, False, False, False]
         self.sharpen_per_tile = [False, False, False, False]
+        self.contrast_per_tile = np.ones(4) * 0.2
         self.mirror_per_tile = [0, 0, 0, 0]
         self.images_pending = True
         self.cs_in = 0

@@ -19,6 +19,7 @@ uniform float ev;
 uniform int cs_in;
 uniform int cs_out;
 uniform int tonemap;
+uniform float contrast;
 uniform int gamma;
 uniform int debug;
 
@@ -66,6 +67,15 @@ float max3(vec3 v) {
    * built-in function in GLSL for this.
    */
   return max(max(v.x, v.y), v.z);
+}
+
+
+float sum3(vec3 v) {
+  /**
+   * Returns the sum of the components of the given vector. Annoyingly, there
+   * is no built-in function in GLSL for this.
+   */
+  return v.x + v.y + v.z;
 }
 
 
@@ -629,21 +639,21 @@ vec3 gtm_filmic(vec3 rgb, vec3 whitelevel) {
 }
 
 
-vec3 apply_gtm(vec3 rgb, int cspace, float whitelevel) {
+vec3 apply_gtm(int tmo, vec3 rgb, int cspace, float whitelevel) {
   /**
-   * Applies the selected global tone mapping (GTM) function on the given HDR
-   * color. The input is assumed to be in an RGB color space wherein (1, 1, 1)
+   * Applies the selected tone mapping operator (TMO) on the given HDR color.
+   * The input is assumed to be in a linear RGB color space wherein (1, 1, 1)
    * represents diffuse white. Specular highlights may exceed the [0, 1] range
    * by orders of magnitude.
    *
-   * The following GTM functions are available:
+   * The following operators are available:
    *
    *   0 - none
    *   1 - neutral - `cspace` and `whitelevel` are not needed
    *   2 - reinhard - `cspace` is required for computing luminance
    *   3 - filmic - [0, whitelevel] gets mapped to [0, 1]
    */
-  switch (tonemap) {
+  switch (tmo) {
     case 1:
       rgb = gtm_neutral(rgb, 1.0);
       break;
@@ -653,6 +663,35 @@ vec3 apply_gtm(vec3 rgb, int cspace, float whitelevel) {
     case 3:
       rgb = gtm_filmic(rgb, vec3(whitelevel));
       break;
+  }
+  return rgb;
+}
+
+
+/**************************************************************************************/
+/*
+/*    G L O B A L   C O N T R A S T   E N H A N C E M E N T
+/*
+/**************************************************************************************/
+
+
+vec3 gce(vec3 rgb, int cspace, float whitelevel, float contrast) {
+  /**
+   * Applies a polynomial S-curve to luminance for global contrast enhancement.
+   * Hue is preserved (approximately, not accounting for perceptual effects) by
+   * multiplying each component of the input color by the same factor.
+   *
+   * :param rgb: input color; range = [0, whitelevel]
+   * :param cspace: input color space for deriving luminance
+   * :param whitelevel: maximum input luminance; typically >= 1.0
+   * :param contrast: strength of contrast enhancement; range = [0, 1]
+   * :returns: contrast-enhanced input color
+   */
+  float luma = csconv(rgb, cspace, XYZ).y;
+  if (luma > 0.0) {
+    float contrasted_luma = smoothstep(0.0, whitelevel, luma);
+    contrasted_luma = mix(luma, contrasted_luma, contrast);
+    rgb *= contrasted_luma / luma;
   }
   return rgb;
 }
@@ -711,8 +750,9 @@ void main() {
   color.rgb = (color.rgb - minval) / maxval;  // [minval, maxval] => [0, 1]
   color.rgb *= gain;
   color.rgb = csconv(color.rgb, cs_in, cs_out);
-  color.rgb = apply_gtm(color.rgb, cs_out, maxval * gain);
   color.rgb = gamut.compress ? compress_gamut(color.rgb) : color.rgb;
+  color.rgb = apply_gtm(tonemap, color.rgb, cs_out, gain);
+  color.rgb = tonemap > 0 ? gce(color.rgb, cs_out, 1.0, contrast) : color.rgb;
   color.rgb = debug_indicators(color.rgb);
   color.rgb = apply_gamma(color.rgb);
 }
