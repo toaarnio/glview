@@ -485,7 +485,7 @@ vec4 conv2d(sampler2D img, vec2 tc) {
    * :uniform int kernw: width and height of the kernel, in pixels
    * :returns: the original pixel color boosted by a 2D convolution kernel
    */
-  float sum = 0.0f;
+  float sharp_gray = 0.0f;
   vec2 xy_step = vec2(1.0) / vec2(resolution);
   xy_step *= max(magnification, 1.0);
   vec2 tc_base = tc - floor(float(kernw) / 2.0) * xy_step;
@@ -496,13 +496,13 @@ vec4 conv2d(sampler2D img, vec2 tc) {
       vec4 pixel = texture(img, tc);
       float grayscale = pixel.r + pixel.g + pixel.b;
       grayscale = max(grayscale, 0.0f);
-      sum += weight * grayscale;
+      sharp_gray += weight * grayscale;
     }
   }
   vec4 org = texture(img, tc);
   float org_gray = max(org.r + org.g + org.b, 0.0f);
-  float boost = clamp(sum / org_gray, 0.5f, 5.0f);
-  org.rgb = org.rgb * boost;
+  float boost = clamp(sharp_gray / org_gray, 0.5f, 5.0f);
+  org.rgb *= boost;
   return org;
 }
 
