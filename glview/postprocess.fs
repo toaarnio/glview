@@ -675,23 +675,29 @@ vec3 apply_gtm(int tmo, vec3 rgb, int cspace, float whitelevel) {
 /**************************************************************************************/
 
 
-vec3 gce(vec3 rgb, int cspace, float whitelevel, float contrast) {
+vec3 apply_gce(int mode, vec3 rgb, int cspace, float contrast, float whitelevel) {
   /**
    * Applies a polynomial S-curve to luminance for global contrast enhancement.
    * Hue is preserved (approximately, not accounting for perceptual effects) by
    * multiplying each component of the input color by the same factor.
    *
-   * :param rgb: input color; range = [0, whitelevel]
+   * The domain and range of the contrast enhancement function is [0, whitelevel];
+   * outside of that domain, the function reduces to a constant scalar multiplier.
+   * See visualization at https://www.desmos.com/calculator/jimezytyho.
+   *
+   * :param mode: contrast enhancement mode; 0 = off, >0 = on
+   * :param rgb: input color; nominal range = [0, whitelevel]
    * :param cspace: input color space for deriving luminance
-   * :param whitelevel: maximum input luminance; typically >= 1.0
    * :param contrast: strength of contrast enhancement; range = [0, 1]
-   * :returns: contrast-enhanced input color
+   * :param whitelevel: maximum input luminance; typically 1.0
+   * :returns: contrast-enhanced input color; nominal range = [0, whitelevel]
    */
   float luma = csconv(rgb, cspace, XYZ).y;
-  if (luma > 0.0) {
-    float contrasted_luma = smoothstep(0.0, whitelevel, luma);
-    contrasted_luma = mix(luma, contrasted_luma, contrast);
-    rgb *= contrasted_luma / luma;
+  if (mode > 0 && luma > 0.0) {
+    float normed_luma = luma / whitelevel;  // [0, wl] => [0, 1]
+    float contrasted_luma = smoothstep(0.0, whitelevel, luma);  // [0, wl] => [0, 1]
+    float luma_gain = mix(normed_luma, contrasted_luma, contrast) / normed_luma;
+    rgb = rgb * luma_gain;  // gain = [0, >1]
   }
   return rgb;
 }
@@ -747,12 +753,12 @@ void main() {
   vec2 tc = flip(texcoords, mirror);
   float gain = autoexpose ? ae_gain * exp(ev) : exp(ev);  // exp(x) == 2^x
   color = sharpen ? conv2d(img, tc) : texture(img, tc);
-  color.rgb = (color.rgb - minval) / maxval;  // [minval, maxval] => [0, 1]
+  color.rgb = tonemap > 0 ? color.rgb : (color.rgb - minval) / maxval;
   color.rgb *= gain;
   color.rgb = csconv(color.rgb, cs_in, cs_out);
   color.rgb = gamut.compress ? compress_gamut(color.rgb) : color.rgb;
-  color.rgb = apply_gtm(tonemap, color.rgb, cs_out, gain);
-  color.rgb = tonemap > 0 ? gce(color.rgb, cs_out, 1.0, contrast) : color.rgb;
+  color.rgb = apply_gtm(tonemap, color.rgb, cs_out, gain * maxval);
+  color.rgb = apply_gce(tonemap, color.rgb, cs_out, contrast, 1.0);
   color.rgb = debug_indicators(color.rgb);
   color.rgb = apply_gamma(color.rgb);
 }
