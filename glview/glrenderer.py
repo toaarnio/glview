@@ -209,7 +209,6 @@ class GLRenderer:
         """
         img = self.loader.get_image(idx)
         texture = self.files.textures[idx]
-
         if isinstance(img, np.ndarray):
             if texture:
                 tex = texture.texture
@@ -222,20 +221,17 @@ class GLRenderer:
                     texture.upload_done = False
                     texture.mipmaps_done = False
                     texture.stats_done = False
-                    texture._precompute_stats()
+                    texture.precompute_stats()
                 else:
                     texture.release()
                     texture = Texture(self.ctx, img, idx)
             else:
                 texture = Texture(self.ctx, img, idx)
-
             self.files.textures[idx] = texture
             self.loader.release_image(idx)
-
         elif texture is None:
             texture = Texture(self.ctx, idx=idx)
             self.files.textures[idx] = texture
-
         self.process_texture(texture, piecewise)
         return texture
 
@@ -259,7 +255,7 @@ class GLRenderer:
             self._vprint(f"Generated mipmaps for texture #{texture.idx}, took {elapsed:.1f} ms")
         elif not texture.stats_done:
             t0 = time.time()
-            texture.calculate_stats_from_mipmaps()
+            texture.compute_stats()
             elapsed = (time.time() - t0) * 1000
             self._vprint(f"Generated stats for texture #{texture.idx}, took {elapsed:.1f} ms")
 

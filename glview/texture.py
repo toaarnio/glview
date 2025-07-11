@@ -22,25 +22,36 @@ class Texture:
             self._create_dummy()
         else:
             self._create_from_image()
-            self._precompute_stats()
+            self.precompute_stats()
 
     def _create_dummy(self):
-        """Creates a placeholder texture."""
-        dummy_img = np.random.default_rng().random((32, 32, 3), dtype=np.float32)
-        self.texture = self.ctx.texture((32, 32), 3, dummy_img, dtype='f4')
+        """Create a placeholder texture."""
+        dummy_img = np.random.default_rng().random((32, 32, 3)).astype(np.uint8)
+        self.texture = self.ctx.texture((32, 32), 3, dummy_img, dtype='f1')
         self.upload_done = True
         self.mipmaps_done = True
         self.stats_done = True
 
     def _create_from_image(self):
-        """Creates an empty texture based on image properties."""
-        h, w = self.img.shape[:2]
-        dtype_map = {np.uint8: 'f1', np.float16: 'f2', np.float32: 'f4'}
-        texture_dtype = dtype_map.get(self.img.dtype, 'f4')
-        self.texture = self.ctx.texture((w, h), self.components, data=None, dtype=texture_dtype)
+        """
+        Create an empty texture based on image properties.
 
-    def _precompute_stats(self):
-        """ Pre-computes basic stats from a downsampled version of the image. """
+        ModernGL texture dtypes that actually work:
+          'f1': fixed-point [0, 1] internal format (GL_RGB8), uint8 input
+          'f2': float16 internal format (GL_RGB16F), float16 input
+          'f4': float32 internal format (GL_RGB32F), float32 input
+
+        dtypes yielding constant zero in fragment shader (as of ModernGL 5.7.4):
+          'u1': integer [0, 255] internal format (GL_RGB8UI), uint8 input
+          'u2': integer [0, 65535] internal format (GL_RGB16UI), uint16 input
+          'u4': integer [0, 2^32-1] internal format (GL_RGB32UI), uint32 input
+        """
+        h, w = self.img.shape[:2]
+        dtype = f"f{self.img.itemsize}"  # uint8 => 'f1', float16 => 'f2', float32 => 'f4'
+        self.texture = self.ctx.texture((w, h), self.components, data=None, dtype=dtype)
+
+    def precompute_stats(self):
+        """ Pre-compute basic stats from a downsampled version of the image. """
         if self.img is None:
             return
         scale = 255.0 if self.img.dtype == np.uint8 else 1.0
@@ -70,14 +81,14 @@ class Texture:
             self.img = None
 
     def build_mipmaps(self):
-        """Generates mipmaps for the texture."""
+        """Generate mipmaps for the texture."""
         if self.mipmaps_done or not self.upload_done:
             return
         self.texture.build_mipmaps()
         self.mipmaps_done = True
 
-    def calculate_stats_from_mipmaps(self):
-        """Calculates statistics from a low-resolution mipmap level."""
+    def compute_stats(self):
+        """Calculate statistics from a low-resolution mipmap level."""
         if self.stats_done or not self.mipmaps_done:
             return
         mip_lvl = 4 if min(self.texture.size) >= 128 else 0
