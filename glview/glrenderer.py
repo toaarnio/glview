@@ -11,11 +11,11 @@ import moderngl                # pip install moderngl
 try:
     # package mode
     from glview import ae
-    from glview.texture import Texture
+    from glview import texture
 except ImportError:
     # stand-alone mode
     import ae
-    from texture import Texture
+    import texture
 
 
 class GLRenderer:
@@ -200,64 +200,24 @@ class GLRenderer:
         self._vprint(f"rendering {w} x {h} pixels took {elapsed:.1f} ms, frame-to-frame interval was {interval:.1f} ms", log_level=2)
         return elapsed
 
-    def upload_texture(self, idx, piecewise):
+    def upload_texture(self, idx: int, piecewise: bool) -> texture.Texture:
         """
-        Upload the given image to GPU memory, either all at once or piecewise
-        (100 rows per call). Progressive uploading helps avoid freezing the
-        user interface, although short glitches may still occur with large
-        images.
+        Upload the image at the given index to GPU memory, either all at once
+        or piecewise, to avoid freezing the user interface. Create a new texture
+        object on the GPU if necessary, otherwise use an existing one.
         """
-        img = self.loader.get_image(idx)
-        texture = self.files.textures[idx]
+        tex = self.files.textures[idx]  # None | Texture
+        img = self.loader.get_image(idx)  # <ndarray> | PENDING | RELEASED | ...
+        if not tex:
+            img = img if isinstance(img, np.ndarray) else None
+            tex = texture.Texture(self.ctx, img, idx, self.verbose)
+            self.files.textures[idx] = tex
+        elif isinstance(img, np.ndarray):
+            tex.reuse(img)
         if isinstance(img, np.ndarray):
-            if texture:
-                tex = texture.texture
-                sizes_match = tex.size[::-1] == img.shape[:2]
-                dtypes_match = texture.dtype == img.dtype
-                nchans_match = tex.components == (img.shape[2] if img.ndim == 3 else 1)
-                if sizes_match and dtypes_match and nchans_match:
-                    texture.img = img
-                    texture.rows_uploaded = 0
-                    texture.upload_done = False
-                    texture.mipmaps_done = False
-                    texture.stats_done = False
-                    texture.precompute_stats()
-                else:
-                    texture.release()
-                    texture = Texture(self.ctx, img, idx)
-            else:
-                texture = Texture(self.ctx, img, idx)
-            self.files.textures[idx] = texture
             self.loader.release_image(idx)
-        elif texture is None:
-            texture = Texture(self.ctx, idx=idx)
-            self.files.textures[idx] = texture
-        self.process_texture(texture, piecewise)
-        return texture
-
-    def process_texture(self, texture: Texture, piecewise: bool):
-        """
-        Handles progressive upload, mipmap generation, and stats calculation.
-        """
-        if texture.done:
-            return
-        if not texture.upload_done:
-            nrows = 100 if piecewise else texture.texture.height
-            t0 = time.time()
-            texture.upload_slice(nrows)
-            if texture.upload_done:
-                elapsed = (time.time() - t0) * 1000
-                self._vprint(f"Completed uploading texture #{texture.idx}, took {elapsed:.1f} ms")
-        elif not texture.mipmaps_done:
-            t0 = time.time()
-            texture.build_mipmaps()
-            elapsed = (time.time() - t0) * 1000
-            self._vprint(f"Generated mipmaps for texture #{texture.idx}, took {elapsed:.1f} ms")
-        elif not texture.stats_done:
-            t0 = time.time()
-            texture.compute_stats()
-            elapsed = (time.time() - t0) * 1000
-            self._vprint(f"Generated stats for texture #{texture.idx}, took {elapsed:.1f} ms")
+        tex.upload(piecewise)
+        return tex
 
     def _sharpen(self, sigma: float, strength: float) -> np.ndarray:
         """
