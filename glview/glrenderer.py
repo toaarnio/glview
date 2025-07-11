@@ -163,7 +163,7 @@ class GLRenderer:
             self.fbo.color_attachments[0].use(location=0)
             magnification = scalex * vpw / (gpu_texture.width / self.ui.scale[i])
             max_kernel_size = self.postprocess['kernel'].array_length
-            kernel = self._sharpen(sigma=0.75, strength=0.5)
+            kernel = self._sharpen(magnification)
             self.postprocess['img'] = 0
             self.postprocess['mousepos'] = (0.0, 0.0)
             self.postprocess['scale'] = 1.0
@@ -219,7 +219,31 @@ class GLRenderer:
         tex.upload(piecewise)
         return tex
 
-    def _sharpen(self, sigma: float, strength: float) -> np.ndarray:
+    def _sharpen(self, magnification: float) -> np.ndarray:
+        """
+        Generate an unsharp masking kernel optimized for the given magnification.
+        Magnification is defined as the ratio of screen pixels to image pixels, so
+        >1.0 means zooming in and <1.0 means zooming out.
+
+        When zooming in, the "sigma" parameter is smoothly decreased towards 0.5,
+        to avoid excessively wide halos around edges. The "strength" parameter is
+        similarly decreased towards zero, to make the halos less dark.
+
+        :param magnification: ratio of screen pixels to image pixels
+        :returns: the generated unsharp masking kernel
+        """
+        def smoothstep(x, minn, maxx):  # [minn, maxx] => [0, 1]
+            t = np.clip((x - minn) / (maxx - minn), 0, 1)
+            y = t * t * (3 - 2 * t)
+            return y
+
+        sigma = smoothstep(magnification, 0.5, 2.0)  # [0.5, 2.0] => [0, 1]
+        sigma = -sigma * 0.25 + 0.75  # [0, 1] => [0, -0.25] => [0.75, 0.5]
+        strength = np.clip(1 / magnification, 0.001, 0.5)
+        kernel = self._sharpen_kernel(sigma, strength)
+        return kernel
+
+    def _sharpen_kernel(self, sigma: float, strength: float) -> np.ndarray:
         """
         Generate an unsharp masking kernel with the given Gaussian blur sigma and
         sharpening strength. The sigma must be at least 0.25 to have any effect,
