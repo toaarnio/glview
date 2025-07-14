@@ -200,6 +200,29 @@ class GLRenderer:
         self._vprint(f"rendering {w} x {h} pixels took {elapsed:.1f} ms, frame-to-frame interval was {interval:.1f} ms", log_level=2)
         return elapsed
 
+    def screenshot(self, dtype=np.uint8):
+        """
+        Render the current on-screen view into an offscreen buffer and return the image
+        as a NumPy array.
+        """
+        assert dtype in [np.uint8, np.float32], dtype
+        t0 = time.time()
+        dt = "f4" if dtype == np.float32 else "f1"
+        w, h = self.ui.window.get_size()
+        fbo = self.ctx.simple_framebuffer((w, h), components=3, dtype=dt)
+        gamma = self.ui.gamma
+        self.ui.gamma = (dtype == np.uint8)  # float32 => linear RGB
+        self.redraw(fbo)
+        self.ui.gamma = gamma
+        self.ctx.screen.use()
+        screenshot = fbo.read(components=3, dtype=dt, clamp=False)
+        screenshot = np.frombuffer(screenshot, dtype=dtype)
+        screenshot = screenshot.reshape(h, w, 3)
+        screenshot = np.ascontiguousarray(screenshot[::-1])
+        elapsed = (time.time() - t0) * 1000
+        self._vprint(f"Taking a screenshot took {elapsed:.1f} ms")
+        return screenshot
+
     def upload_texture(self, idx: int, piecewise: bool) -> texture.Texture:
         """
         Upload the image at the given index to GPU memory, either all at once
