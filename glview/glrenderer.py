@@ -143,9 +143,9 @@ class GLRenderer:
             else:
                 maxval = texture.maxval
                 minval = texture.minval
-                meanval = texture.meanval
+                diffuse_white = texture.diffuse_white
                 percentiles = texture.percentiles
-                norm_maxvals = np.r_[1, maxval, maxval, percentiles, meanval / 0.18]
+                norm_maxvals = np.r_[1, maxval, maxval, percentiles, diffuse_white]
                 norm_minvals = np.r_[0, 0, minval, 0, 0, 0, 0, 0]
                 whitelevel = norm_maxvals[self.ui.normalize]
                 blacklevel = norm_minvals[self.ui.normalize]

@@ -17,6 +17,7 @@ class Texture:
         self.minval = 0.0
         self.maxval = 1.0
         self.meanval = 0.5
+        self.diffuse_white = 1.0
         self.percentiles = np.ones(4)
         self.upload_done = False
         self.mipmaps_done = False
@@ -24,7 +25,7 @@ class Texture:
         self._rows_uploaded = 0
         if self.img is not None:
             self.create_empty()
-            self.precompute_stats()
+            self.compute_stats()
         else:
             self.create_dummy()
 
@@ -65,7 +66,7 @@ class Texture:
         self.mipmaps_done = False
         self.stats_done = False
         self._rows_uploaded = 0
-        self.precompute_stats()
+        self.compute_stats()
         sizes_match = self.texture.size[::-1] == img.shape[:2]
         dtypes_match = self.dtype == img.dtype
         nchans_match = self.components == (img.shape[2] if img.ndim == 3 else 1)
@@ -75,9 +76,9 @@ class Texture:
 
     def upload(self, piecewise: bool):
         """
-        Upload image data to the GPU, generate mipmaps, and calculate statistics.
-        Piecewise uploading (100 rows per call) helps avoid freezing the UI, but
-        short glitches may still occur with large images.
+        Upload image data to the GPU and generate mipmaps. Piecewise uploading
+        (100 rows per call) helps avoid freezing the UI, but short glitches may
+        still occur with large images.
         """
         t0 = time.time()
         if not self.upload_done:
@@ -87,7 +88,6 @@ class Texture:
                 elapsed = (time.time() - t0) * 1000
                 self._vprint(f"Completed uploading texture #{self.idx}, took {elapsed:.1f} ms")
         self.build_mipmaps()
-        self.compute_stats()
 
     def build_mipmaps(self):
         """Generate mipmaps for the texture."""
@@ -99,39 +99,33 @@ class Texture:
             self._vprint(f"Generated mipmaps for texture #{self.idx}, took {elapsed:.1f} ms")
 
     def compute_stats(self):
-        """Calculate statistics from a low-resolution mipmap level."""
-        if self.mipmaps_done and not self.stats_done:
-            t0 = time.time()
-            mip_lvl = 4 if min(self.texture.size) >= 128 else 0
-            stats = self.texture.read(level=int(mip_lvl))
-            stats = np.frombuffer(stats, dtype=self.dtype)
-            stats = stats.reshape(-1, self.components)
-            scale = 255.0 if self.dtype == np.uint8 else 1.0
-            pixel_max = np.max(stats, axis=-1) / scale
-            self.minval = np.min(pixel_max)
-            self.maxval = np.max(pixel_max)
-            self.meanval = np.mean(pixel_max)
-            self.percentiles = np.percentile(pixel_max, [99.5, 98, 95, 90])
-            self.stats_done = True
-            p = stats.shape[0]
-            elapsed = (time.time() - t0) * 1000
-            self._vprint(f"Generated final stats for texture #{self.idx} from {p} pixels, took {elapsed:.1f} ms")
-
-    def precompute_stats(self):
-        """ Pre-compute preliminary stats from a downsampled version of the image. """
-        if self.img is not None:
+        """ Compute statistics from a downsampled version of the image. """
+        if self.img is not None and not self.stats_done:
             t0 = time.time()
             scale = 255.0 if self.img.dtype == np.uint8 else 1.0
-            stats_img = self.img[::16, ::16]
+            stats_img = self.img[::6, ::6]
             if stats_img.size > 0:
                 pixel_max = np.max(stats_img, axis=-1) / scale
+                pixel_max = np.clip(pixel_max, 0, None)
                 self.minval = np.min(pixel_max)
                 self.maxval = np.max(pixel_max)
                 self.meanval = np.mean(pixel_max)
                 self.percentiles = np.percentile(pixel_max, [99.5, 98, 95, 90])
+                self.diffuse_white = self.estimate_diffuse_white(pixel_max)
+                self.stats_done = True
                 h, w = stats_img.shape[:2]
                 elapsed = (time.time() - t0) * 1000
-                self._vprint(f"Generated preliminary stats for texture #{self.idx} from {w * h} pixels, took {elapsed:.1f} ms")
+                self._vprint(f"Computed stats for texture #{self.idx} from {w * h} pixels, took {elapsed:.1f} ms")
+
+    def estimate_diffuse_white(self, img: np.ndarray) -> float:
+        """ Estimate diffuse white level using geometric mean over all pixels. """
+        if np.max(img) == 1.0:  # already clipped to 1.0
+            return 1.0
+        else:
+            img = img.astype(np.float32)  # float16 is not enough
+            mean_level = np.exp(np.mean(np.log(img + 1e-6)))
+            diffuse_white = mean_level / 0.08
+            return diffuse_white
 
     def release(self):
         """Release the GPU memory associated with this Texture."""
