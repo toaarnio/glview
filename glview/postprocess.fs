@@ -49,7 +49,6 @@ const int XYZ = 3;
 
 const vec3 ones = vec3(1.0);
 const vec3 zeros = vec3(0.0);
-const vec3 eps = vec3(5.0 / 256.0);
 
 
 float min3(vec3 v) {
@@ -722,13 +721,16 @@ vec3 debug_indicators(vec3 rgb) {
    */
   float gdist = max3(gamut_distance(rgb));  // [0, >1]
   float oog_dist = clamp(5.0 * (gdist - 1.0), 0.0, 1.0);  // [1.0, 1.2] => [0, 1]
-  bool overflow = any(greaterThanEqual(rgb, ones));  // 1.0 treated as overflow
-  bool underflow = all(lessThan(abs(rgb), eps));
+  float maxx = max3(abs(rgb));
+  float overflow_dist = 0.5 + 0.5 * (maxx - 1.0) / (peak_white - 1.0);  // [0.5, 1]
+  bool overflow = maxx >= 1.0;  // 1.0 treated as overflow
+  overflow_dist = overflow ? overflow_dist : 0.0;
+  bool underflow = maxx < (1.0 / 255.0f);
   bool oog = gdist >= 1.0;
   switch (debug) {
     case 1:  // red/blue/magenta
-      if ((oog && !underflow) || overflow)
-        rgb = vec3(overflow, 0.0, oog);
+      if (overflow || (oog && !underflow))
+        rgb = vec3(overflow_dist, 0.0, oog);
       break;
     case 2:  // shades of green
       if (oog && !underflow)
