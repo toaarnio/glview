@@ -107,6 +107,7 @@ class Texture:
             if stats_img.size > 0:
                 pixel_max = np.max(stats_img, axis=-1) / scale
                 pixel_max = np.clip(pixel_max, 0, None)
+                pixel_max = pixel_max[pixel_max != 0.0]
                 self.minval = np.min(pixel_max)
                 self.maxval = np.max(pixel_max)
                 self.meanval = np.mean(pixel_max)
@@ -118,13 +119,14 @@ class Texture:
                 self._vprint(f"Computed stats for texture #{self.idx} from {w * h} pixels, took {elapsed:.1f} ms")
 
     def estimate_diffuse_white(self, img: np.ndarray) -> float:
-        """ Estimate diffuse white level using geometric mean over all pixels. """
+        """ Estimate diffuse white level using geometric mean over all non-zero pixels. """
         if np.max(img) == 1.0:  # already clipped to 1.0
             return 1.0
         else:
+            img = img[img != 0.0]
             img = img.astype(np.float32)  # float16 is not enough
             mean_level = np.exp(np.mean(np.log(img + 1e-6)))
-            diffuse_white = mean_level / 0.08
+            diffuse_white = mean_level / 0.18
             return diffuse_white
 
     def release(self):
