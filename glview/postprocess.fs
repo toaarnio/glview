@@ -1,28 +1,35 @@
 #version 300 es
 
-const int MAX_KERNEL_WIDTH = 25;
-
 precision highp float;
 
+// Inputs & outputs
+
+in vec2 texcoords;
+out vec4 color;
+
+// Texture sampling & sharpening
+
+const int MAX_KERNEL_WIDTH = 25;
+
 uniform sampler2D img;
-uniform ivec2 resolution;
-uniform float magnification;
 uniform int mirror;
 uniform bool sharpen;
+uniform ivec2 resolution;
+uniform float magnification;
 uniform float kernel[MAX_KERNEL_WIDTH * MAX_KERNEL_WIDTH];
 uniform int kernw;
-uniform float maxval;
+
+// Exposure, tone, gamut & contrast
+
 uniform float minval;
+uniform float maxval;
+uniform float diffuse_white;
+uniform float peak_white;
+uniform float ev;
 uniform bool autoexpose;
 uniform float ae_gain;
-uniform float ev;
-uniform int cs_in;
-uniform int cs_out;
 uniform int tonemap;
 uniform float contrast;
-uniform int gamma;
-uniform int debug;
-
 uniform struct {
   bool compress;
   vec3 power;
@@ -30,8 +37,20 @@ uniform struct {
   vec3 scale;
 } gamut;
 
-in vec2 texcoords;
-out vec4 color;
+// Standard color spaces
+
+const int sRGB = 0;
+const int P3 = 1;
+const int Rec2020 = 2;
+const int XYZ = 3;
+
+uniform int cs_in;
+uniform int cs_out;
+uniform int gamma;
+
+// Diagnostics
+
+uniform int debug;
 
 
 /**************************************************************************************/
@@ -39,12 +58,6 @@ out vec4 color;
 /*    U T I L I T I E S
 /*
 /**************************************************************************************/
-
-
-const int sRGB = 0;
-const int P3 = 1;
-const int Rec2020 = 2;
-const int XYZ = 3;
 
 
 const vec3 ones = vec3(1.0);
@@ -564,27 +577,37 @@ vec3 compress_gamut(vec3 rgb) {
 /**************************************************************************************/
 
 
-vec3 gtm_neutral(vec3 rgb, float ymax) {
+vec3 gtm_neutral(vec3 rgb, float ystart, float yclip) {
   /**
-   * Compresses RGB colors from [0, inf] to [0, ymax]. See apply_gtm() for
-   * documentation.
+   * Compresses RGB colors from [ystart, yclip] to [ystart, 1], keeping
+   * the [0, ystart] range intact.
+   *
+   * See https://www.desmos.com/calculator/3bb4905ea6 for an interactive
+   * visualization.
    */
-  const float desaturate = 0.1;
-  const float ystart = 0.5;
-  float d = ymax - ystart;
-
   float peak = max3(rgb);
-  if (peak >= ystart) {
-    // Compress the peak value from [ystart, inf] to [ystart, ymax],
-    // scaling all RGB components by the same factor
-    float new_peak = ymax - d * d / (ymax  + peak - 2.0 * ystart);
-    rgb = rgb * new_peak / peak;
+  if (peak > ystart) {
 
-    // Interpolate towards the gray axis
-    float g = ymax / (desaturate * (peak - new_peak) + ymax);
-    rgb = mix(rgb, vec3(new_peak), 1.0 - g);
+    // solve for ymax (the asymptote of ynew) for the given [ystart, yclip],
+    // such that y = yclip yields ynew = 1, and y > yclip yields ynew > 1
+
+    yclip = max(yclip, 1.0 + 1e-6);  // avoid divide by zero
+    float ymax = (yclip - 2.0 * ystart + ystart * ystart) / (yclip - 1.0);
+
+    // scale all RGB components by the same factor; note that the factor is
+    // necessarily less than 1.0, because ynew is always less than peak
+
+    float d = ymax - ystart;
+    float ynew = ymax - d * d / (ymax  + peak - 2.0 * ystart);
+    float scale = ynew / peak;
+    rgb = rgb * scale;
+
+    // optionally, interpolate gradually towards the gray axis
+
+    float desaturate = 0.0;
+    float gray_pct = 1.0 - ymax / (desaturate * (peak - ynew) + ymax);
+    rgb = mix(rgb, vec3(ynew), gray_pct);
   }
-
   return rgb;
 }
 
@@ -602,65 +625,70 @@ vec3 gtm_reinhard(vec3 rgb, int cspace) {
 }
 
 
-vec3 filmic_curve(vec3 x) {
+vec3 filmic_curve(vec3 rgb) {
   float A = 0.15;  // shoulder strength (default: 0.15)
   float B = 0.50;  // linear strength (default: 0.50)
   float C = 0.10;  // linear angle (default: 0.10)
   float D = 0.20;  // toe strength (default: 0.20)
-  float E = 0.02;  // toe numerator (default: 0.02)
+  float E = 0.03;  // toe numerator (default: 0.02)
   float F = 0.30;  // toe denominator (default: 0.30)
-  // smooth non-linear curve for x > 0
-  vec3 numerator = x * (A * x + C * B) + D * E;
-  vec3 denominator = x * (A * x + B) + D * F;
+  vec3 numerator = rgb * (A * rgb + C * B) + D * E;
+  vec3 denominator = rgb * (A * rgb + B) + D * F;
   float bias = E / F;
-  vec3 pos = numerator / denominator - bias;
-  // linear extension for x < 0
-  float slope = B * (C * F - E) / (D * F * F);
-  vec3 neg = x * slope;
-  vec3 y = mix(pos, neg, lessThan(x, zeros));
-  return y;
+  rgb = numerator / denominator - bias;
+  return rgb;
 }
 
 
-vec3 gtm_filmic(vec3 rgb, vec3 whitelevel) {
+vec3 gtm_filmic(vec3 rgb, int cspace, vec3 peak_white) {
   /**
-   * A filmic tonemapping operator based on the Uncharted 2 curve with
-   * a smooth linear extension for negative (out-of-gamut) inputs. This
+   * A filmic tonemapping operator based on the Uncharted 2 curve, with
+   * a straight-line extension for negative (out-of-gamut) inputs. This
    * provides a more cinematic and perceptually pleasing result than
    * simple Reinhard, with better saturation and highlight rolloff.
+   * The operator is applied in Rec2020 color space to minimize the
+   * adverse impact of negative colors.
    *
    * See http://filmicworlds.com/blog/filmic-tonemapping-operators/ for
    * background and https://www.desmos.com/calculator/jimezytyho for an
    * interactive visualization.
    */
-  rgb = filmic_curve(rgb) / filmic_curve(whitelevel);
+  vec3 wide = csconv(rgb, cspace, Rec2020);
+  vec3 pos = filmic_curve(wide) / filmic_curve(peak_white);
+  vec3 neg = wide / peak_white;
+  wide = mix(pos, neg, lessThan(wide, zeros));
+  rgb = csconv(wide, Rec2020, cspace);
   return rgb;
 }
 
 
-vec3 apply_gtm(int tmo, vec3 rgb, int cspace, float whitelevel) {
+vec3 apply_gtm(int tmo, vec3 rgb, int cspace, float diffuse_white, float peak_white) {
   /**
    * Applies the selected tone mapping operator (TMO) on the given HDR color.
-   * The input is assumed to be in a linear RGB color space wherein (1, 1, 1)
-   * represents diffuse white. Specular highlights may exceed the [0, 1] range
-   * by orders of magnitude.
+   * The input is assumed to be in the given linear RGB color space, and have
+   * the given diffuse and peak white levels. Note that peak_white is defined
+   * as relative to diffuse_white, and must be >= 1.0.
    *
-   * The following operators are available:
+   * The input color is first normalized such that [0, diffuse_white] maps to
+   * [0, 1], then compressed by the chosen tone mapping operator:
    *
-   *   0 - none
-   *   1 - neutral - `cspace` and `whitelevel` are not needed
-   *   2 - reinhard - `cspace` is required for computing luminance
-   *   3 - filmic - [0, whitelevel] gets mapped to [0, 1]
+   *   0 - none - return the input color unmodified
+   *   1 - neutral - compress [0.8, peak_white] to [0.8, 1]
+   *   2 - reinhard - compress [0, inf] to [0, 1]
+   *   3 - filmic - compress [0, peak_white] to [0, 1]
    */
   switch (tmo) {
     case 1:
-      rgb = gtm_neutral(rgb, 1.0);
+      rgb = rgb / diffuse_white;
+      rgb = gtm_neutral(rgb, 0.8, peak_white);
       break;
     case 2:
+      rgb = rgb / diffuse_white;
       rgb = gtm_reinhard(rgb, cspace);
       break;
     case 3:
-      rgb = gtm_filmic(rgb, vec3(whitelevel));
+      rgb = rgb / diffuse_white;
+      rgb = gtm_filmic(rgb, cspace, vec3(peak_white));
       break;
   }
   return rgb;
@@ -755,12 +783,12 @@ void main() {
   vec2 tc = flip(texcoords, mirror);
   float gain = autoexpose ? ae_gain * exp(ev) : exp(ev);  // exp(x) == 2^x
   color = sharpen ? conv2d(img, tc) : texture(img, tc);
-  color.rgb = tonemap > 0 ? color.rgb : (color.rgb - minval) / maxval;
-  color.rgb *= gain;
+  color.rgb = (color.rgb - minval) / maxval;  // [minval, maxval] => [0, 1]
+  color.rgb = color.rgb * gain;
   color.rgb = csconv(color.rgb, cs_in, cs_out);
-  color.rgb = gamut.compress ? compress_gamut(color.rgb) : color.rgb;
-  color.rgb = apply_gtm(tonemap, color.rgb, cs_out, gain * maxval);
+  color.rgb = apply_gtm(tonemap, color.rgb, cs_out, diffuse_white * gain, peak_white);
   color.rgb = apply_gce(tonemap, color.rgb, cs_out, contrast, 1.0);
+  color.rgb = gamut.compress ? compress_gamut(color.rgb) : color.rgb;
   color.rgb = debug_indicators(color.rgb);
   color.rgb = apply_gamma(color.rgb);
 }

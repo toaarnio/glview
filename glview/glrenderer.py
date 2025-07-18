@@ -125,14 +125,16 @@ class GLRenderer:
             # Derive exposure parameters for the current tile, to be applied in the
             # second rendering pass
 
+            norm_maxvals = np.r_[1, texture.maxval, texture.maxval, texture.percentiles, texture.diffuse_white]
+            norm_minvals = np.r_[0, 0, texture.minval, 0, 0, 0, 0, 0]
+            whitelevel = norm_maxvals[self.ui.normalize]
+            blacklevel = norm_minvals[self.ui.normalize]
+            diffuse_white = texture.diffuse_white
+            peak_white = texture.percentiles[0] / texture.diffuse_white
+            peak_white = max(peak_white, 1.0)
+
             if self.ui.ae_per_tile[i]:
-                imgw = scalex * vpw * self.ui.scale[i]
-                imgh = scaley * vph * self.ui.scale[i]
-                imgw = min(int(imgw), vpw)
-                imgh = min(int(imgh), vph)
-                blacklevel = 0.0
-                whitelevel = texture.percentiles[0]  # global whitelevel = 99.5th percentile
-                ae_gain = ae.autoexposure(self.fbo.color_attachments[0], whitelevel, imgw, imgh)
+                ae_gain = ae.autoexposure(self.fbo.color_attachments[0], whitelevel, clip_pct=2.0)
                 if ae_gain is not None:
                     if self.ui.ae_reset_per_tile[i]:
                         self.ae_gain_per_tile[i] = ae_gain
@@ -141,14 +143,6 @@ class GLRenderer:
                         self.ae_gain_per_tile[i] = ae_gain * 0.1 + self.ae_gain_per_tile[i] * 0.9
                     self.ae_converged[i] = np.isclose(ae_gain, self.ae_gain_per_tile[i], rtol=0.01)
             else:
-                maxval = texture.maxval
-                minval = texture.minval
-                diffuse_white = texture.diffuse_white
-                percentiles = texture.percentiles
-                norm_maxvals = np.r_[1, maxval, maxval, percentiles, diffuse_white]
-                norm_minvals = np.r_[0, 0, minval, 0, 0, 0, 0, 0]
-                whitelevel = norm_maxvals[self.ui.normalize]
-                blacklevel = norm_minvals[self.ui.normalize]
                 self.ae_gain_per_tile[i] = 1.0
                 self.ae_converged[i] = True
 
@@ -164,6 +158,7 @@ class GLRenderer:
             magnification = scalex * vpw / (gpu_texture.width / self.ui.scale[i])
             max_kernel_size = self.postprocess['kernel'].array_length
             kernel = self._sharpen(magnification)
+            ae_gain = self.ae_gain_per_tile[i]
             self.postprocess['img'] = 0
             self.postprocess['mousepos'] = (0.0, 0.0)
             self.postprocess['scale'] = 1.0
@@ -174,10 +169,12 @@ class GLRenderer:
             self.postprocess['sharpen'] = self.ui.sharpen_per_tile[i]
             self.postprocess['kernel'] = np.resize(kernel, max_kernel_size)
             self.postprocess['kernw'] = kernel.shape[0]
-            self.postprocess['maxval'] = whitelevel
             self.postprocess['minval'] = blacklevel
+            self.postprocess['maxval'] = whitelevel
+            self.postprocess['diffuse_white'] = diffuse_white
+            self.postprocess['peak_white'] = peak_white
             self.postprocess['autoexpose'] = self.ui.ae_per_tile[i]
-            self.postprocess['ae_gain'] = self.ae_gain_per_tile[i]
+            self.postprocess['ae_gain'] = ae_gain
             self.postprocess['ev'] = self.ui.ev
             self.postprocess['cs_in'] = self.ui.cs_in
             self.postprocess['cs_out'] = self.ui.cs_out
@@ -186,7 +183,7 @@ class GLRenderer:
             self.postprocess['gamut.power'] = self.ui.gamut_pow
             self.postprocess['gamut.thr'] = self.ui.gamut_thr
             self.postprocess['gamut.scale'] = self._gamut(imgidx)
-            self.postprocess['contrast'] = self.ui.contrast_per_tile[i]
+            self.postprocess['contrast'] = 0.25 if self.ui.tonemap_per_tile[i] else 0.0
             self.postprocess['gamma'] = self.ui.gamma
             self.postprocess['debug'] = self.ui.debug_mode
             self.vao_post.render(moderngl.TRIANGLE_STRIP)

@@ -2,28 +2,24 @@ import numpy as np    # pip install numpy
 import moderngl       # pip install moderngl
 
 
-def autoexposure(texture: moderngl.Texture, whitelevel: float, imgw: int, imgh: int) -> float:
+def autoexposure(texture: moderngl.Texture, whitelevel: float, clip_pct: float) -> float:
     """
-    Calculate an autoexposure gain factor for the given texture.
+    Calculate an autoexposure gain factor for the given texture. The texture
+    is intended to represent a cropped region of a full-size image, with the
+    calculated gain intended to yield an ideal exposure for that region. The
+    gain is defined relative to the given global whitelevel.
 
     The gain is determined by analyzing a downscaled version of the texture
-    (a mipmap level) to speed up the calculation. The core logic is in the
-    `percentile_ae` function, which computes a gain that aims to balance
-    the overall brightness of the image while preventing excessive clipping
-    of highlights.
+    (a mipmap level) to speed up the calculation. If the texture has black
+    borders (zero-valued rows and/or columns at the edges), they are ignored.
 
-    If the texture has black borders (zero-valued rows and/or columns at the
-    edges), they are ignored in the gain calculation.
-
-    :param texture: image for which to calculate the exposure gain
-    :param whitelevel: nominal (global) white level of the image
-    :param imgw: width of the image within the viewport, in pixels
-    :param imgh: height of the image within the viewport, in pixels
-    :returns: the estimated autoexposure gain, or None if the image in the
-              viewport is too small for analysis
+    :param texture: texture for which to calculate the exposure gain
+    :param whitelevel: global nominal white level of the full-size image
+    :returns: the estimated autoexposure gain, or None if the texture is too
+              small for analysis
     """
-    if imgw * imgh >= 64:
-        texw, texh = texture.size
+    texw, texh = texture.size
+    if texw * texh >= 64:
         stats_level = np.log2(max(texw, texh) / 128)
         stats_level = int(max(stats_level, 0))
         texture.build_mipmaps(max_level=stats_level)
@@ -32,30 +28,29 @@ def autoexposure(texture: moderngl.Texture, whitelevel: float, imgw: int, imgh: 
         stats = texture.read(stats_level)
         stats = np.frombuffer(stats, dtype="f4")
         stats = stats.reshape(statsh, statsw, 3)[::-1]
-        stats_vp = crop_borders(stats)
-        ae_gain = percentile_ae(stats_vp, whitelevel)
-        return ae_gain
+        stats = crop_borders(stats)
+        if stats.size > 16:
+            ae_gain = percentile_ae(stats, whitelevel, clip_pct)
+            return ae_gain
 
 
-def percentile_ae(img: np.ndarray, whitelevel: float) -> float:
+def percentile_ae(img: np.ndarray, whitelevel: float, clip_pct: float) -> float:
     """
     Estimate exposure gain using a center-weighted, percentile-based method.
 
-    The gain is determined by finding the pixel value at a specific high percentile
-    (currently, 99.5th) of per-pixel maximums. That is, 0.5% of pixels are allowed
-    to have one or more clipped color components.
+    The gain is determined by finding the pixel value at a specific percentile
+    of per-pixel maximums. For example, if the given clip_pct is 95, 5% of pixels
+    are allowed to have one or more clipped color components.
 
-    The image is assumed to be in a nominal range of [0, whitelevel]. Values outside
-    of this range are allowed, but the gain factor is defined relative to the nominal
-    whitelevel. For example, if the nominal whitelevel is 1.5 and the top-0.5% value
-    is 3.0, the gain will be 2.0.
-
-    To avoid ever reducing the brightness of the image, while also not boosting noise
-    in dark regions too much, the final gain is clamped to a range of [1, 32].
+    The image is assumed to be in a nominal range of [0, whitelevel]. Values
+    outside of this range are allowed, but the gain factor is defined relative
+    to the nominal white level. For example, if the nominal white level is 1.5,
+    and the top-5% value representing a target white level ends up at 3.0, the
+    gain will be 2.0.
 
     :param img: input image, or part of an image; shape = (H, W, C)
-    :param whitelevel: nominal (global) white level of the image
-    :returns: estimated autoexposure gain; range = [1, 32]
+    :param whitelevel: global nominal white level of the image
+    :returns: estimated gain factor to yield the target clip percentage
     """
     def weighted_percentile(data, weights, percentile):
         """
@@ -82,15 +77,13 @@ def percentile_ae(img: np.ndarray, whitelevel: float) -> float:
     weights = np.exp(-(x**2 + y**2) / (2 * sigma**2))
     weights /= np.sum(weights)
 
-    # Define a target whitelevel such that 0.5% of pixels would be clipped;
-    # the target is not always reached, as the gain is restricted to [1, 32]
+    # Define a target whitelevel such that the given percentage of pixels
+    # will be clipped
 
-    clip_percentile = 0.5
     pixel_max = np.max(img, axis=2)
-    target_whitelevel = weighted_percentile(pixel_max, weights, 100 - clip_percentile)
-    gain = whitelevel / target_whitelevel
-    gain = np.clip(gain, 1.0, 32.0)
-    return gain
+    target_white = weighted_percentile(pixel_max, weights, 100 - clip_pct)
+    target_gain = whitelevel / target_white
+    return target_gain
 
 
 def crop_borders(img):
