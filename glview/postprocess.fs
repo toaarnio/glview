@@ -737,15 +737,16 @@ vec3 apply_gce(int mode, vec3 rgb, int cspace, float contrast, float whitelevel)
 /**************************************************************************************/
 
 
-vec3 debug_indicators(vec3 rgb) {
+vec3 debug_indicators(vec3 rgb, vec3 orig_rgb, float diffuse_level, float peak_level) {
   /**
    * Returns a color-coded debug representation of the given pixel, depending on
    * its value and a user-defined debug mode. The following modes are available:
    *
    *   0 - no-op => keep original pixel color
-   *   1 - overexposed => red; out-of-gamut => blue; magenta => both
-   *   2 - out-of-gamut => shades of green
+   *   1 - red => overexposed; blue => out-of-gamut; magenta => both
+   *   2 - shades of green => distance to gamut
    *   3 - normalized color => rgb' = 1.0 - rgb / max(rgb)
+   *   4 - red => above diffuse white; magenta => above peak white
    */
   float gdist = max3(gamut_distance(rgb));  // [0, >1]
   float oog_dist = clamp(5.0 * (gdist - 1.0), 0.0, 1.0);  // [1.0, 1.2] => [0, 1]
@@ -767,6 +768,12 @@ vec3 debug_indicators(vec3 rgb) {
     case 3:  // normalized color
       rgb = 1.0 - gamut_distance(rgb);
       break;
+    case 4:  // red => above diffuse white; magenta => above peak white
+      if (max3(abs(orig_rgb)) > diffuse_level)
+        rgb = vec3(1.0, 0.0, 0.0);
+      if (max3(abs(orig_rgb)) > peak_level * diffuse_level)
+        rgb.b = 1.0;
+      break;
   }
   return rgb;
 }
@@ -780,15 +787,17 @@ vec3 debug_indicators(vec3 rgb) {
 
 
 void main() {
+  vec3 debug_rgb;
   vec2 tc = flip(texcoords, mirror);
   float gain = autoexpose ? ae_gain * exp(ev) : exp(ev);  // exp(x) == 2^x
   color = sharpen ? conv2d(img, tc) : texture(img, tc);
   color.rgb = (color.rgb - minval) / maxval;  // [minval, maxval] => [0, 1]
+  debug_rgb = color.rgb * exp(ev);
   color.rgb = color.rgb * gain;
   color.rgb = csconv(color.rgb, cs_in, cs_out);
   color.rgb = apply_gtm(tonemap, color.rgb, cs_out, diffuse_white * gain, peak_white);
   color.rgb = apply_gce(tonemap, color.rgb, cs_out, contrast, 1.0);
   color.rgb = gamut.compress ? compress_gamut(color.rgb) : color.rgb;
-  color.rgb = debug_indicators(color.rgb);
+  color.rgb = debug_indicators(color.rgb, debug_rgb, diffuse_white, peak_white);
   color.rgb = apply_gamma(color.rgb);
 }
