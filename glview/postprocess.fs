@@ -789,9 +789,9 @@ void main() {
   debug_rgb = color.rgb * exp(ev);
   color.rgb = color.rgb * gain;
   color.rgb = csconv(color.rgb, cs_in, cs_out);
-  color.rgb = apply_gtm(tonemap, color.rgb, cs_out, diffuse_white * gain, peak_white);
-  color.rgb = apply_gce(tonemap, color.rgb, cs_out, contrast, 1.0);
   color.rgb = gamut.compress ? compress_gamut(color.rgb) : color.rgb;
+  color.rgb = apply_gtm(tonemap, color.rgb, cs_out, diffuse_white, peak_white);
+  color.rgb = apply_gce(tonemap, color.rgb, cs_out, contrast, 1.0);
   color.rgb = debug_indicators(color.rgb, debug_rgb, diffuse_white, peak_white);
   color.rgb = apply_gamma(color.rgb);
 }
