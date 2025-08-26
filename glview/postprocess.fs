@@ -741,6 +741,9 @@ vec3 debug_indicators(vec3 rgb, vec3 orig_rgb, float diffuse_level, float peak_l
    *   2 - shades of green => distance to gamut
    *   3 - normalized color => rgb' = 1.0 - rgb / max(rgb)
    *   4 - red => above diffuse white; magenta => above peak white
+   *   r - show red channel only
+   *   g - show green channel only
+   *   b - show blue channel only
    */
   float gdist = max3(gamut_distance(rgb));  // [0, >1]
   float oog_dist = clamp(5.0 * (gdist - 1.0), 0.0, 1.0);  // [1.0, 1.2] => [0, 1]
@@ -767,6 +770,15 @@ vec3 debug_indicators(vec3 rgb, vec3 orig_rgb, float diffuse_level, float peak_l
         rgb = vec3(1.0, 0.0, 0.0);
       if (max3(abs(orig_rgb)) > peak_level * diffuse_level)
         rgb.b = 1.0;
+      break;
+    case 66:  // show red channel only
+      rgb = vec3(rgb.r, 0.0, 0.0);
+      break;
+    case 55:  // show green channel only
+      rgb = vec3(0.0, rgb.g, 0.0);
+      break;
+    case 50:  // show blue channel only
+      rgb = vec3(0.0, 0.0, rgb.b);
       break;
   }
   return rgb;

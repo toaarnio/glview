@@ -131,7 +131,7 @@ def main():  # noqa: PLR0915
     config.normalize = argv.stringval("--normalize", default="off", accepted=list(NORMS.keys()))
     config.idt = argv.stringval("--idt", default="sRGB", accepted=list(COLORSPACES.keys()))
     config.odt = argv.stringval("--odt", default="sRGB", accepted=list(COLORSPACES.keys()))
-    config.debug = argv.intval("--debug", default=1, accepted=[1, 2, 3, 4])
+    config.debug = argv.stringval("--debug", default="1", accepted=list("1234rgb"))
     config.verbose = argv.exists("--verbose")
     config.verbose += argv.exists("--verbose")
     show_version = argv.exists("--version")
@@ -152,7 +152,7 @@ def main():  # noqa: PLR0915
         print("    --filter                use linear filtering; default = nearest")
         print("    --idt sRGB|P3|...       input image color space; default = sRGB")
         print("    --odt sRGB|P3|...       output device color space; default = sRGB")
-        print("    --debug N               select debug rendering mode; default = 1")
+        print("    --debug 1|2|...|r|g|b   select debug rendering mode; default = 1")
         print("    --verbose               print extra traces to the console")
         print("    --verbose               print even more traces to the console")
         print("    --version               show glview version number & exit")
@@ -195,11 +195,14 @@ def main():  # noqa: PLR0915
         print("  supported file types:")
         print("   ", '\n    '.join(IMAGE_TYPES))
         print()
-        print("  available debug rendering modes (--debug N):")
+        print("  available debug rendering modes (--debug M):")
         print("    1 - red => overexposed; blue => out of gamut; magenta => both")
         print("    2 - shades of green => out-of-gamut distance")
         print("    3 - normalized color: rgb' = rgb / max(rgb)")
         print("    4 - red => above diffuse white; magenta => above peak white")
+        print("    r - show red channel only, set others to zero")
+        print("    g - show green channel only, set others to zero")
+        print("    b - show blue channel only, set others to zero")
         print()
         print(f"  glview version {version.__version__}.")
         print()
@@ -214,7 +217,7 @@ def main():  # noqa: PLR0915
     loader = imageprovider.ImageProvider(FileList(filenames), config.downsample, bool(config.verbose))
     enforce(loader.files.numfiles > 0, "No valid images to show. Terminating.")
 
-    ui = pygletui.PygletUI(loader.files, config.debug, bool(config.verbose))
+    ui = pygletui.PygletUI(loader.files, ord(config.debug) - ord("0"), bool(config.verbose))
     ui.version = version.__version__
     ui.texture_filter = "LINEAR" if config.smooth else "NEAREST"
     ui.normalize = NORMS[config.normalize]

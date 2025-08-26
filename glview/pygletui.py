@@ -18,8 +18,8 @@ class PygletUI:
     def __init__(self, files, debug, verbose=False):
         """ Create a new PygletUI with the given (hardcoded) FileList instance. """
         self.thread_name = "UIThread"
-        self.debug_selected = debug  # selected debug rendering mode: 1|2|3|...
-        self.debug_mode = 0  # start in normal mode, toggle on/off with space
+        self.debug_mode = debug  # selected debug rendering mode: 1|2|3|4|r|g|b|...
+        self.debug_mode_on = False  # start in normal mode, toggle on/off with space
         self.verbose = verbose
         self.files = files
         self.version = None
@@ -494,8 +494,7 @@ class PygletUI:
                         imgio.imwrite(f"screenshot{self.ss_idx:02d}.pfm", screenshot_fp32, maxval=1.0, verbose=True)
                         self.ss_idx += 1
                     case keys.SPACE:  # toggle debug mode on/off
-                        N = self.debug_selected
-                        self.debug_mode = (self.debug_mode + N) % (N * 2)
+                        self.debug_mode_on = not self.debug_mode_on
                         self._vprint(f"debug rendering mode {self.debug_mode}")
                         self.need_redraw = True
                     case keys.D | keys.DELETE:

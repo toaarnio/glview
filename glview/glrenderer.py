@@ -185,7 +185,7 @@ class GLRenderer:
             self.postprocess['gamut.scale'] = self._gamut(imgidx)
             self.postprocess['contrast'] = 0.25 if self.ui.tonemap_per_tile[i] else 0.0
             self.postprocess['gamma'] = self.ui.gamma
-            self.postprocess['debug'] = self.ui.debug_mode
+            self.postprocess['debug'] = self.ui.debug_mode * int(self.ui.debug_mode_on)
             self.vao_post.render(moderngl.TRIANGLE_STRIP)
 
         self.ctx.finish()
