@@ -630,7 +630,7 @@ vec3 filmic_curve(vec3 rgb) {
   float B = 0.50;  // linear strength (default: 0.50)
   float C = 0.10;  // linear angle (default: 0.10)
   float D = 0.20;  // toe strength (default: 0.20)
-  float E = 0.03;  // toe numerator (default: 0.02)
+  float E = 0.02;  // toe numerator (default: 0.02)
   float F = 0.30;  // toe denominator (default: 0.30)
   vec3 numerator = rgb * (A * rgb + C * B) + D * E;
   vec3 denominator = rgb * (A * rgb + B) + D * F;
@@ -640,24 +640,18 @@ vec3 filmic_curve(vec3 rgb) {
 }
 
 
-vec3 gtm_filmic(vec3 rgb, int cspace, vec3 peak_white) {
+vec3 gtm_filmic(vec3 rgb, vec3 peak_white) {
   /**
-   * A filmic tonemapping operator based on the Uncharted 2 curve, with
-   * a straight-line extension for negative (out-of-gamut) inputs. This
+   * A filmic tonemapping operator based on the Uncharted 2 curve. This
    * provides a more cinematic and perceptually pleasing result than
    * simple Reinhard, with better saturation and highlight rolloff.
-   * The operator is applied in Rec2020 color space to minimize the
-   * adverse impact of negative colors.
    *
    * See http://filmicworlds.com/blog/filmic-tonemapping-operators/ for
    * background and https://www.desmos.com/calculator/jimezytyho for an
    * interactive visualization.
    */
-  vec3 wide = csconv(rgb, cspace, Rec2020);
-  vec3 pos = filmic_curve(wide) / filmic_curve(peak_white);
-  vec3 neg = wide / peak_white;
-  wide = mix(pos, neg, lessThan(wide, zeros));
-  rgb = csconv(wide, Rec2020, cspace);
+  vec3 pos = filmic_curve(rgb) / filmic_curve(peak_white);
+  rgb = mix(pos, zeros, lessThan(rgb, zeros));
   return rgb;
 }
 
@@ -688,7 +682,7 @@ vec3 apply_gtm(int tmo, vec3 rgb, int cspace, float diffuse_white, float peak_wh
       break;
     case 3:
       rgb = rgb / diffuse_white;
-      rgb = gtm_filmic(rgb, cspace, vec3(peak_white));
+      rgb = gtm_filmic(rgb, vec3(peak_white));
       break;
   }
   return rgb;
