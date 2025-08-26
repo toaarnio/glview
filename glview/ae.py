@@ -87,10 +87,10 @@ def percentile_ae(img: np.ndarray, whitelevel: float, clip_pct: float) -> float:
 
 
 def crop_borders(img):
+    span = lambda a: slice(a.argmax(), a.size - a[::-1].argmax())
     nonzero = np.any(img != 0.0, axis=2)
     rowmask = np.any(nonzero, axis=1)
-    img = img[rowmask, :]
-    nonzero = np.any(img != 0.0, axis=2)
     colmask = np.any(nonzero, axis=0)
-    img = img[:, colmask]
+    img = img[span(rowmask), :]
+    img = img[:, span(colmask)]
     return img

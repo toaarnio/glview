@@ -287,12 +287,12 @@ class PygletUI:
         self.ev = self._triangle_wave(self.ev_linear, self.ev_range)
 
     def _crop_borders(self, img):
+        span = lambda a: slice(a.argmax(), a.size - a[::-1].argmax())
         nonzero = np.any(img != 0.0, axis=2)
         rowmask = np.any(nonzero, axis=1)
-        img = img[rowmask, :]
-        nonzero = np.any(img != 0.0, axis=2)
         colmask = np.any(nonzero, axis=0)
-        img = img[:, colmask]
+        img = img[span(rowmask), :]
+        img = img[:, span(colmask)]
         return img
 
     def _setup_events(self):
