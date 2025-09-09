@@ -55,6 +55,16 @@ uniform int debug;
 
 /**************************************************************************************/
 /*
+/*    F O R W A R D   D E C L A R A T I O N S
+/*
+/**************************************************************************************/
+
+
+vec3 csconv(vec3 rgb, int cs_in, int cs_out);
+
+
+/**************************************************************************************/
+/*
 /*    U T I L I T I E S
 /*
 /**************************************************************************************/
@@ -230,6 +240,30 @@ vec3 apply_gamma(vec3 rgb) {
 /*    C O L O R   S P A C E   C O N V E R S I O N S
 /*
 /**************************************************************************************/
+
+
+float trad_luma(vec3 rgb, int cspace) {
+  /**
+   * Returns the traditional estimate of luma (perceived brightness) of the given
+   * color in the given color space.
+   */
+  float luma = csconv(rgb, cspace, XYZ).y;
+  luma = max(luma, 0.0);
+  return luma;
+}
+
+
+float luma(vec3 rgb, int cspace) {
+  /**
+   * Returns a non-linear estimate of the luma (perceived brightness) of the given
+   * color in the given color space.
+   */
+  vec3 luma_weights = vec3(0.79, 1.0, 0.34);
+  float luma = max3(luma_weights * rgb);
+  luma = max(trad_luma(rgb, cspace), luma);
+  luma = max(luma, 0.0);
+  return luma;
+}
 
 
 vec3 xy_to_xyz(vec2 xy) {
@@ -731,7 +765,7 @@ vec3 apply_gce(int mode, vec3 rgb, int cspace, float contrast, float whitelevel)
 /**************************************************************************************/
 
 
-vec3 debug_indicators(vec3 rgb, vec3 orig_rgb, float diffuse_level, float peak_level) {
+vec3 debug_indicators(vec3 rgb, vec3 orig_rgb, int cspace, float diffuse_level, float peak_level) {
   /**
    * Returns a color-coded debug representation of the given pixel, depending on
    * its value and a user-defined debug mode. The following modes are available:
@@ -780,6 +814,9 @@ vec3 debug_indicators(vec3 rgb, vec3 orig_rgb, float diffuse_level, float peak_l
     case 50:  // show blue channel only
       rgb = vec3(0.0, 0.0, rgb.b);
       break;
+    case 60:  // grayscale (perceived brightness)
+      rgb = vec3(luma(rgb, cspace));
+      break;
   }
   return rgb;
 }
@@ -804,6 +841,6 @@ void main() {
   color.rgb = gamut.compress ? compress_gamut(color.rgb) : color.rgb;
   color.rgb = apply_gtm(tonemap, color.rgb, cs_out, diffuse_white, peak_white);
   color.rgb = apply_gce(tonemap, color.rgb, cs_out, contrast, 1.0);
-  color.rgb = debug_indicators(color.rgb, debug_rgb, diffuse_white, peak_white);
+  color.rgb = debug_indicators(color.rgb, debug_rgb, cs_out, diffuse_white, peak_white);
   color.rgb = apply_gamma(color.rgb);
 }
