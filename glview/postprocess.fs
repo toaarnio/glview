@@ -512,7 +512,7 @@ vec3 csconv(vec3 rgb, int cs_in, int cs_out) {
 /**************************************************************************************/
 
 
-vec4 conv2d(sampler2D img, vec2 tc) {
+vec4 conv2d(sampler2D img, vec2 tc, int cspace) {
   /**
    * Convolves the given texture with a kernel defined in a uniform array. The color
    * of each pixel is multiplied by a factor proportional to the sum of its weighted
@@ -540,13 +540,12 @@ vec4 conv2d(sampler2D img, vec2 tc) {
       float weight = kernel[y * kernw + x];
       vec2 tc = tc_base + vec2(x, y) * xy_step;
       vec4 pixel = texture(img, tc);
-      float grayscale = pixel.r + pixel.g + pixel.b;
-      grayscale = max(grayscale, 0.0f);
+      float grayscale = luma(pixel.rgb, cspace);
       sharp_gray += weight * grayscale;
     }
   }
   vec4 org = texture(img, tc);
-  float org_gray = max(org.r + org.g + org.b, 0.0f);
+  float org_gray = luma(org.rgb, cspace);
   float boost = clamp(sharp_gray / org_gray, 0.5f, 5.0f);
   org.rgb *= boost;
   return org;
@@ -833,7 +832,7 @@ void main() {
   vec3 debug_rgb;
   vec2 tc = flip(texcoords, mirror);
   float gain = autoexpose ? ae_gain * exp(ev) : exp(ev);  // exp(x) == 2^x
-  color = sharpen ? conv2d(img, tc) : texture(img, tc);
+  color = sharpen ? conv2d(img, tc, cs_in) : texture(img, tc);
   color.rgb = (color.rgb - minval) / maxval;  // [minval, maxval] => [0, 1]
   debug_rgb = color.rgb * exp(ev);
   color.rgb = color.rgb * gain;
