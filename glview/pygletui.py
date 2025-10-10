@@ -107,7 +107,7 @@ class PygletUI:
         self._vprint("initializing Pyglet & native OpenGL...")
         pyglet.options['debug_lib'] = self.verbose
         pyglet.options['debug_gl'] = self.verbose
-        display = pyglet.canvas.get_display()
+        display = pyglet.display.get_display()
         screen = display.get_default_screen()
         self.winsize = (screen.width // 3, screen.height // 3)
         self.viewports = self._retile(self.numtiles, self.winsize, self.layout)
