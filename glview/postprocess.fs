@@ -746,7 +746,7 @@ vec3 apply_gce(int mode, vec3 rgb, int cspace, float contrast, float whitelevel)
    * :param whitelevel: maximum input luminance; typically 1.0
    * :returns: contrast-enhanced input color; nominal range = [0, whitelevel]
    */
-  float luma = csconv(rgb, cspace, XYZ).y;
+  float luma = luma(rgb, cspace);
   if (mode > 0 && luma > 0.0) {
     float normed_luma = luma / whitelevel;  // [0, wl] => [0, 1]
     float contrasted_luma = smoothstep(0.0, whitelevel, luma);  // [0, wl] => [0, 1]
