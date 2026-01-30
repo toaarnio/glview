@@ -30,8 +30,14 @@ def autoexposure(texture: moderngl.Texture, whitelevel: float, clip_pct: float) 
         stats = stats.reshape(statsh, statsw, 3)[::-1]
         stats = crop_borders(stats)
         if stats.size > 16:
-            ae_gain = percentile_ae(stats, whitelevel, clip_pct)
-            return ae_gain
+            stats = np.max(stats, axis=2)
+            stats = np.clip(stats, 0, None)
+            ae_gain, peak_white = percentile_ae(stats, whitelevel, clip_pct)
+            diffuse_white = estimate_diffuse_white(stats)
+            diffuse_white = min(diffuse_white, peak_white)
+            return ae_gain, diffuse_white, peak_white
+        else:
+            return None, None, None
 
 
 def percentile_ae(img: np.ndarray, whitelevel: float, clip_pct: float) -> float:
@@ -80,10 +86,18 @@ def percentile_ae(img: np.ndarray, whitelevel: float, clip_pct: float) -> float:
     # Define a target whitelevel such that the given percentage of pixels
     # will be clipped
 
-    pixel_max = np.max(img, axis=2)
-    target_white = weighted_percentile(pixel_max, weights, 100 - clip_pct)
-    target_gain = whitelevel / target_white
-    return target_gain
+    target_white = weighted_percentile(img, weights, 100 - clip_pct)
+    target_gain = sdiv(whitelevel, target_white)
+    return target_gain, target_white
+
+
+def estimate_diffuse_white(img: np.ndarray) -> float:
+    """ Estimate diffuse white level using geometric mean over all non-zero pixels. """
+    img = img[img != 0.0]
+    img = img.astype(np.float32)  # float16 is not enough
+    mean_level = np.exp(np.mean(np.log(img + 1e-6)))
+    diffuse_white = 2.5 * mean_level
+    return diffuse_white
 
 
 def crop_borders(img):
@@ -94,3 +108,14 @@ def crop_borders(img):
     img = img[span(rowmask), :]
     img = img[:, span(colmask)]
     return img
+
+
+def sdiv(nominator, denominator):
+    nominator, denominator = np.broadcast_arrays(nominator, denominator)
+    nonzero = np.abs(denominator) > 0.0
+    finite = np.isfinite(denominator)
+    valid = nonzero * finite  # logical AND
+    zeros = np.zeros_like(nominator)
+    result = np.divide(nominator, denominator, out=zeros, where=valid)
+    result = np.nan_to_num(result, posinf=np.inf, neginf=-np.inf)
+    return result

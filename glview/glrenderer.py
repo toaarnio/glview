@@ -129,12 +129,10 @@ class GLRenderer:
             norm_minvals = np.r_[0, 0, texture.minval, 0, 0, 0, 0, 0]
             whitelevel = norm_maxvals[self.ui.normalize]
             blacklevel = norm_minvals[self.ui.normalize]
-            diffuse_white = texture.diffuse_white
-            peak_white = texture.percentiles[0] / texture.diffuse_white
-            peak_white = max(peak_white, 1.0)
+
+            ae_gain, tile_diffuse, tile_peak = ae.autoexposure(self.fbo.color_attachments[0], whitelevel, clip_pct=1.0)
 
             if self.ui.ae_per_tile[i]:
-                ae_gain = ae.autoexposure(self.fbo.color_attachments[0], whitelevel, clip_pct=2.0)
                 if ae_gain is not None:
                     if self.ui.ae_reset_per_tile[i]:
                         self.ae_gain_per_tile[i] = ae_gain
@@ -145,6 +143,12 @@ class GLRenderer:
             else:
                 self.ae_gain_per_tile[i] = 1.0
                 self.ae_converged[i] = True
+
+            if tile_peak is None:
+                tile_peak = texture.maxval
+                tile_diffuse = texture.diffuse_white
+            peak_white = tile_peak / tile_diffuse  # peak = maxval of visible part (relative to diffuse level)
+            diffuse_white = tile_diffuse
 
             # Render the current tile from an offscreen texture to the screen (or
             # the given render target), applying any screen-space postprocessing
