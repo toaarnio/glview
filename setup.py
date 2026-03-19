@@ -11,7 +11,7 @@ def read_deps(filename):
 
 
 def read_readme(filename):
-    with open(filename, "r") as f:
+    with open(filename) as f:
         lines = f.readlines()
         lines = lines[:-2]  # drop last two lines (CI build status)
         text = ''.join(lines)

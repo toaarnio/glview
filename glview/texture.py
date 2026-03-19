@@ -123,12 +123,11 @@ class Texture:
         """ Estimate diffuse white level using geometric mean over all non-zero pixels. """
         if np.max(img) == 1.0:  # already clipped to 1.0
             return 1.0
-        else:
-            img = img[img != 0.0]
-            img = img.astype(np.float32)  # float16 is not enough
-            mean_level = np.exp(np.mean(np.log(img + 1e-6)))
-            diffuse_white = mean_level / 0.18
-            return diffuse_white
+        img = img[img != 0.0]
+        img = img.astype(np.float32)  # float16 is not enough
+        mean_level = np.exp(np.mean(np.log(img + 1e-6)))
+        diffuse_white = mean_level / 0.18
+        return diffuse_white
 
     def release(self):
         """Release the GPU memory associated with this Texture."""

@@ -26,11 +26,8 @@ SOFTWARE.
 
 import os                         # standard library
 import sys                        # standard library
-import re                         # standard library # pylint: disable=unused-import # noqa
 import glob                       # standard library
 import unittest                   # standard library
-
-# pylint: disable=invalid-name
 
 
 ######################################################################################
@@ -78,7 +75,7 @@ def intval(argname, default=None, accepted=None, condition=None, repeats=False):
     Example:
       numtiles = argv.intval("--split", 1, [1, 2, 3, 4])
     """
-    if not repeats:  # pylint: disable=no-else-return
+    if not repeats:
         argstr = _string(argname)
         useDefault = argstr is None
         if not useDefault:
@@ -88,20 +85,19 @@ def intval(argname, default=None, accepted=None, condition=None, repeats=False):
             if not _isValid(argname, argval, accepted, condition):
                 sys.exit(-1)
         return default if useDefault else argval
-    else:
-        argSet = set()
+    argSet = set()
+    argstr = _string(argname)
+    if argstr is None:
+        argSet = argSet.union([default])
+    while argstr is not None:
+        errmsg = f"Invalid value for '{argname}': '{argstr}' does not represent an integer."
+        _enforce(_isInt(argstr), errmsg)
+        argval = int(argstr, 0)  # hex values must have the "0x" prefix for this to work
+        if not _isValid(argname, argval, accepted, condition):
+            sys.exit(-1)
+        argSet = argSet.union([argval])
         argstr = _string(argname)
-        if argstr is None:
-            argSet = argSet.union([default])
-        while argstr is not None:
-            errmsg = f"Invalid value for '{argname}': '{argstr}' does not represent an integer."
-            _enforce(_isInt(argstr), errmsg)
-            argval = int(argstr, 0)  # hex values must have the "0x" prefix for this to work
-            if not _isValid(argname, argval, accepted, condition):
-                sys.exit(-1)
-            argSet = argSet.union([argval])
-            argstr = _string(argname)
-        return argSet
+    return argSet
 
 
 def floatval(argname, default=None, accepted=None, condition=None):
@@ -125,24 +121,23 @@ def stringval(argname, default=None, accepted=None, condition=None, repeats=Fals
       bayer = argv.stringval("--bayer", default="AUTO", accepted=["AUTO", "GBRG", "RGGB"])
       sources = argv.stringval("--source", default="all", accepted=["foo", "bar", "baz", "all"], repeats=True)
     """
-    if not repeats:  # pylint: disable=no-else-return
+    if not repeats:
         argstr = _string(argname)
         useDefault = argstr is None
         if not useDefault:
             if not _isValid(argname, argstr, accepted, condition):
                 sys.exit(-1)
         return default if useDefault else argstr
-    else:
-        argSet = set()
+    argSet = set()
+    argstr = _string(argname)
+    if argstr is None:
+        argSet |= {default}
+    while argstr is not None:
+        if not _isValid(argname, argstr, accepted, condition):
+            sys.exit(-1)
+        argSet = argSet.union([argstr])
         argstr = _string(argname)
-        if argstr is None:
-            argSet |= {default}
-        while argstr is not None:
-            if not _isValid(argname, argstr, accepted, condition):
-                sys.exit(-1)
-            argSet = argSet.union([argstr])
-            argstr = _string(argname)
-        return argSet
+    return argSet
 
 
 def intpair(argname, default=None, repeats=False):
@@ -155,15 +150,14 @@ def intpair(argname, default=None, repeats=False):
         pair = _intpair(argname)
         pair = default if pair is None else pair
         return pair
-    else:
-        pairSet = set()
+    pairSet = set()
+    pair = _intpair(argname)
+    if pair is None:
+        pairSet |= {default}
+    while pair is not None:
+        pairSet |= {pair}
         pair = _intpair(argname)
-        if pair is None:
-            pairSet |= {default}
-        while pair is not None:
-            pairSet |= {pair}
-            pair = _intpair(argname)
-        return pairSet
+    return pairSet
 
 
 def floatpair(argname, default=None):
@@ -242,8 +236,7 @@ def _string(argname, default=None):
             argstr = sys.argv[argidx + 1]
             del sys.argv[argidx:argidx + 2]
             return argstr
-        else:
-            return ""
+        return ""
     return default
 
 
@@ -272,7 +265,7 @@ def _isValid(argname, arg, validArgs=None, condition=None):
             print(f"Invalid value for '{argname}': '{arg}' is not in the set {validArgs}.")
             return False
     if condition is not None:
-        validator = eval(f"lambda v: {condition}")  # pylint: disable=eval-used
+        validator = eval(f"lambda v: {condition}")  # noqa: S307
         if validator(arg) is not True:
             print(f"Invalid value for '{argname}': '{arg}' does not satisfy '{condition}'.")
             return False
@@ -304,8 +297,6 @@ def _intpair(argname):
 
 
 class _Tests(unittest.TestCase):
-
-    # pylint: disable=missing-docstring
 
     def test_exists(self):
         print("Testing argv.exists()...")

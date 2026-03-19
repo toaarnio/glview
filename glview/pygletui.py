@@ -115,7 +115,7 @@ class PygletUI:
         self.window.set_caption(self._caption())
         self.window.set_fullscreen(self.fullscreen)
         self.window.set_mouse_visible(not self.fullscreen)
-        self.key_state = {k: False for k in pyglet.window.key._key_names}
+        self.key_state = dict.fromkeys(pyglet.window.key._key_names, False)
         self._setup_events()
         self._vprint("Pyglet & native OpenGL initialized")
 

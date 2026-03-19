@@ -36,8 +36,8 @@ def autoexposure(texture: moderngl.Texture, whitelevel: float, clip_pct: float) 
             diffuse_white = estimate_diffuse_white(stats)
             diffuse_white = min(diffuse_white, peak_white)
             return ae_gain, diffuse_white, peak_white
-        else:
-            return None, None, None
+        return None, None, None
+    return None, None, None
 
 
 def percentile_ae(img: np.ndarray, whitelevel: float, clip_pct: float) -> float:
