@@ -2,11 +2,11 @@ lint:
 	ruff check glview/[^a]*.py
 
 install:
-	pip3 uninstall --yes glview || true
+	pipx uninstall glview || true
 	rm -rf build dist glview.egg-info || true
 	python3 setup.py sdist bdist_wheel
-	pip3 install --user dist/*.whl
-	@python3 -c 'import glview; print(f"Installed glview version {glview.__version__}.")'
+	pipx install --force dist/*.whl
+	@glview --version | grep 'glview version.*'
 
 release:
 	pip3 install --user setuptools wheel twine

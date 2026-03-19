@@ -1,8 +1,5 @@
 from setuptools import setup, find_packages
 
-import glview
-
-
 def read_deps(filename):
     with open(filename) as f:
         deps = f.read().split('\n')
@@ -18,8 +15,15 @@ def read_readme(filename):
         return text
 
 
+def read_version(filename):
+    namespace = {}
+    with open(filename) as f:
+        exec(f.read(), namespace)
+    return namespace["__version__"]
+
+
 setup(name="glview",
-      version=glview.__version__,
+      version=read_version("glview/version.py"),
       description="Lightning-fast image viewer with smooth zooming & panning.",
       url="http://github.com/toaarnio/glview",
       author="Tomi Aarnio",
