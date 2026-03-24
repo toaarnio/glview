@@ -10,9 +10,12 @@ pipx install glview
 glview --help
 glview <your-image-file>
 
-# If there's a failure due to missing libGL.so
+# [LINUX] If there's a failure due to missing libGL.so
 sudo apt update
 sudo apt install libegl1 mesa-utils libegl1-mesa-dev
+
+# [MACOS] If there's a failure due to missing EXIF libraries
+brew install exiv2
 ```
 
 ## Usage
