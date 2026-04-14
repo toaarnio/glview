@@ -116,8 +116,41 @@ class PygletUI:
         self.window.set_fullscreen(self.fullscreen)
         self.window.set_mouse_visible(not self.fullscreen)
         self.key_state = dict.fromkeys(pyglet.window.key._key_names, False)
+        self._patch_gl_cleanup()
         self._setup_events()
         self._vprint("Pyglet & native OpenGL initialized")
+
+    @staticmethod
+    def _patch_gl_cleanup():
+        """
+        On Windows, pyglet uses WGLFunctionProxy to lazily resolve OpenGL 1.2+
+        function pointers via wglGetProcAddress on the first call. If the first
+        call happens after the GL context is destroyed (e.g. from BufferObject.__del__
+        via Context.delete_buffer, or from set_current's _delete_objects/_delete_objects_one_by_one),
+        wglGetProcAddress returns NULL and pyglet raises MissingFunctionException.
+
+        Wrap the affected GL functions in pyglet.gl with a silent exception handler.
+        This covers all call paths without probing (probing caused an access violation).
+        """
+        def _make_safe(fn):
+            def safe(*args, **kwargs):
+                try:
+                    return fn(*args, **kwargs)
+                except pyglet.gl.lib.MissingFunctionException:
+                    pass
+            return safe
+
+        for name in [
+            "glDeleteBuffers",        # OpenGL 1.5 — called from BufferObject.__del__
+            "glDeleteProgram",        # OpenGL 2.0 — called from shader program __del__
+            "glDeleteShader",         # OpenGL 2.0
+            "glDeleteVertexArrays",   # OpenGL 3.0
+            "glDeleteFramebuffers",   # OpenGL 3.0
+            "glDeleteRenderbuffers",  # OpenGL 3.0
+        ]:
+            fn = getattr(pyglet.gl, name, None)
+            if fn is not None:
+                setattr(pyglet.gl, name, _make_safe(fn))
 
     def _poll_loading(self):
         """
