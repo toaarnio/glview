@@ -139,7 +139,7 @@ def main():  # noqa: PLR0915
     argv.exitIfAnyUnparsedOptions()
     if show_version:
         print(f"glview version {version.__version__}")
-        sys.exit(-1)
+        sys.exit()
     if show_help:
         print("Usage: glview [options] [image.(pgm|ppm|pnm|png|jpg|..)] ...")
         print()
@@ -207,7 +207,7 @@ def main():  # noqa: PLR0915
         print()
         print(f"  glview version {version.__version__}.")
         print()
-        sys.exit(-1)
+        sys.exit()
     else:
         print("See 'glview --help' for command-line options and keyboard commands.")
 

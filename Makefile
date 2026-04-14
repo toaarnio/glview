@@ -1,16 +1,17 @@
-lint:
-	ruff check glview/[^a]*.py
+deps:
+	uv sync --active --extra dev
 
-install:
-	pipx uninstall glview || true
-	rm -rf build dist glview.egg-info || true
-	python3 setup.py sdist bdist_wheel
-	pipx install --force dist/*.whl
-	@glview --version | grep 'glview version.*'
+lint:
+	uv run --active ruff check glview/[^a]*.py
+
+install: lint
+	rm -rf dist || true
+	uv build
+	uv pip install --upgrade dist/*.whl
+	@glview --version
 
 release:
-	pip3 install --user setuptools wheel twine
-	make install
-	twine upload dist/*
+	@echo "Publishing is handled by GitHub Actions with PyPI Trusted Publishing."
+	@echo "Create a GitHub Release to trigger the publish workflow."
 
-.PHONY: lint install release
+.PHONY: deps lint install release
