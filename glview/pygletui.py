@@ -116,8 +116,30 @@ class PygletUI:
         self.window.set_fullscreen(self.fullscreen)
         self.window.set_mouse_visible(not self.fullscreen)
         self.key_state = dict.fromkeys(pyglet.window.key._key_names, False)
+        self._patch_gl_cleanup()
         self._setup_events()
         self._vprint("Pyglet & native OpenGL initialized")
+
+    @staticmethod
+    def _patch_gl_cleanup():
+        """
+        On Windows with older OpenGL drivers, functions introduced in OpenGL 1.5+
+        (e.g. glDeleteBuffers) and OpenGL 2.0+ (e.g. glDeleteProgram) may not be
+        exported. Pyglet replaces them with stubs that raise MissingFunctionException
+        at GC time (after the event loop exits), crashing the process. Patch pyglet's
+        Context._delete_objects to silently skip calls to any such missing function.
+        """
+        import pyglet.gl.base as _glbase
+        _orig = _glbase.Context._delete_objects
+
+        @staticmethod
+        def _delete_objects(lst, fn):
+            try:
+                _orig(lst, fn)
+            except pyglet.gl.lib.MissingFunctionException:
+                pass
+
+        _glbase.Context._delete_objects = _delete_objects
 
     def _poll_loading(self):
         """

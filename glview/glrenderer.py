@@ -213,8 +213,9 @@ class GLRenderer:
         for obj in [self.vao_post, self.vao, self.vbo, self.postprocess, self.prog, self.fbo]:
             if obj is not None:
                 obj.release()
-        if self.ctx is not None:
-            self.ctx.release()
+        # Don't release self.ctx: moderngl attaches to pyglet's context, so
+        # pyglet owns the context lifecycle. Releasing it here causes pyglet's
+        # own cleanup to fail (glDeleteBuffers MissingFunctionException).
 
     def screenshot(self, dtype=np.uint8):
         """
