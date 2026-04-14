@@ -331,6 +331,7 @@ class PygletUI:
     def _setup_close_event(self):
         @self.window.event
         def on_close():
+            self.renderer.release()
             self.running = False
             self.event_loop.has_exit = True
 

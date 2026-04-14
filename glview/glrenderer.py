@@ -201,6 +201,21 @@ class GLRenderer:
         self._vprint(f"rendering {w} x {h} pixels took {elapsed:.1f} ms, frame-to-frame interval was {interval:.1f} ms", log_level=2)
         return elapsed
 
+    def release(self):
+        """
+        Explicitly release all GL resources while the context is still alive.
+        Must be called before the window closes to avoid errors from the GC
+        trying to call glDeleteBuffers after the context is gone.
+        """
+        for tex in (self.files.textures or []):
+            if tex is not None:
+                tex.release()
+        for obj in [self.vao_post, self.vao, self.vbo, self.postprocess, self.prog, self.fbo]:
+            if obj is not None:
+                obj.release()
+        if self.ctx is not None:
+            self.ctx.release()
+
     def screenshot(self, dtype=np.uint8):
         """
         Render the current on-screen view into an offscreen buffer and return the image
