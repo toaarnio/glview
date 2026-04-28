@@ -13,6 +13,11 @@ import imsize                  # pip install imsize
 import imgio                   # pip install imgio
 from pqdm.threads import pqdm  # pip install pqdm
 
+try:
+    from glview.imagestate import ImageStatus
+except ImportError:
+    from imagestate import ImageStatus
+
 
 class ImageProvider:
     """ A multithreaded image file loader. """
@@ -78,17 +83,17 @@ class ImageProvider:
     def get_image(self, index):
         """
         Return the image at the given index. The image might not be present,
-        in which case the return value is either "PENDING" (not loaded yet),
-        "RELEASED" (already released to free up the memory), or "INVALID"
-        (tried to load the image but failed).
+        in which case the return value is the corresponding slot-state label.
         """
-        return self.files.images[index]
+        if self.files.image_status(index) == ImageStatus.LOADED:
+            return self.files.loaded_images[index]
+        return self.files.image_status(index).value
 
     def release_image(self, index):
         """
         Release the image at the given index to (eventually) free up the memory.
         """
-        self.files.images[index] = "RELEASED"
+        self.files.mark_released(index)
 
     def _degamma(self, frame: np.ndarray) -> np.ndarray:
         """
@@ -129,10 +134,13 @@ class ImageProvider:
                         images = pqdm(batch, self._load_single, 8, "args", bounded=True,
                                       exception_behaviour="immediate", disable=True)
                         for idx, img in zip(chunk, images, strict=True):
-                            if img is not None:
-                                self.files.images[idx] = img
+                            if isinstance(img, np.ndarray):
+                                self.files.mark_loaded(idx, img)
                                 nloaded += 1
-            nbytes = np.sum([img.nbytes for img in self.files.images if isinstance(img, np.ndarray)])
+                            elif img == ImageStatus.INVALID.value:
+                                self.files.mark_invalid(idx)
+                                nloaded += 1
+            nbytes = np.sum([img.nbytes for img in self.files.loaded_images if isinstance(img, np.ndarray)])
             if nloaded > 0 and nbytes > 1e4:
                 elapsed = time.time() - t0
                 nbytes = nbytes / 1024**2
@@ -160,9 +168,11 @@ class ImageProvider:
                     if idx < self.files.numfiles:
                         verbose = self.verbose or self.files.numfiles < 200
                         img = self._load_single(idx, downsample, verbose)
-                        if img is not None:
-                            self.files.images[idx] = img
-                            nbytes += img.nbytes if isinstance(img, np.ndarray) else 0
+                        if isinstance(img, np.ndarray):
+                            self.files.mark_loaded(idx, img)
+                            nbytes += img.nbytes
+                        elif img == ImageStatus.INVALID.value:
+                            self.files.mark_invalid(idx)
                     else:
                         break
                 time.sleep(0.001)
@@ -185,7 +195,7 @@ class ImageProvider:
         Read image, drop alpha channel, convert to fp32 if maxval != 255;
         if loading fails, mark the slot as "INVALID" and keep going.
         """
-        if isinstance(self.files.images[idx], str) and self.files.images[idx] == "PENDING":
+        if self.files.image_status(idx) == ImageStatus.PENDING:
             try:
                 filespec = self.files.filespecs[idx]
                 suffix = Path(filespec).suffix.lower()
@@ -234,7 +244,7 @@ class ImageProvider:
             except (imgio.ImageIOError, imsize.ImageFileError) as e:
                 print(f"\n{e}")
                 self._vprint(e)
-                return "INVALID"
+                return ImageStatus.INVALID.value
         return None
 
     def _check_ram(self, minimum, wait):

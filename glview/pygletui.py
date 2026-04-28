@@ -13,8 +13,10 @@ import imgio                   # pip install imgio
 
 try:
     from glview import uistate
+    from glview.imagestate import ImageStatus
 except ImportError:
     import uistate
+    from imagestate import ImageStatus
 
 
 class PygletUI:
@@ -164,8 +166,7 @@ class PygletUI:
         visible until the user performs some interaction.
         """
         for imgidx in self.img_per_tile[:self.numtiles]:
-            img = self.files.images[imgidx]
-            if isinstance(img, str) and img == "PENDING":
+            if self.files.image_status(imgidx) == ImageStatus.PENDING:
                 self.images_pending = True
                 break
         else:
@@ -519,7 +520,7 @@ class PygletUI:
                         self.need_redraw = True
                     case keys.U:  # reload currently visible images from disk
                         for imgidx in self.img_per_tile[:self.numtiles]:
-                            self.files.images[imgidx] = "PENDING"
+                            self.files.mark_pending(imgidx)
                     case keys.X:  # EXIF info (current image)
                         imgidx = self.img_per_tile[self.tileidx]
                         filespec = self.files.filespecs[imgidx]

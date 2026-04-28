@@ -4,6 +4,7 @@ from pathlib import Path
 import numpy as np
 
 from glview.glview import FileList
+from glview.imagestate import ImageStatus
 from glview.pygletui import PygletUI
 
 
@@ -40,8 +41,8 @@ class PygletUISmokeTests(unittest.TestCase):
         ui.img_per_tile = [0, 1, 2, 3]
         ui.images_pending = True
         ui.need_redraw = False
-        ui.files.images[0] = np.zeros((1, 1, 3), dtype=np.uint8)
-        ui.files.images[1] = np.zeros((1, 1, 3), dtype=np.uint8)
+        ui.files.mark_loaded(0, np.zeros((1, 1, 3), dtype=np.uint8))
+        ui.files.mark_loaded(1, np.zeros((1, 1, 3), dtype=np.uint8))
 
         ui._poll_loading()
 
@@ -54,8 +55,7 @@ class PygletUISmokeTests(unittest.TestCase):
         ui.img_per_tile = [0, 1, 2, 3]
         ui.images_pending = False
         ui.need_redraw = False
-        ui.files.images[0] = np.zeros((1, 1, 3), dtype=np.uint8)
-        ui.files.images[1] = "PENDING"
+        ui.files.mark_loaded(0, np.zeros((1, 1, 3), dtype=np.uint8))
 
         ui._poll_loading()
 
@@ -67,7 +67,9 @@ class PygletUISmokeTests(unittest.TestCase):
         ui.numtiles = 2
         ui.img_per_tile = [2, 1, 0, 3]
         ui.need_redraw = False
-        ui.files.images = ["RELEASED", np.zeros((1, 1, 3), dtype=np.uint8), np.zeros((1, 1, 3), dtype=np.uint8)]
+        ui.files.mark_released(0)
+        ui.files.mark_loaded(1, np.zeros((1, 1, 3), dtype=np.uint8))
+        ui.files.mark_loaded(2, np.zeros((1, 1, 3), dtype=np.uint8))
         ui.files.textures = [None, None, None]
         ui.renderer = _FakeRenderer(
             upload_results={
@@ -84,7 +86,7 @@ class PygletUISmokeTests(unittest.TestCase):
     def test_upload_textures_sets_redraw_when_uploaded_texture_completes(self):
         ui = self._ui(["a.png"])
         ui.need_redraw = False
-        ui.files.images[0] = np.zeros((1, 1, 3), dtype=np.uint8)
+        ui.files.mark_loaded(0, np.zeros((1, 1, 3), dtype=np.uint8))
         ui.renderer = _FakeRenderer(upload_results={0: _FakeUploadedTexture(done=True)})
 
         ui._upload_textures()
@@ -95,7 +97,7 @@ class PygletUISmokeTests(unittest.TestCase):
     def test_upload_textures_is_skipped_while_redraw_is_pending(self):
         ui = self._ui(["a.png"])
         ui.need_redraw = True
-        ui.files.images[0] = np.zeros((1, 1, 3), dtype=np.uint8)
+        ui.files.mark_loaded(0, np.zeros((1, 1, 3), dtype=np.uint8))
         ui.renderer = _FakeRenderer(upload_results={0: _FakeUploadedTexture(done=True)})
 
         ui._upload_textures()
@@ -130,6 +132,25 @@ class PygletUISmokeTests(unittest.TestCase):
 
         self.assertEqual(viewports[0], (0, 40, 120, 40))
         self.assertEqual(viewports[1], (0, 0, 120, 40))
+
+    def test_reload_marks_visible_images_pending_and_clears_payloads(self):
+        ui = self._ui(["a.png", "b.png"])
+        ui.numtiles = 2
+        ui.img_per_tile = [0, 1, 2, 3]
+        ui.files.mark_loaded(0, np.zeros((1, 1, 3), dtype=np.uint8))
+        ui.files.mark_loaded(1, np.ones((1, 1, 3), dtype=np.uint8))
+        ui.files.consume_image(0, np.full((1, 1, 3), 2, dtype=np.uint8))
+        ui.files.consume_image(1, np.full((1, 1, 3), 3, dtype=np.uint8))
+
+        for imgidx in ui.img_per_tile[:ui.numtiles]:
+            ui.files.mark_pending(imgidx)
+
+        self.assertEqual(ui.files.image_status(0), ImageStatus.PENDING)
+        self.assertEqual(ui.files.image_status(1), ImageStatus.PENDING)
+        self.assertIsNone(ui.files.loaded_images[0])
+        self.assertIsNone(ui.files.loaded_images[1])
+        self.assertIsNone(ui.files.images[0])
+        self.assertIsNone(ui.files.images[1])
 
 
 if __name__ == "__main__":

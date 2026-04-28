@@ -255,6 +255,7 @@ class GLRenderer:
         elif isinstance(img, np.ndarray):
             tex.reuse(img)
         if isinstance(img, np.ndarray):
+            self.files.consume_image(idx, img)
             self.loader.release_image(idx)
         tex.upload(piecewise)
         return tex

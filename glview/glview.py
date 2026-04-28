@@ -23,6 +23,7 @@ try:
     from glview import pygletui       # local import
     from glview import glrenderer     # local import
     from glview import imageprovider  # local import
+    from glview.imagestate import ImageSlot, ImageStatus
 except ImportError:
     # stand-alone mode
     import version                 # local import
@@ -30,6 +31,7 @@ except ImportError:
     import pygletui                # local import
     import glrenderer              # local import
     import imageprovider           # local import
+    from imagestate import ImageSlot, ImageStatus
 
 
 IMAGE_TYPES = imgio.RO_FORMATS
@@ -52,7 +54,9 @@ class FileList:
         self.numfiles = len(filespecs)
         self.orientations = [0] * self.numfiles
         self.linearize = [False] * self.numfiles
-        self.images = ["PENDING"] * self.numfiles  # PENDING | RELEASED | INVALID
+        self.image_slots = [ImageSlot() for _ in range(self.numfiles)]
+        self.loaded_images = [None] * self.numfiles
+        self.images = [None] * self.numfiles  # payloads already consumed by the UI/render thread
         self.textures = [None] * self.numfiles     # None | <Texture>
         self.metadata = [None] * self.numfiles
         self.is_url = [None] * self.numfiles
@@ -64,9 +68,37 @@ class FileList:
         Return True if the given image is ready to be uploaded to OpenGL,
         or has already been uploaded.
         """
-        img = self.images[idx]
-        not_ready = isinstance(img, str) and img in ["PENDING", "INVALID"]
-        return not not_ready
+        return self.image_status(idx) not in [ImageStatus.PENDING, ImageStatus.INVALID]
+
+    def image_status(self, idx) -> ImageStatus:
+        return self.image_slots[idx].status
+
+    def mark_pending(self, idx):
+        self.image_slots[idx].status = ImageStatus.PENDING
+        self.image_slots[idx].revision += 1
+        self.loaded_images[idx] = None
+        self.images[idx] = None
+
+    def mark_loaded(self, idx, img):
+        self.image_slots[idx].status = ImageStatus.LOADED
+        self.image_slots[idx].revision += 1
+        self.loaded_images[idx] = img
+
+    def mark_released(self, idx):
+        self.image_slots[idx].status = ImageStatus.RELEASED
+        self.loaded_images[idx] = None
+
+    def mark_invalid(self, idx):
+        self.image_slots[idx].status = ImageStatus.INVALID
+        self.image_slots[idx].revision += 1
+        self.loaded_images[idx] = None
+        self.images[idx] = None
+
+    def consume_image(self, idx, img):
+        self.images[idx] = img
+
+    def clear_consumed_image(self, idx):
+        self.images[idx] = None
 
     def drop(self, indices):
         """ Drop the given images from this FileList, do not delete the files. """
@@ -76,6 +108,8 @@ class FileList:
                 self.filespecs = self._drop(self.filespecs, indices)
                 self.orientations = self._drop(self.orientations, indices)
                 self.linearize = self._drop(self.linearize, indices)
+                self.image_slots = self._drop(self.image_slots, indices)
+                self.loaded_images = self._drop(self.loaded_images, indices)
                 self.textures = self._drop(self.textures, indices)
                 self.metadata = self._drop(self.metadata, indices)
                 self.images = self._drop(self.images, indices)
@@ -93,6 +127,8 @@ class FileList:
                 self.filespecs = self._drop(self.filespecs, [idx])
                 self.orientations = self._drop(self.orientations, [idx])
                 self.linearize = self._drop(self.linearize, [idx])
+                self.image_slots = self._drop(self.image_slots, [idx])
+                self.loaded_images = self._drop(self.loaded_images, [idx])
                 self.textures = self._drop(self.textures, [idx])
                 self.metadata = self._drop(self.metadata, [idx])
                 self.images = self._drop(self.images, [idx])

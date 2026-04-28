@@ -7,6 +7,7 @@ import imsize
 import numpy as np
 
 from glview.glview import FileList
+from glview.imagestate import ImageStatus
 from glview.imageprovider import ImageProvider
 
 
@@ -34,17 +35,17 @@ class ImageProviderTests(unittest.TestCase):
 
     def test_get_and_release_image_round_trip(self):
         provider = self._provider(["a.png"])
-        provider.files.images[0] = np.zeros((1, 1, 3), dtype=np.uint8)
+        provider.files.mark_loaded(0, np.zeros((1, 1, 3), dtype=np.uint8))
 
         self.assertIsInstance(provider.get_image(0), np.ndarray)
 
         provider.release_image(0)
 
-        self.assertEqual(provider.get_image(0), "RELEASED")
+        self.assertEqual(provider.get_image(0), ImageStatus.RELEASED.value)
 
     def test_load_single_returns_none_for_non_pending_slot(self):
         provider = self._provider(["a.png"])
-        provider.files.images[0] = "RELEASED"
+        provider.files.mark_released(0)
 
         result = provider._load_single(0, downsample=1, verbose=False)
 
@@ -185,7 +186,7 @@ class ImageProviderTests(unittest.TestCase):
         ):
             result = provider._load_single(0, downsample=1, verbose=False)
 
-        self.assertEqual(result, "INVALID")
+        self.assertEqual(result, ImageStatus.INVALID.value)
 
     def test_load_single_marks_invalid_metadata_reads(self):
         provider = self._provider(["a.png"])
@@ -193,7 +194,7 @@ class ImageProviderTests(unittest.TestCase):
         with mock.patch("glview.imageprovider.imsize.read", side_effect=imsize.ImageFileError("bad metadata")):
             result = provider._load_single(0, downsample=1, verbose=False)
 
-        self.assertEqual(result, "INVALID")
+        self.assertEqual(result, ImageStatus.INVALID.value)
 
 
 if __name__ == "__main__":
