@@ -4,6 +4,9 @@ deps:
 lint:
 	uv run --active ruff check glview/[^a]*.py
 
+test: deps
+	uv run --active pytest -vs
+
 install: lint
 	rm -rf dist || true
 	uv build
@@ -14,4 +17,4 @@ release:
 	@echo "Publishing is handled by GitHub Actions with PyPI Trusted Publishing."
 	@echo "Create a GitHub Release to trigger the publish workflow."
 
-.PHONY: deps lint install release
+.PHONY: deps lint test install release
