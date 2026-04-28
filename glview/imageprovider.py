@@ -1,6 +1,7 @@
 """ A multithreaded image file loader. """
 
 import os                      # built-in library
+import queue                   # built-in library
 import time                    # built-in library
 import threading               # built-in library
 import urllib.request          # built-in library
@@ -31,6 +32,9 @@ class ImageProvider:
         self.downsample = config.downsample
         self.loader_thread = None
         self.running = False
+        self._loader_statuses = [ImageStatus.PENDING] * self.files.numfiles
+        self._update_queue = queue.SimpleQueue()
+        self._request_queue = queue.SimpleQueue()
         self.validate_files()
 
     def start(self):
@@ -86,7 +90,7 @@ class ImageProvider:
         in which case the return value is the corresponding slot-state label.
         """
         if self.files.image_status(index) == ImageStatus.LOADED:
-            return self.files.loaded_images[index]
+            return self.files.images[index]
         return self.files.image_status(index).value
 
     def release_image(self, index):
@@ -94,6 +98,30 @@ class ImageProvider:
         Release the image at the given index to (eventually) free up the memory.
         """
         self.files.mark_released(index)
+        self.files.clear_consumed_image(index)
+        self._request_queue.put(("release", index))
+
+    def reload_image(self, index):
+        """Request reloading the image at the given index from disk."""
+        self.files.mark_pending(index)
+        self._request_queue.put(("reload", index))
+
+    def apply_updates(self):
+        """Apply pending loader-thread updates on the UI/render thread."""
+        while True:
+            try:
+                update = self._update_queue.get_nowait()
+            except queue.Empty:
+                break
+            action, idx, *payload = update
+            if idx >= self.files.numfiles:
+                continue
+            if action == "loaded":
+                img = payload[0]
+                self.files.mark_loaded(idx, img)
+                self.files.consume_image(idx, img)
+            elif action == "invalid":
+                self.files.mark_invalid(idx)
 
     def _degamma(self, frame: np.ndarray) -> np.ndarray:
         """
@@ -126,6 +154,8 @@ class ImageProvider:
             t0 = time.time()
             self._check_ram(2048, wait=True)
             with self.files.mutex:  # drop/delete not allowed while loading
+                self._sync_loader_state_locked()
+                self._drain_requests_locked()
                 nloaded = 0
                 for chunk in split():
                     ok = self._check_ram(2048, wait=False)
@@ -135,12 +165,14 @@ class ImageProvider:
                                       exception_behaviour="immediate", disable=True)
                         for idx, img in zip(chunk, images, strict=True):
                             if isinstance(img, np.ndarray):
-                                self.files.mark_loaded(idx, img)
+                                self._loader_statuses[idx] = ImageStatus.LOADED
+                                self._update_queue.put(("loaded", idx, img))
                                 nloaded += 1
                             elif img == ImageStatus.INVALID.value:
-                                self.files.mark_invalid(idx)
+                                self._loader_statuses[idx] = ImageStatus.INVALID
+                                self._update_queue.put(("invalid", idx))
                                 nloaded += 1
-            nbytes = np.sum([img.nbytes for img in self.files.loaded_images if isinstance(img, np.ndarray)])
+            nbytes = np.sum([img.nbytes for img in self.files.images if isinstance(img, np.ndarray)])
             if nloaded > 0 and nbytes > 1e4:
                 elapsed = time.time() - t0
                 nbytes = nbytes / 1024**2
@@ -165,14 +197,18 @@ class ImageProvider:
             while self.running:  # load all files
                 self._check_ram(2048, wait=True)
                 with self.files.mutex:  # avoid race conditions
+                    self._sync_loader_state_locked()
+                    self._drain_requests_locked()
                     if idx < self.files.numfiles:
                         verbose = self.verbose or self.files.numfiles < 200
                         img = self._load_single(idx, downsample, verbose)
                         if isinstance(img, np.ndarray):
-                            self.files.mark_loaded(idx, img)
+                            self._loader_statuses[idx] = ImageStatus.LOADED
+                            self._update_queue.put(("loaded", idx, img))
                             nbytes += img.nbytes
                         elif img == ImageStatus.INVALID.value:
-                            self.files.mark_invalid(idx)
+                            self._loader_statuses[idx] = ImageStatus.INVALID
+                            self._update_queue.put(("invalid", idx))
                     else:
                         break
                 time.sleep(0.001)
@@ -195,7 +231,7 @@ class ImageProvider:
         Read image, drop alpha channel, convert to fp32 if maxval != 255;
         if loading fails, mark the slot as "INVALID" and keep going.
         """
-        if self.files.image_status(idx) == ImageStatus.PENDING:
+        if idx < len(self._loader_statuses) and self._loader_statuses[idx] == ImageStatus.PENDING:
             try:
                 filespec = self.files.filespecs[idx]
                 suffix = Path(filespec).suffix.lower()
@@ -246,6 +282,23 @@ class ImageProvider:
                 self._vprint(e)
                 return ImageStatus.INVALID.value
         return None
+
+    def _sync_loader_state_locked(self):
+        if len(self._loader_statuses) != self.files.numfiles:
+            self._loader_statuses = [self.files.image_status(i) for i in range(self.files.numfiles)]
+
+    def _drain_requests_locked(self):
+        while True:
+            try:
+                action, idx = self._request_queue.get_nowait()
+            except queue.Empty:
+                break
+            if idx >= len(self._loader_statuses):
+                continue
+            if action == "release":
+                self._loader_statuses[idx] = ImageStatus.RELEASED
+            elif action == "reload":
+                self._loader_statuses[idx] = ImageStatus.PENDING
 
     def _check_ram(self, minimum, wait):
         ram_available = lambda: psutil.virtual_memory().available / 1024**2

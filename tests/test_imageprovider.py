@@ -35,7 +35,9 @@ class ImageProviderTests(unittest.TestCase):
 
     def test_get_and_release_image_round_trip(self):
         provider = self._provider(["a.png"])
-        provider.files.mark_loaded(0, np.zeros((1, 1, 3), dtype=np.uint8))
+        img = np.zeros((1, 1, 3), dtype=np.uint8)
+        provider.files.mark_loaded(0, img)
+        provider.files.consume_image(0, img)
 
         self.assertIsInstance(provider.get_image(0), np.ndarray)
 
@@ -43,9 +45,54 @@ class ImageProviderTests(unittest.TestCase):
 
         self.assertEqual(provider.get_image(0), ImageStatus.RELEASED.value)
 
+    def test_apply_updates_moves_loaded_payloads_to_ui_owned_store(self):
+        provider = self._provider(["a.png"])
+        img = np.ones((2, 2, 3), dtype=np.uint8)
+        provider._update_queue.put(("loaded", 0, img))
+
+        provider.apply_updates()
+
+        self.assertEqual(provider.files.image_status(0), ImageStatus.LOADED)
+        np.testing.assert_array_equal(provider.files.loaded_images[0], img)
+        np.testing.assert_array_equal(provider.files.images[0], img)
+        np.testing.assert_array_equal(provider.get_image(0), img)
+
+    def test_apply_updates_marks_invalid_slots(self):
+        provider = self._provider(["a.png"])
+        provider._update_queue.put(("invalid", 0))
+
+        provider.apply_updates()
+
+        self.assertEqual(provider.files.image_status(0), ImageStatus.INVALID)
+
+    def test_release_request_is_queued_for_loader_thread(self):
+        provider = self._provider(["a.png"])
+        provider.files.mark_loaded(0, np.ones((1, 1, 3), dtype=np.uint8))
+        provider.files.consume_image(0, np.ones((1, 1, 3), dtype=np.uint8))
+
+        provider.release_image(0)
+        with provider.files.mutex:
+            provider._drain_requests_locked()
+
+        self.assertEqual(provider.files.image_status(0), ImageStatus.RELEASED)
+        self.assertEqual(provider._loader_statuses[0], ImageStatus.RELEASED)
+        self.assertIsNone(provider.files.images[0])
+
+    def test_reload_request_is_queued_for_loader_thread(self):
+        provider = self._provider(["a.png"])
+        provider._loader_statuses[0] = ImageStatus.RELEASED
+
+        provider.reload_image(0)
+        with provider.files.mutex:
+            provider._drain_requests_locked()
+
+        self.assertEqual(provider.files.image_status(0), ImageStatus.PENDING)
+        self.assertEqual(provider._loader_statuses[0], ImageStatus.PENDING)
+
     def test_load_single_returns_none_for_non_pending_slot(self):
         provider = self._provider(["a.png"])
         provider.files.mark_released(0)
+        provider._loader_statuses[0] = ImageStatus.RELEASED
 
         result = provider._load_single(0, downsample=1, verbose=False)
 

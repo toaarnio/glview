@@ -16,14 +16,28 @@ class _FakeUploadedTexture:
 
 class _FakeRenderer:
 
-    def __init__(self, upload_results=None):
+    def __init__(self, upload_results=None, loader=None):
         self.fps = np.array([58.0, 60.0, 62.0])
         self.upload_results = upload_results or {}
         self.upload_calls = []
+        self.loader = loader
 
     def upload_texture(self, imgidx, piecewise):
         self.upload_calls.append((imgidx, piecewise))
         return self.upload_results[imgidx]
+
+
+class _FakeLoader:
+
+    def __init__(self):
+        self.reload_calls = []
+        self.apply_updates_calls = 0
+
+    def apply_updates(self):
+        self.apply_updates_calls += 1
+
+    def reload_image(self, imgidx):
+        self.reload_calls.append(imgidx)
 
 
 class PygletUISmokeTests(unittest.TestCase):
@@ -32,7 +46,8 @@ class PygletUISmokeTests(unittest.TestCase):
         files = FileList(filespecs)
         ui = PygletUI(files, debug=1, verbose=False)
         ui.version = "test"
-        ui.renderer = _FakeRenderer()
+        ui.loader = _FakeLoader()
+        ui.renderer = _FakeRenderer(loader=ui.loader)
         return ui
 
     def test_poll_loading_requests_redraw_when_visible_images_finish_loading(self):
@@ -143,6 +158,7 @@ class PygletUISmokeTests(unittest.TestCase):
         ui.files.consume_image(1, np.full((1, 1, 3), 3, dtype=np.uint8))
 
         for imgidx in ui.img_per_tile[:ui.numtiles]:
+            ui.loader.reload_image(imgidx)
             ui.files.mark_pending(imgidx)
 
         self.assertEqual(ui.files.image_status(0), ImageStatus.PENDING)
@@ -151,6 +167,7 @@ class PygletUISmokeTests(unittest.TestCase):
         self.assertIsNone(ui.files.loaded_images[1])
         self.assertIsNone(ui.files.images[0])
         self.assertIsNone(ui.files.images[1])
+        self.assertEqual(ui.loader.reload_calls, [0, 1])
 
 
 if __name__ == "__main__":

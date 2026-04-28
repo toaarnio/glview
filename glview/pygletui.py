@@ -48,6 +48,7 @@ class PygletUI:
         self.layout = "N x 1"  # N x 1 | 1 x N | 2 x 2
         self.ui_thread = None
         self.event_loop = None
+        self.loader = None
         self.renderer = None
         self.texture_filter = "NEAREST"
         self.img_per_tile = [0, 1, 2, 3]
@@ -74,6 +75,7 @@ class PygletUI:
         """ Start the UI thread. """
         self._vprint(f"spawning {self.thread_name}...")
         self.renderer = renderer
+        self.loader = renderer.loader
         self.running = True
         self.ui_thread = threading.Thread(target=lambda: self._try(self._pyglet_runner), name=self.thread_name)
         self.ui_thread.daemon = True  # terminate when main process ends
@@ -100,6 +102,7 @@ class PygletUI:
 
         class _EventLoop(pyglet.app.EventLoop):
             def idle(self):
+                parent.loader.apply_updates()
                 parent._keyboard_zoom_pan()
                 parent._smooth_exposure()
                 parent._poll_loading()
@@ -520,7 +523,7 @@ class PygletUI:
                         self.need_redraw = True
                     case keys.U:  # reload currently visible images from disk
                         for imgidx in self.img_per_tile[:self.numtiles]:
-                            self.files.mark_pending(imgidx)
+                            self.loader.reload_image(imgidx)
                     case keys.X:  # EXIF info (current image)
                         imgidx = self.img_per_tile[self.tileidx]
                         filespec = self.files.filespecs[imgidx]
