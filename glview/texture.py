@@ -12,8 +12,8 @@ class Texture:
         self.idx = idx
         self.verbose = verbose
         self.texture = None
-        self.dtype = img.dtype if img is not None else np.float32
-        self.components = img.shape[2] if img is not None and img.ndim == 3 else 3
+        self.dtype = np.float32
+        self.components = 3
         self.minval = 0.0
         self.maxval = 1.0
         self.meanval = 0.5
@@ -55,6 +55,7 @@ class Texture:
           'u2': integer [0, 65535] internal format (GL_RGB16UI), uint16 input
           'u4': integer [0, 2^32-1] internal format (GL_RGB32UI), uint32 input
         """
+        self._refresh_image_properties()
         h, w = self.img.shape[:2]
         dtype = f"f{self.img.itemsize}"  # uint8 => 'f1', float16 => 'f2', float32 => 'f4'
         self.texture = self.ctx.texture((w, h), self.components, data=None, dtype=dtype)
@@ -67,9 +68,10 @@ class Texture:
         self.stats_done = False
         self._rows_uploaded = 0
         self.compute_stats()
+        components = img.shape[2] if img.ndim == 3 else 1
         sizes_match = self.texture.size[::-1] == img.shape[:2]
         dtypes_match = self.dtype == img.dtype
-        nchans_match = self.components == (img.shape[2] if img.ndim == 3 else 1)
+        nchans_match = self.components == components
         if not (sizes_match and dtypes_match and nchans_match):
             self.release()
             self.create_empty()
@@ -153,3 +155,12 @@ class Texture:
     def _vprint(self, message, log_level=1):
         if self.verbose >= log_level:
             print(f"[{self.__class__.__name__}/{threading.current_thread().name}] {message}")
+
+    def _refresh_image_properties(self):
+        """Update cached image metadata used when creating or reusing textures."""
+        if self.img is None:
+            self.dtype = np.float32
+            self.components = 3
+            return
+        self.dtype = self.img.dtype
+        self.components = self.img.shape[2] if self.img.ndim == 3 else 1
