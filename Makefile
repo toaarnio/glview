@@ -8,7 +8,7 @@ install: lint
 	rm -rf dist || true
 	uv build
 	uv pip install --upgrade dist/*.whl
-	@glview --version
+	uv run --active glview --version
 
 release:
 	@echo "Publishing is handled by GitHub Actions with PyPI Trusted Publishing."

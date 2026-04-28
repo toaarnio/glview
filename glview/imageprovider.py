@@ -17,12 +17,13 @@ from pqdm.threads import pqdm  # pip install pqdm
 class ImageProvider:
     """ A multithreaded image file loader. """
 
-    def __init__(self, files, downsample, verbose=False):
+    def __init__(self, files, config):
         """ Create a new ImageProvider with the given (hardcoded) FileList instance. """
         self.thread_name = "ImageProviderThread"
-        self.downsample = downsample
-        self.verbose = verbose
         self.files = files
+        self.config = config
+        self.verbose = bool(config.verbose)
+        self.downsample = config.downsample
         self.loader_thread = None
         self.running = False
         self.validate_files()
@@ -191,7 +192,20 @@ class ImageProvider:
                 self.files.linearize[idx] = suffix in [".jpg", ".jpeg", ".png", ".bmp", ".ppm"]
                 if not self.files.is_url[idx]:
                     info = imsize.read(filespec)
-                    img, maxval = imgio.imread(filespec, width=info.width, height=info.height, bpp=info.bitdepth, verbose=verbose)
+                    if info.cfa_raw:
+                        packing = "unpacked"
+                        if info.packed_raw:
+                            packing = "plain"
+                        if info.mipi_raw:
+                            packing = "mipi"
+                        width = self.config.width or info.width
+                        height = self.config.height or info.height
+                        bpp = self.config.bpp or info.bitdepth
+                        stride = self.config.stride or info.stride
+                        packing = self.config.packing or packing
+                        img, maxval = imgio.rawread(filespec, width, height, bpp, stride, packing, verbose=verbose)
+                    else:
+                        img, maxval = imgio.imread(filespec, verbose=verbose)
                 else:
                     assert filespec.startswith(("http:", "https:")), filespec
                     data = urllib.request.urlopen(filespec).read()  # noqa: S310
