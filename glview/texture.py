@@ -106,26 +106,32 @@ class Texture:
             t0 = time.time()
             scale = 255.0 if self.img.dtype == np.uint8 else 1.0
             stats_img = self.img[::6, ::6]
-            if stats_img.size > 0:
-                pixel_max = np.max(stats_img, axis=-1) / scale
-                pixel_max = np.clip(pixel_max, 0, None)
-                pixel_max = pixel_max[pixel_max != 0.0]
-                if pixel_max.size > 0:
-                    self.minval = np.min(pixel_max)
-                    self.maxval = np.max(pixel_max)
-                    self.meanval = np.mean(pixel_max)
-                    self.percentiles = np.percentile(pixel_max, [99.5, 98, 95, 90])
-                    self.diffuse_white = self.estimate_diffuse_white(pixel_max)
-                    self.stats_done = True
-                    h, w = stats_img.shape[:2]
-                    elapsed = (time.time() - t0) * 1000
-                    self._vprint(f"Computed stats for texture #{self.idx} from {w * h} pixels, took {elapsed:.1f} ms")
+            if stats_img.size == 0:
+                self.stats_done = True
+                return
+            pixel_max = np.max(stats_img, axis=-1) / scale
+            pixel_max = np.clip(pixel_max, 0, None)
+            pixel_max = pixel_max[pixel_max != 0.0]
+            if pixel_max.size == 0:
+                self.stats_done = True
+                return
+            self.minval = np.min(pixel_max)
+            self.maxval = np.max(pixel_max)
+            self.meanval = np.mean(pixel_max)
+            self.percentiles = np.percentile(pixel_max, [99.5, 98, 95, 90])
+            self.diffuse_white = self.estimate_diffuse_white(pixel_max)
+            self.stats_done = True
+            h, w = stats_img.shape[:2]
+            elapsed = (time.time() - t0) * 1000
+            self._vprint(f"Computed stats for texture #{self.idx} from {w * h} pixels, took {elapsed:.1f} ms")
 
     def estimate_diffuse_white(self, img: np.ndarray) -> float:
         """ Estimate diffuse white level using geometric mean over all non-zero pixels. """
         if np.max(img) == 1.0:  # already clipped to 1.0
             return 1.0
         img = img[img != 0.0]
+        if img.size == 0:
+            return 1.0
         img = img.astype(np.float32)  # float16 is not enough
         mean_level = np.exp(np.mean(np.log(img + 1e-6)))
         diffuse_white = mean_level / 0.18
