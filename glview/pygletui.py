@@ -11,6 +11,11 @@ import numpy as np             # pip install numpy
 import imsize                  # pip install imsize
 import imgio                   # pip install imgio
 
+try:
+    from glview import uistate
+except ImportError:
+    import uistate
+
 
 class PygletUI:
     """ A graphical user interface for glview, based on Pyglet and ModernGL. """
@@ -482,24 +487,26 @@ class PygletUI:
                         self.texture_filter = "LINEAR" if self.texture_filter == "NEAREST" else "NEAREST"
                         self.need_redraw = True
                     case keys.S:  # split
-                        if self.numtiles == 4 and self.layout == "N x 1":
-                            self.layout = "2 x 2"
-                        elif self.numtiles == 2 and self.layout == "N x 1":
-                            self.layout = "1 x N"
-                        else:
-                            self.layout = "N x 1"
-                            self.numtiles = (self.numtiles % 4) + 1
-                            self.tileidx = min(self.tileidx, self.numtiles - 1)
-                            self.img_per_tile = np.clip(self.img_per_tile, 0, self.files.numfiles - 1)
+                        state = uistate.SplitState(
+                            numtiles=self.numtiles,
+                            layout=self.layout,
+                            tileidx=self.tileidx,
+                            img_per_tile=np.asarray(self.img_per_tile),
+                        )
+                        state = uistate.cycle_split_state(state, self.files.numfiles)
+                        self.numtiles = state.numtiles
+                        self.layout = state.layout
+                        self.tileidx = state.tileidx
+                        self.img_per_tile = state.img_per_tile
                         self.viewports = self._retile(self.numtiles, self.winsize, self.layout)
                         self.window.set_caption(self._caption())
                         self.need_redraw = True
                     case keys.P if self.numtiles == 2:  # flip image pair
-                        self.img_per_tile[:2] = self.img_per_tile[:2][::-1]
-                        self.ae_per_tile[:2] = self.ae_per_tile[:2][::-1]
+                        self.img_per_tile = uistate.flip_pair(self.img_per_tile)
+                        self.ae_per_tile = uistate.flip_pair(self.ae_per_tile)
                         self.ae_reset_per_tile[:2] = [True, True]
-                        self.tonemap_per_tile[:2] = self.tonemap_per_tile[:2][::-1]
-                        self.sharpen_per_tile[:2] = self.sharpen_per_tile[:2][::-1]
+                        self.tonemap_per_tile = uistate.flip_pair(self.tonemap_per_tile)
+                        self.sharpen_per_tile = uistate.flip_pair(self.sharpen_per_tile)
                         self.window.set_caption(self._caption())
                         self.need_redraw = True
                     case keys.R:  # rotate (current image)
@@ -544,9 +551,9 @@ class PygletUI:
                                 self.running = False
                                 self.event_loop.has_exit = True
                             else:
-                                N = self.numtiles
-                                visible_images = np.asarray(self.img_per_tile[:N]) - N
-                                self.img_per_tile[:N] = visible_images % self.files.numfiles
+                                self.img_per_tile = uistate.repair_visible_images_after_removal(
+                                    self.img_per_tile, self.numtiles, self.files.numfiles
+                                )
                                 self.window.set_caption(self._caption())
                                 self.need_redraw = True
                     case keys._1 | keys._2 | keys._3 | keys._4:
@@ -561,9 +568,7 @@ class PygletUI:
                 # PageUp / PageDown
                 self._vprint(f"on_text_motion({keys.symbol_string(motion)})")
                 incr = 1 if motion == keys.MOTION_NEXT_PAGE else -1
-                imgidx = self.img_per_tile[self.tileidx]
-                imgidx = (imgidx + incr) % self.files.numfiles
-                self.img_per_tile[self.tileidx] = imgidx
+                self.img_per_tile = uistate.step_active_tile(self.img_per_tile, self.tileidx, incr, self.files.numfiles)
                 self.ae_reset_per_tile[self.tileidx] = True
                 self.window.set_caption(self._caption())
                 self.need_redraw = True
@@ -571,12 +576,7 @@ class PygletUI:
                 # Ctrl + Left / Right
                 self._vprint(f"on_text_motion({keys.symbol_string(motion)})")
                 incr = 1 if motion == keys.MOTION_NEXT_WORD else -1
-                active_tiles = self.img_per_tile[:self.numtiles]
-                consecutive = np.ptp(active_tiles) + 1 == self.numtiles
-                stride = self.numtiles if consecutive else 1
-                active_tiles = np.array(active_tiles) + incr * stride
-                active_tiles = active_tiles % self.files.numfiles
-                self.img_per_tile[:self.numtiles] = active_tiles
+                self.img_per_tile = uistate.step_all_tiles(self.img_per_tile, self.numtiles, incr, self.files.numfiles)
                 self.window.set_caption(self._caption())
                 self.ae_reset_per_tile = [True, True, True, True]
                 self.need_redraw = True
