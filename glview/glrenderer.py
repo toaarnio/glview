@@ -130,30 +130,16 @@ class GLRenderer:
             # Derive exposure parameters for the current tile, to be applied in the
             # second rendering pass
 
-            norm_maxvals = np.r_[1, texture.maxval, texture.maxval, texture.percentiles, texture.diffuse_white]
-            norm_minvals = np.r_[0, 0, texture.minval, 0, 0, 0, 0, 0]
-            whitelevel = norm_maxvals[self.ui.normalize]
-            blacklevel = norm_minvals[self.ui.normalize]
+            whitelevel, blacklevel = self._normalization_levels(texture)
 
             ae_gain, tile_diffuse, tile_peak = ae.autoexposure(self.fbo.color_attachments[0], whitelevel, clip_pct=1.0)
-
-            if self.ui.ae_per_tile[i]:
-                if ae_gain is not None:
-                    if self.ui.ae_reset_per_tile[i]:
-                        self.ae_gain_per_tile[i] = ae_gain
-                        self.ui.ae_reset_per_tile[i] = False
-                    else:
-                        self.ae_gain_per_tile[i] = ae_gain * 0.1 + self.ae_gain_per_tile[i] * 0.9
-                    self.ae_converged[i] = np.isclose(ae_gain, self.ae_gain_per_tile[i], rtol=0.01)
-            else:
-                self.ae_gain_per_tile[i] = 1.0
-                self.ae_converged[i] = True
-
-            if tile_peak is None:
-                tile_peak = texture.maxval
-                tile_diffuse = texture.diffuse_white
-            peak_white = tile_peak / tile_diffuse  # peak = maxval of visible part (relative to diffuse level)
-            diffuse_white = tile_diffuse
+            ae_gain, diffuse_white, peak_white = self._resolve_tile_exposure(
+                tileidx=i,
+                texture=texture,
+                ae_gain=ae_gain,
+                tile_diffuse=tile_diffuse,
+                tile_peak=tile_peak,
+            )
 
             # Render the current tile from an offscreen texture to the screen (or
             # the given render target), applying any screen-space postprocessing
@@ -165,36 +151,21 @@ class GLRenderer:
             target.clear(viewport=target.viewport)
             self.fbo.color_attachments[0].use(location=0)
             magnification = scalex * vpw / (gpu_texture.width / self.ui.scale[i])
-            max_kernel_size = self.postprocess['kernel'].array_length
-            kernel = self._sharpen(magnification)
-            ae_gain = self.ae_gain_per_tile[i]
-            self.postprocess['img'] = 0
-            self.postprocess['mousepos'] = (0.0, 0.0)
-            self.postprocess['scale'] = 1.0
-            self.postprocess['aspect'] = (1.0, 1.0)
-            self.postprocess['resolution'] = (vpw, vph)
-            self.postprocess['magnification'] = magnification
-            self.postprocess['mirror'] = self.ui.mirror_per_tile[i]
-            self.postprocess['sharpen'] = self.ui.sharpen_per_tile[i]
-            self.postprocess['kernel'] = np.resize(kernel, max_kernel_size)
-            self.postprocess['kernw'] = kernel.shape[0]
-            self.postprocess['minval'] = blacklevel
-            self.postprocess['maxval'] = whitelevel
-            self.postprocess['diffuse_white'] = diffuse_white
-            self.postprocess['peak_white'] = peak_white
-            self.postprocess['autoexpose'] = self.ui.ae_per_tile[i]
-            self.postprocess['ae_gain'] = ae_gain
-            self.postprocess['ev'] = self.ui.ev
-            self.postprocess['cs_in'] = self.ui.cs_in
-            self.postprocess['cs_out'] = self.ui.cs_out
-            self.postprocess['tonemap'] = int(self.ui.tonemap_per_tile[i]) * 3
-            self.postprocess['gamut.compress'] = self.ui.gamutmap_per_tile[i]
-            self.postprocess['gamut.power'] = self.ui.gamut_pow
-            self.postprocess['gamut.thr'] = self.ui.gamut_thr
-            self.postprocess['gamut.scale'] = self._gamut(imgidx)
-            self.postprocess['contrast'] = 0.25 if self.ui.tonemap_per_tile[i] else 0.0
-            self.postprocess['gamma'] = self.ui.gamma
-            self.postprocess['debug'] = self.ui.debug_mode * int(self.ui.debug_mode_on)
+            uniforms = self._build_postprocess_uniforms(
+                tileidx=i,
+                imgidx=imgidx,
+                vpw=vpw,
+                vph=vph,
+                gpu_texture=gpu_texture,
+                scalex=scalex,
+                whitelevel=whitelevel,
+                blacklevel=blacklevel,
+                diffuse_white=diffuse_white,
+                peak_white=peak_white,
+                ae_gain=ae_gain,
+            )
+            for key, value in uniforms.items():
+                self.postprocess[key] = value
             self.vao_post.render(moderngl.TRIANGLE_STRIP)
 
         self.ctx.finish()
@@ -268,6 +239,78 @@ class GLRenderer:
     def get_cached_texture(self, slot_id: int):
         """Return the cached texture for the given slot id, if any."""
         return self.texture_cache.get(slot_id)
+
+    def _normalization_levels(self, texture_obj):
+        norm_maxvals = np.r_[1, texture_obj.maxval, texture_obj.maxval, texture_obj.percentiles, texture_obj.diffuse_white]
+        norm_minvals = np.r_[0, 0, texture_obj.minval, 0, 0, 0, 0, 0]
+        return norm_maxvals[self.ui.normalize], norm_minvals[self.ui.normalize]
+
+    def _resolve_tile_exposure(self, tileidx: int, texture, ae_gain, tile_diffuse, tile_peak):
+        if self.ui.ae_per_tile[tileidx]:
+            if ae_gain is not None:
+                if self.ui.ae_reset_per_tile[tileidx]:
+                    self.ae_gain_per_tile[tileidx] = ae_gain
+                    self.ui.ae_reset_per_tile[tileidx] = False
+                else:
+                    self.ae_gain_per_tile[tileidx] = ae_gain * 0.1 + self.ae_gain_per_tile[tileidx] * 0.9
+                self.ae_converged[tileidx] = np.isclose(ae_gain, self.ae_gain_per_tile[tileidx], rtol=0.01)
+        else:
+            self.ae_gain_per_tile[tileidx] = 1.0
+            self.ae_converged[tileidx] = True
+
+        if tile_peak is None:
+            tile_peak = texture.maxval
+            tile_diffuse = texture.diffuse_white
+        peak_white = tile_peak / tile_diffuse
+        diffuse_white = tile_diffuse
+        return self.ae_gain_per_tile[tileidx], diffuse_white, peak_white
+
+    def _build_postprocess_uniforms(
+        self,
+        tileidx: int,
+        imgidx: int,
+        vpw: int,
+        vph: int,
+        gpu_texture,
+        scalex: float,
+        whitelevel: float,
+        blacklevel: float,
+        diffuse_white: float,
+        peak_white: float,
+        ae_gain: float,
+    ):
+        magnification = scalex * vpw / (gpu_texture.width / self.ui.scale[tileidx])
+        kernel = self._sharpen(magnification)
+        max_kernel_size = self.postprocess['kernel'].array_length
+        return {
+            'img': 0,
+            'mousepos': (0.0, 0.0),
+            'scale': 1.0,
+            'aspect': (1.0, 1.0),
+            'resolution': (vpw, vph),
+            'magnification': magnification,
+            'mirror': self.ui.mirror_per_tile[tileidx],
+            'sharpen': self.ui.sharpen_per_tile[tileidx],
+            'kernel': np.resize(kernel, max_kernel_size),
+            'kernw': kernel.shape[0],
+            'minval': blacklevel,
+            'maxval': whitelevel,
+            'diffuse_white': diffuse_white,
+            'peak_white': peak_white,
+            'autoexpose': self.ui.ae_per_tile[tileidx],
+            'ae_gain': ae_gain,
+            'ev': self.ui.ev,
+            'cs_in': self.ui.cs_in,
+            'cs_out': self.ui.cs_out,
+            'tonemap': int(self.ui.tonemap_per_tile[tileidx]) * 3,
+            'gamut.compress': self.ui.gamutmap_per_tile[tileidx],
+            'gamut.power': self.ui.gamut_pow,
+            'gamut.thr': self.ui.gamut_thr,
+            'gamut.scale': self._gamut(imgidx),
+            'contrast': 0.25 if self.ui.tonemap_per_tile[tileidx] else 0.0,
+            'gamma': self.ui.gamma,
+            'debug': self.ui.debug_mode * int(self.ui.debug_mode_on),
+        }
 
     def _prune_texture_cache(self, snapshot):
         """Release textures whose slot ids are no longer present in the catalog."""
