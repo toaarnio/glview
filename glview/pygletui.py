@@ -8,13 +8,11 @@ import pyglet                  # pip install pyglet
 import numpy as np             # pip install numpy
 
 try:
-    from glview import uistate
     from glview import uiops
     from glview.viewconfig import ViewConfigState
     from glview.imagestate import ImageStatus
     from glview.viewerstate import ViewerState
 except ImportError:
-    import uistate
     import uiops
     from viewconfig import ViewConfigState
     from imagestate import ImageStatus
@@ -470,10 +468,8 @@ class PygletUI:
             dx = self.key_state[keys.LEFT] - self.key_state[keys.RIGHT]
             dy = self.key_state[keys.DOWN] - self.key_state[keys.UP]
             changed = self.state.keyboard_pan_zoom(
-                key_zoom_in=self.key_state[keys.PLUS],
-                key_zoom_out=self.key_state[keys.MINUS],
-                dx=dx,
-                dy=dy,
+                zoom_steps=(self.key_state[keys.PLUS], self.key_state[keys.MINUS]),
+                pan_steps=(dx, dy),
                 pan_speed=self.keyboard_pan_speed,
                 canvas_width=self.mouse_canvas_width,
             )
@@ -631,6 +627,33 @@ class PygletUI:
             keys.SPACE: self._toggle_debug_mode,
         }
 
+    def _handle_key_press(self, symbol, modifiers):
+        keys = pyglet.window.key
+        self._vprint(f"on_key_press({keys.symbol_string(symbol)}, modifiers={keys.modifiers_string(modifiers)})")
+        disallowed_keys = keys.MOD_CTRL | keys.MOD_ALT | keys.MOD_WINDOWS | keys.MOD_COMMAND
+        if symbol == keys.C and modifiers == keys.MOD_CTRL:
+            self._request_exit()
+        if (modifiers & disallowed_keys) == 0:
+            self._dispatch_key_press(symbol, keys)
+
+    def _dispatch_key_press(self, symbol, keys):
+        action = self._simple_key_actions(keys).get(symbol)
+        if action is not None:
+            action()
+        elif symbol == keys.P and self.numtiles == 2:
+            self._flip_pair_command()
+        elif symbol == keys.X:
+            self.ops.show_exif_for_current()
+        elif symbol == keys.W:
+            self.ops.take_screenshot()
+        elif symbol == keys.D:
+            self._remove_visible_images()
+        elif symbol == keys.DELETE:
+            self._delete_current_image()
+        elif symbol in [keys._1, keys._2, keys._3, keys._4]:
+            tileidx = symbol - keys._1
+            self._select_tile_command(tileidx)
+
     def _setup_events(self):
         self._vprint("setting up Pyglet window event handlers...")
         self._setup_draw_event()
@@ -703,7 +726,7 @@ class PygletUI:
             self.state.scroll_zoom(scroll_y=scroll_y, active_only=shift_down)
             self.need_redraw = True
 
-    def _setup_keyboard_events(self):  # noqa: PLR0915, C901
+    def _setup_keyboard_events(self):
         @self.window.event
         def on_key_release(symbol, modifiers):
             keys = pyglet.window.key
@@ -720,30 +743,9 @@ class PygletUI:
             self._vprint(f"on_key_release({keys.symbol_string(symbol)}, modifiers={keys.modifiers_string(modifiers)})")
 
         @self.window.event
-        def on_key_press(symbol, modifiers):  # noqa: PLR0912, PLR0915, C901
+        def on_key_press(symbol, modifiers):
             self.key_state[symbol] = True
-            keys = pyglet.window.key
-            self._vprint(f"on_key_press({keys.symbol_string(symbol)}, modifiers={keys.modifiers_string(modifiers)})")
-            disallowed_keys = keys.MOD_CTRL | keys.MOD_ALT | keys.MOD_WINDOWS | keys.MOD_COMMAND
-            if symbol == keys.C and modifiers == keys.MOD_CTRL:
-                self._request_exit()
-            if (modifiers & disallowed_keys) == 0:  # ignore NumLock, ScrollLock, CapsLock, Shift
-                action = self._simple_key_actions(keys).get(symbol)
-                if action is not None:
-                    action()
-                elif symbol == keys.P and self.numtiles == 2:
-                        self._flip_pair_command()
-                elif symbol == keys.X:
-                    self.ops.show_exif_for_current()
-                elif symbol == keys.W:
-                    self.ops.take_screenshot()
-                elif symbol == keys.D:
-                    self._remove_visible_images()
-                elif symbol == keys.DELETE:
-                    self._delete_current_image()
-                elif symbol in [keys._1, keys._2, keys._3, keys._4]:
-                    tileidx = symbol - keys._1
-                    self._select_tile_command(tileidx)
+            self._handle_key_press(symbol, modifiers)
 
         @self.window.event
         def on_text_motion(motion):

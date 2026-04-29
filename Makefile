@@ -2,9 +2,9 @@ deps:
 	uv sync --active --extra dev
 
 lint:
-	uv run --active ruff check glview/[^a]*.py
+	uv run --active ruff check glview --exclude glview/argv.py
 
-test: deps
+test: deps lint
 	uv run --active pytest -vs
 
 install: lint

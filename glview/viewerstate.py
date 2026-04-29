@@ -90,11 +90,12 @@ class ViewerState:
         self.img_per_tile = uistate.step_all_tiles(self.img_per_tile, self.numtiles, incr, numfiles)
         self.reset_ae()
 
-    def keyboard_pan_zoom(self, key_zoom_in: int, key_zoom_out: int, dx: int, dy: int, pan_speed: float, canvas_width: float):
+    def keyboard_pan_zoom(self, zoom_steps: tuple[int, int], pan_steps: tuple[int, int], pan_speed: float, canvas_width: float):
         prev_scale = self.scale.copy()
+        key_zoom_in, key_zoom_out = zoom_steps
         self.scale *= 1.0 + 0.1 * key_zoom_in
         self.scale /= 1.0 + 0.1 * key_zoom_out
-        dxdy = np.tile((dx, dy), (4, 1))
+        dxdy = np.tile(pan_steps, (4, 1))
         dxdy = dxdy * pan_speed
         dxdy = dxdy / self.scale[:, np.newaxis]
         dxdy = dxdy / canvas_width

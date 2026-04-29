@@ -196,15 +196,17 @@ class GLRendererParameterTests(unittest.TestCase):
                 uniforms = renderer._build_postprocess_uniforms(
                     tileidx=0,
                     imgidx=0,
-                    vpw=200,
-                    vph=100,
-                    gpu_texture=gpu_texture,
-                    scalex=0.5,
-                    whitelevel=2.0,
-                    blacklevel=0.1,
-                    diffuse_white=1.5,
-                    peak_white=4.0,
-                    ae_gain=1.75,
+                    params={
+                        "vpw": 200,
+                        "vph": 100,
+                        "gpu_texture": gpu_texture,
+                        "scalex": 0.5,
+                        "whitelevel": 2.0,
+                        "blacklevel": 0.1,
+                        "diffuse_white": 1.5,
+                        "peak_white": 4.0,
+                        "ae_gain": 1.75,
+                    },
                 )
 
         sharpen_mock.assert_called_once_with(2.0)

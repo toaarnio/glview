@@ -83,10 +83,8 @@ class ViewerStateTests(unittest.TestCase):
         state = ViewerState()
 
         changed = state.keyboard_pan_zoom(
-            key_zoom_in=1,
-            key_zoom_out=0,
-            dx=1,
-            dy=-1,
+            zoom_steps=(1, 0),
+            pan_steps=(1, -1),
             pan_speed=100,
             canvas_width=1000,
         )

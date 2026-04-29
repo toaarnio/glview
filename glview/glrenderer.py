@@ -77,7 +77,7 @@ class GLRenderer:
         self.tprev = time.time()
         _ = self.ctx.error  # clear the GL error flag (workaround for a bug that prevents interoperability with Pyglet)
 
-    def redraw(self, target: moderngl.Framebuffer | None = None):  # noqa: PLR0915
+    def redraw(self, target: moderngl.Framebuffer | None = None):
         """ Redraw the tiled image view with refreshed pan & zoom, filtering, etc. """
         t0 = time.time()
         target = target or self.ctx.screen
@@ -150,19 +150,20 @@ class GLRenderer:
             target.viewport = self.ui.viewports[i]
             target.clear(viewport=target.viewport)
             self.fbo.color_attachments[0].use(location=0)
-            magnification = scalex * vpw / (gpu_texture.width / self.ui.scale[i])
             uniforms = self._build_postprocess_uniforms(
                 tileidx=i,
                 imgidx=imgidx,
-                vpw=vpw,
-                vph=vph,
-                gpu_texture=gpu_texture,
-                scalex=scalex,
-                whitelevel=whitelevel,
-                blacklevel=blacklevel,
-                diffuse_white=diffuse_white,
-                peak_white=peak_white,
-                ae_gain=ae_gain,
+                params={
+                    "vpw": vpw,
+                    "vph": vph,
+                    "gpu_texture": gpu_texture,
+                    "scalex": scalex,
+                    "whitelevel": whitelevel,
+                    "blacklevel": blacklevel,
+                    "diffuse_white": diffuse_white,
+                    "peak_white": peak_white,
+                    "ae_gain": ae_gain,
+                },
             )
             for key, value in uniforms.items():
                 self.postprocess[key] = value
@@ -265,20 +266,16 @@ class GLRenderer:
         diffuse_white = tile_diffuse
         return self.ae_gain_per_tile[tileidx], diffuse_white, peak_white
 
-    def _build_postprocess_uniforms(
-        self,
-        tileidx: int,
-        imgidx: int,
-        vpw: int,
-        vph: int,
-        gpu_texture,
-        scalex: float,
-        whitelevel: float,
-        blacklevel: float,
-        diffuse_white: float,
-        peak_white: float,
-        ae_gain: float,
-    ):
+    def _build_postprocess_uniforms(self, tileidx: int, imgidx: int, params: dict):
+        vpw = params["vpw"]
+        vph = params["vph"]
+        gpu_texture = params["gpu_texture"]
+        scalex = params["scalex"]
+        whitelevel = params["whitelevel"]
+        blacklevel = params["blacklevel"]
+        diffuse_white = params["diffuse_white"]
+        peak_white = params["peak_white"]
+        ae_gain = params["ae_gain"]
         magnification = scalex * vpw / (gpu_texture.width / self.ui.scale[tileidx])
         kernel = self._sharpen(magnification)
         max_kernel_size = self.postprocess['kernel'].array_length
