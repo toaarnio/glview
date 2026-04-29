@@ -12,10 +12,12 @@ try:
     # package mode
     from glview import ae
     from glview import texture
+    from glview import texturecache
 except ImportError:
     # stand-alone mode
     import ae
     import texture
+    import texturecache
 
 
 class GLRenderer:
@@ -52,7 +54,7 @@ class GLRenderer:
         self.fps = np.zeros(20)
         self.ae_gain_per_tile = np.ones(4)
         self.ae_converged = [True, True, True, True]
-        self.texture_cache = {}
+        self.texture_cache = texturecache.TextureCache()
 
     def init(self):
         """ Initialize an OpenGL context and attach it to an existing window. """
@@ -210,9 +212,7 @@ class GLRenderer:
         Must be called before the window closes to avoid errors from the GC
         trying to call glDeleteBuffers after the context is gone.
         """
-        for tex in self.texture_cache.values():
-            tex.release()
-        self.texture_cache.clear()
+        self.texture_cache.release_all()
         for obj in [self.vao_post, self.vao, self.vbo, self.postprocess, self.prog, self.fbo]:
             if obj is not None:
                 obj.release()
@@ -256,7 +256,7 @@ class GLRenderer:
         if not tex:
             img = img if isinstance(img, np.ndarray) else None
             tex = texture.Texture(self.ctx, img, idx, self.verbose)
-            self.texture_cache[slot_id] = tex
+            self.texture_cache.store(slot_id, tex)
         elif isinstance(img, np.ndarray):
             tex.reuse(img)
         if isinstance(img, np.ndarray):
@@ -272,9 +272,7 @@ class GLRenderer:
     def _prune_texture_cache(self, snapshot):
         """Release textures whose slot ids are no longer present in the catalog."""
         active_slot_ids = {slot.slot_id for slot in snapshot.image_slots}
-        stale_slot_ids = [slot_id for slot_id in self.texture_cache if slot_id not in active_slot_ids]
-        for slot_id in stale_slot_ids:
-            self.texture_cache.pop(slot_id).release()
+        self.texture_cache.prune(active_slot_ids)
 
     def _sharpen(self, magnification: float) -> np.ndarray:
         """

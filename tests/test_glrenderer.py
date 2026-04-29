@@ -66,7 +66,7 @@ class GLRendererTextureCacheTests(unittest.TestCase):
             tex = renderer.upload_texture(0, piecewise=False)
 
         slot_id = files.image_slot_id(0)
-        self.assertIs(renderer.texture_cache[slot_id], tex)
+        self.assertIs(renderer.texture_cache.get(slot_id), tex)
         self.assertEqual(loader.release_calls, [(0, token)])
         self.assertEqual(tex.upload_calls, [False])
 
@@ -77,14 +77,15 @@ class GLRendererTextureCacheTests(unittest.TestCase):
         tex1 = _FakeTextureObject(None, np.zeros((1, 1, 3), dtype=np.uint8), 1, False)
         slot0 = files.image_slot_id(0)
         slot1 = files.image_slot_id(1)
-        renderer.texture_cache = {slot0: tex0, slot1: tex1}
+        renderer.texture_cache.store(slot0, tex0)
+        renderer.texture_cache.store(slot1, tex1)
 
         files.drop([0])
         renderer._prune_texture_cache(files.snapshot())
 
         self.assertEqual(tex0.release_count, 1)
         self.assertEqual(tex1.release_count, 0)
-        self.assertEqual(set(renderer.texture_cache), {slot1})
+        self.assertEqual(set(renderer.texture_cache.keys()), {slot1})
 
 
 if __name__ == "__main__":
