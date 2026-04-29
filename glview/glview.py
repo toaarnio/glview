@@ -54,7 +54,8 @@ class FileList:
         self.numfiles = len(filespecs)
         self.orientations = [0] * self.numfiles
         self.linearize = [False] * self.numfiles
-        self.image_slots = [ImageSlot() for _ in range(self.numfiles)]
+        self._next_slot_id = 0
+        self.image_slots = [self._new_slot() for _ in range(self.numfiles)]
         self.loaded_images = [None] * self.numfiles
         self.images = [None] * self.numfiles  # payloads already consumed by the UI/render thread
         self.textures = [None] * self.numfiles     # None | <Texture>
@@ -73,6 +74,16 @@ class FileList:
     def image_status(self, idx) -> ImageStatus:
         return self.image_slots[idx].status
 
+    def image_revision(self, idx) -> int:
+        return self.image_slots[idx].revision
+
+    def image_slot_id(self, idx) -> int:
+        return self.image_slots[idx].slot_id
+
+    def image_token(self, idx):
+        slot = self.image_slots[idx]
+        return (slot.slot_id, slot.revision)
+
     def mark_pending(self, idx):
         self.image_slots[idx].status = ImageStatus.PENDING
         self.image_slots[idx].revision += 1
@@ -81,7 +92,6 @@ class FileList:
 
     def mark_loaded(self, idx, img):
         self.image_slots[idx].status = ImageStatus.LOADED
-        self.image_slots[idx].revision += 1
         self.loaded_images[idx] = img
 
     def mark_released(self, idx):
@@ -90,7 +100,6 @@ class FileList:
 
     def mark_invalid(self, idx):
         self.image_slots[idx].status = ImageStatus.INVALID
-        self.image_slots[idx].revision += 1
         self.loaded_images[idx] = None
         self.images[idx] = None
 
@@ -154,6 +163,11 @@ class FileList:
         self.numfiles = len(self.filespecs)
         self.is_url = ["://" in f for f in self.filespecs]
         self.reindexed = True
+
+    def _new_slot(self):
+        slot = ImageSlot(slot_id=self._next_slot_id)
+        self._next_slot_id += 1
+        return slot
 
 
 def main():  # noqa: PLR0915

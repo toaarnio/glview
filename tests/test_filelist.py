@@ -104,10 +104,12 @@ class FileListTests(unittest.TestCase):
         consumed = np.ones((1, 1, 3), dtype=np.uint8)
         files.mark_loaded(0, loaded)
         files.consume_image(0, consumed)
+        rev_before = files.image_revision(0)
 
         files.mark_pending(0)
 
         self.assertEqual(files.image_status(0), ImageStatus.PENDING)
+        self.assertEqual(files.image_revision(0), rev_before + 1)
         self.assertIsNone(files.loaded_images[0])
         self.assertIsNone(files.images[0])
 

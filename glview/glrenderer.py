@@ -247,7 +247,7 @@ class GLRenderer:
         object on the GPU if necessary, otherwise use an existing one.
         """
         tex = self.files.textures[idx]  # None | Texture
-        img = self.loader.get_image(idx)  # <ndarray> | PENDING | RELEASED | ...
+        img, token = self.loader.get_image_record(idx)  # <ndarray> | PENDING | RELEASED | ...
         if not tex:
             img = img if isinstance(img, np.ndarray) else None
             tex = texture.Texture(self.ctx, img, idx, self.verbose)
@@ -256,7 +256,7 @@ class GLRenderer:
             tex.reuse(img)
         if isinstance(img, np.ndarray):
             self.files.consume_image(idx, img)
-            self.loader.release_image(idx)
+            self.loader.release_image(idx, token=token)
         tex.upload(piecewise)
         return tex
 

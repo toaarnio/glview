@@ -13,5 +13,6 @@ class ImageStatus(Enum):
 
 @dataclass
 class ImageSlot:
+    slot_id: int
     status: ImageStatus = ImageStatus.PENDING
     revision: int = 0

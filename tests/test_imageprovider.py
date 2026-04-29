@@ -48,7 +48,8 @@ class ImageProviderTests(unittest.TestCase):
     def test_apply_updates_moves_loaded_payloads_to_ui_owned_store(self):
         provider = self._provider(["a.png"])
         img = np.ones((2, 2, 3), dtype=np.uint8)
-        provider._update_queue.put(("loaded", 0, img))
+        slot_id, revision = provider.files.image_token(0)
+        provider._update_queue.put(("loaded", 0, slot_id, revision, img))
 
         provider.apply_updates()
 
@@ -59,24 +60,66 @@ class ImageProviderTests(unittest.TestCase):
 
     def test_apply_updates_marks_invalid_slots(self):
         provider = self._provider(["a.png"])
-        provider._update_queue.put(("invalid", 0))
+        slot_id, revision = provider.files.image_token(0)
+        provider._update_queue.put(("invalid", 0, slot_id, revision))
 
         provider.apply_updates()
 
         self.assertEqual(provider.files.image_status(0), ImageStatus.INVALID)
 
+    def test_apply_updates_ignores_stale_tokens(self):
+        provider = self._provider(["a.png"])
+        img = np.ones((2, 2, 3), dtype=np.uint8)
+        stale_token = provider.files.image_token(0)
+        provider.files.mark_pending(0)
+        provider._update_queue.put(("loaded", 0, stale_token[0], stale_token[1], img))
+
+        provider.apply_updates()
+
+        self.assertEqual(provider.files.image_status(0), ImageStatus.PENDING)
+        self.assertIsNone(provider.files.images[0])
+
+    def test_apply_updates_ignores_stale_indices_after_drop(self):
+        provider = self._provider(["a.png", "b.png"])
+        img = np.ones((2, 2, 3), dtype=np.uint8)
+        stale_token = provider.files.image_token(0)
+        provider.files.drop([0])
+        provider._loader_statuses = [provider.files.image_status(0)]
+        provider._loader_tokens = [provider.files.image_token(0)]
+        provider._update_queue.put(("loaded", 0, stale_token[0], stale_token[1], img))
+
+        provider.apply_updates()
+
+        self.assertEqual(provider.files.filespecs, ["b.png"])
+        self.assertEqual(provider.files.image_status(0), ImageStatus.PENDING)
+        self.assertIsNone(provider.files.images[0])
+
     def test_release_request_is_queued_for_loader_thread(self):
         provider = self._provider(["a.png"])
         provider.files.mark_loaded(0, np.ones((1, 1, 3), dtype=np.uint8))
         provider.files.consume_image(0, np.ones((1, 1, 3), dtype=np.uint8))
+        token = provider.files.image_token(0)
 
-        provider.release_image(0)
+        provider.release_image(0, token=token)
         with provider.files.mutex:
             provider._drain_requests_locked()
 
         self.assertEqual(provider.files.image_status(0), ImageStatus.RELEASED)
         self.assertEqual(provider._loader_statuses[0], ImageStatus.RELEASED)
         self.assertIsNone(provider.files.images[0])
+
+    def test_stale_release_request_is_ignored(self):
+        provider = self._provider(["a.png"])
+        stale_token = provider.files.image_token(0)
+        provider.reload_image(0)
+        with provider.files.mutex:
+            provider._drain_requests_locked()
+
+        provider.release_image(0, token=stale_token)
+        with provider.files.mutex:
+            provider._drain_requests_locked()
+
+        self.assertEqual(provider._loader_statuses[0], ImageStatus.PENDING)
 
     def test_reload_request_is_queued_for_loader_thread(self):
         provider = self._provider(["a.png"])

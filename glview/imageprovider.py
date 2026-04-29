@@ -33,6 +33,7 @@ class ImageProvider:
         self.loader_thread = None
         self.running = False
         self._loader_statuses = [ImageStatus.PENDING] * self.files.numfiles
+        self._loader_tokens = [self.files.image_token(i) for i in range(self.files.numfiles)]
         self._update_queue = queue.SimpleQueue()
         self._request_queue = queue.SimpleQueue()
         self.validate_files()
@@ -93,18 +94,26 @@ class ImageProvider:
             return self.files.images[index]
         return self.files.image_status(index).value
 
-    def release_image(self, index):
+    def get_image_record(self, index):
+        """Return the current image payload or state plus the slot identity token."""
+        token = self.files.image_token(index)
+        image = self.get_image(index)
+        return image, token
+
+    def release_image(self, index, token=None):
         """
         Release the image at the given index to (eventually) free up the memory.
         """
+        if token is not None and token != self.files.image_token(index):
+            return
         self.files.mark_released(index)
         self.files.clear_consumed_image(index)
-        self._request_queue.put(("release", index))
+        self._request_queue.put(("release", index, token or self.files.image_token(index)))
 
     def reload_image(self, index):
         """Request reloading the image at the given index from disk."""
         self.files.mark_pending(index)
-        self._request_queue.put(("reload", index))
+        self._request_queue.put(("reload", index, self.files.image_token(index)))
 
     def apply_updates(self):
         """Apply pending loader-thread updates on the UI/render thread."""
@@ -113,8 +122,10 @@ class ImageProvider:
                 update = self._update_queue.get_nowait()
             except queue.Empty:
                 break
-            action, idx, *payload = update
+            action, idx, slot_id, revision, *payload = update
             if idx >= self.files.numfiles:
+                continue
+            if (slot_id, revision) != self.files.image_token(idx):
                 continue
             if action == "loaded":
                 img = payload[0]
@@ -166,11 +177,13 @@ class ImageProvider:
                         for idx, img in zip(chunk, images, strict=True):
                             if isinstance(img, np.ndarray):
                                 self._loader_statuses[idx] = ImageStatus.LOADED
-                                self._update_queue.put(("loaded", idx, img))
+                                slot_id, revision = self._loader_tokens[idx]
+                                self._update_queue.put(("loaded", idx, slot_id, revision, img))
                                 nloaded += 1
                             elif img == ImageStatus.INVALID.value:
                                 self._loader_statuses[idx] = ImageStatus.INVALID
-                                self._update_queue.put(("invalid", idx))
+                                slot_id, revision = self._loader_tokens[idx]
+                                self._update_queue.put(("invalid", idx, slot_id, revision))
                                 nloaded += 1
             nbytes = np.sum([img.nbytes for img in self.files.images if isinstance(img, np.ndarray)])
             if nloaded > 0 and nbytes > 1e4:
@@ -204,11 +217,13 @@ class ImageProvider:
                         img = self._load_single(idx, downsample, verbose)
                         if isinstance(img, np.ndarray):
                             self._loader_statuses[idx] = ImageStatus.LOADED
-                            self._update_queue.put(("loaded", idx, img))
+                            slot_id, revision = self._loader_tokens[idx]
+                            self._update_queue.put(("loaded", idx, slot_id, revision, img))
                             nbytes += img.nbytes
                         elif img == ImageStatus.INVALID.value:
                             self._loader_statuses[idx] = ImageStatus.INVALID
-                            self._update_queue.put(("invalid", idx))
+                            slot_id, revision = self._loader_tokens[idx]
+                            self._update_queue.put(("invalid", idx, slot_id, revision))
                     else:
                         break
                 time.sleep(0.001)
@@ -286,19 +301,25 @@ class ImageProvider:
     def _sync_loader_state_locked(self):
         if len(self._loader_statuses) != self.files.numfiles:
             self._loader_statuses = [self.files.image_status(i) for i in range(self.files.numfiles)]
+            self._loader_tokens = [self.files.image_token(i) for i in range(self.files.numfiles)]
 
     def _drain_requests_locked(self):
         while True:
             try:
-                action, idx = self._request_queue.get_nowait()
+                action, idx, token = self._request_queue.get_nowait()
             except queue.Empty:
                 break
             if idx >= len(self._loader_statuses):
                 continue
             if action == "release":
+                if token != self._loader_tokens[idx]:
+                    continue
                 self._loader_statuses[idx] = ImageStatus.RELEASED
             elif action == "reload":
+                if token[0] != self._loader_tokens[idx][0]:
+                    continue
                 self._loader_statuses[idx] = ImageStatus.PENDING
+                self._loader_tokens[idx] = token
 
     def _check_ram(self, minimum, wait):
         ram_available = lambda: psutil.virtual_memory().available / 1024**2
