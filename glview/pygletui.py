@@ -168,8 +168,9 @@ class PygletUI:
         loaded from disk. Otherwise, a placeholder dummy image would remain
         visible until the user performs some interaction.
         """
+        snapshot = self.files.snapshot()
         for imgidx in self.img_per_tile[:self.numtiles]:
-            if self.files.image_status(imgidx) == ImageStatus.PENDING:
+            if snapshot.image_slots[imgidx].status == ImageStatus.PENDING:
                 self.images_pending = True
                 break
         else:
@@ -189,17 +190,20 @@ class PygletUI:
         in index order.
         """
         if not self.need_redraw:
+            snapshot = self.files.snapshot()
             indices = self.img_per_tile[:self.numtiles]
-            indices = list(indices) + list(range(self.files.numfiles))
+            indices = list(indices) + list(range(snapshot.numfiles))
             for imgidx in indices:
-                if self.files.ready_to_upload(imgidx):
-                    texture = self.files.textures[imgidx]
+                status = snapshot.image_slots[imgidx].status
+                if status not in [ImageStatus.PENDING, ImageStatus.INVALID]:
+                    texture = snapshot.textures[imgidx]
                     if texture is None or not texture.done:
                         texture = self.renderer.upload_texture(imgidx, piecewise=True)
                         self.need_redraw = texture.done
                         break  # upload only one slice of one texture per call
 
     def _caption(self):
+        snapshot = self.files.snapshot()
         ver = self.version
         fps = np.median(self.renderer.fps)
         cspaces = ["sRGB", "DCI-P3", "Rec2020", "XYZ"]
@@ -221,15 +225,15 @@ class PygletUI:
         # so we need to make a compromise: show filenames if all files are in the same
         # directory; otherwise show the directory name but not the filename
 
-        dirnames = [Path(fspec).parent for fspec in self.files.filespecs]
-        basenames = [Path(fspec).name for fspec in self.files.filespecs]
+        dirnames = [Path(fspec).parent for fspec in snapshot.filespecs]
+        basenames = [Path(fspec).name for fspec in snapshot.filespecs]
         hide_dirname = np.unique(dirnames).size == 1
         for tileidx in range(self.numtiles):
             imgidx = self.img_per_tile[tileidx]
-            label = Path(self.files.filespecs[imgidx])
+            label = Path(snapshot.filespecs[imgidx])
             if self.numtiles > 1:  # show folder name or filename but not both
                 label = basenames[imgidx] if hide_dirname else dirnames[imgidx]
-            caption = f"{caption} | {label} [{imgidx+1}/{self.files.numfiles}]"
+            caption = f"{caption} | {label} [{imgidx+1}/{snapshot.numfiles}]"
         return caption
 
     def _retile(self, numtiles, winsize, layout):

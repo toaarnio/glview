@@ -113,6 +113,21 @@ class FileListTests(unittest.TestCase):
         self.assertIsNone(files.loaded_images[0])
         self.assertIsNone(files.images[0])
 
+    def test_snapshot_returns_consistent_read_only_view(self):
+        files = FileList(["a.png", "b.png"])
+        files.mark_loaded(0, np.zeros((1, 1, 3), dtype=np.uint8))
+        files.linearize[1] = True
+        files.metadata[1] = {"name": "b"}
+
+        snapshot = files.snapshot()
+        files.drop([0])
+
+        self.assertEqual(snapshot.numfiles, 2)
+        self.assertEqual(snapshot.filespecs, ("a.png", "b.png"))
+        self.assertEqual(snapshot.image_slots[0].status, ImageStatus.LOADED)
+        self.assertEqual(snapshot.linearize[1], True)
+        self.assertEqual(snapshot.metadata[1], {"name": "b"})
+
 
 if __name__ == "__main__":
     unittest.main()

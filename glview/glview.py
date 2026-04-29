@@ -10,6 +10,7 @@ import time                    # built-in library
 import threading               # built-in library
 import pathlib                 # built-in library
 import types                   # built-in library
+from dataclasses import dataclass  # built-in library
 import numpy as np             # pip install numpy
 import natsort                 # pip install natsort
 import psutil                  # pip install psutil
@@ -39,6 +40,18 @@ IMAGE_TYPES = imgio.RO_FORMATS
 COLORSPACES = {"sRGB": 0, "P3": 1, "Rec2020": 2, "XYZ": 3}
 
 NORMS = {"off": 0, "max": 1, "stretch": 2, "99": 3, "98": 4, "95": 5, "90": 6, "mean": 7}
+
+
+@dataclass(frozen=True)
+class FileListSnapshot:
+    filespecs: tuple
+    numfiles: int
+    orientations: tuple
+    linearize: tuple
+    image_slots: tuple
+    textures: tuple
+    metadata: tuple
+    is_url: tuple
 
 
 class FileList:
@@ -108,6 +121,20 @@ class FileList:
 
     def clear_consumed_image(self, idx):
         self.images[idx] = None
+
+    def snapshot(self) -> FileListSnapshot:
+        """Return a consistent read-only view of the catalog state."""
+        with self.mutex:
+            return FileListSnapshot(
+                filespecs=tuple(self.filespecs),
+                numfiles=self.numfiles,
+                orientations=tuple(self.orientations),
+                linearize=tuple(self.linearize),
+                image_slots=tuple(self.image_slots),
+                textures=tuple(self.textures),
+                metadata=tuple(self.metadata),
+                is_url=tuple(self.is_url),
+            )
 
     def drop(self, indices):
         """ Drop the given images from this FileList, do not delete the files. """

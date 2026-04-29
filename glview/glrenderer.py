@@ -89,6 +89,7 @@ class GLRenderer:
             self.fbo = self.ctx.framebuffer([offscreen_tile])
 
         for i in range(self.ui.numtiles):
+            snapshot = self.files.snapshot()
             imgidx = self.ui.img_per_tile[i]
             texture = self.upload_texture(imgidx, piecewise=False)
             gpu_texture = texture.texture
@@ -100,7 +101,7 @@ class GLRenderer:
             gpu_texture.repeat_y = False
             gpu_texture.swizzle = 'RGB1'
             gpu_texture.use(location=0)
-            orientation = self.files.orientations[imgidx]
+            orientation = snapshot.orientations[imgidx]
             texw, texh = gpu_texture.width, gpu_texture.height
             texw, texh = (texh, texw) if orientation in [90, 270] else (texw, texh)
             scalex, scaley = self._get_aspect_ratio(vpw, vph, texw, texh)
@@ -119,7 +120,7 @@ class GLRenderer:
             self.prog['aspect'] = (scalex, scaley)
             self.prog['orientation'] = orientation
             self.prog['grayscale'] = (gpu_texture.components == 1)
-            self.prog['degamma'] = self.files.linearize[imgidx]
+            self.prog['degamma'] = snapshot.linearize[imgidx]
             self.vao.render(moderngl.TRIANGLE_STRIP)
 
             # Derive exposure parameters for the current tile, to be applied in the
@@ -317,7 +318,8 @@ class GLRenderer:
         control of the 'limit' parameter is supported, but not currently used.
         """
         if (gamut_lim := self.ui.gamut_lim) is None:  # use global limits by default
-            gamut_lim = self.files.metadata[imgidx]['gamut_bounds']  # per-image limit
+            snapshot = self.files.snapshot()
+            gamut_lim = snapshot.metadata[imgidx]['gamut_bounds']  # per-image limit
         gamut_lim = np.clip(gamut_lim, 1.01, np.inf)  # >1.01 to ensure no overflows
         scale = self._gamut_curve(self.ui.gamut_pow, self.ui.gamut_thr, gamut_lim)
         return scale
