@@ -14,9 +14,11 @@ import imgio                   # pip install imgio
 try:
     from glview import uistate
     from glview.imagestate import ImageStatus
+    from glview.viewerstate import ViewerState
 except ImportError:
     import uistate
     from imagestate import ImageStatus
+    from viewerstate import ViewerState
 
 
 class PygletUI:
@@ -31,33 +33,24 @@ class PygletUI:
         self.files = files
         self.version = None
         self.fullscreen = False
-        self.numtiles = 1
+        self.state = ViewerState()
         self.running = None
         self.need_redraw = True
         self.was_resized = True
         self.window = None
         self.key_state = None
         self.winsize = None
-        self.tileidx = 0
         self.scale = np.ones(4)  # per-tile scale
         self.mousepos = np.zeros((4, 2))  # per-tile (x, y); clipped to [0, 1]
         self.mouse_speed = 2.0
         self.mouse_canvas_width = 1000
         self.keyboard_pan_speed = 100
         self.viewports = None
-        self.layout = "N x 1"  # N x 1 | 1 x N | 2 x 2
         self.ui_thread = None
         self.event_loop = None
         self.loader = None
         self.renderer = None
         self.texture_filter = "NEAREST"
-        self.img_per_tile = [0, 1, 2, 3]
-        self.ae_per_tile = [False, False, False, False]
-        self.ae_reset_per_tile = [False, False, False, False]
-        self.tonemap_per_tile = [False, False, False, False]
-        self.gamutmap_per_tile = [False, False, False, False]
-        self.sharpen_per_tile = [False, False, False, False]
-        self.mirror_per_tile = [0, 0, 0, 0]
         self.images_pending = True
         self.cs_in = 0
         self.cs_out = 0
@@ -70,6 +63,86 @@ class PygletUI:
         self.gamut_lim = np.ones(3) * 1.1
         self.gamut_thr = np.ones(3) * 0.8
         self.ss_idx = 0
+
+    @property
+    def numtiles(self):
+        return self.state.numtiles
+
+    @numtiles.setter
+    def numtiles(self, value):
+        self.state.numtiles = value
+
+    @property
+    def tileidx(self):
+        return self.state.tileidx
+
+    @tileidx.setter
+    def tileidx(self, value):
+        self.state.tileidx = value
+
+    @property
+    def layout(self):
+        return self.state.layout
+
+    @layout.setter
+    def layout(self, value):
+        self.state.layout = value
+
+    @property
+    def img_per_tile(self):
+        return self.state.img_per_tile
+
+    @img_per_tile.setter
+    def img_per_tile(self, value):
+        self.state.img_per_tile = np.asarray(value, dtype=int)
+
+    @property
+    def ae_per_tile(self):
+        return self.state.ae_per_tile
+
+    @ae_per_tile.setter
+    def ae_per_tile(self, value):
+        self.state.ae_per_tile = list(value)
+
+    @property
+    def ae_reset_per_tile(self):
+        return self.state.ae_reset_per_tile
+
+    @ae_reset_per_tile.setter
+    def ae_reset_per_tile(self, value):
+        self.state.ae_reset_per_tile = list(value)
+
+    @property
+    def tonemap_per_tile(self):
+        return self.state.tonemap_per_tile
+
+    @tonemap_per_tile.setter
+    def tonemap_per_tile(self, value):
+        self.state.tonemap_per_tile = list(value)
+
+    @property
+    def gamutmap_per_tile(self):
+        return self.state.gamutmap_per_tile
+
+    @gamutmap_per_tile.setter
+    def gamutmap_per_tile(self, value):
+        self.state.gamutmap_per_tile = list(value)
+
+    @property
+    def sharpen_per_tile(self):
+        return self.state.sharpen_per_tile
+
+    @sharpen_per_tile.setter
+    def sharpen_per_tile(self, value):
+        self.state.sharpen_per_tile = list(value)
+
+    @property
+    def mirror_per_tile(self):
+        return self.state.mirror_per_tile
+
+    @mirror_per_tile.setter
+    def mirror_per_tile(self, value):
+        self.state.mirror_per_tile = list(value)
 
     def start(self, renderer):
         """ Start the UI thread. """
@@ -456,7 +529,7 @@ class PygletUI:
                         self.scale = np.ones(4)
                         self.mousepos = np.zeros((4, 2))
                         self.ev_linear = 0.0
-                        self.ae_reset_per_tile = [True, True, True, True]
+                        self.state.reset_ae()
                         self.need_redraw = True
                     case keys.L:  # toggle linearization on/off (current image)
                         imgidx = self.img_per_tile[self.tileidx]
@@ -466,18 +539,16 @@ class PygletUI:
                         self.gamma = (self.gamma + 1) % 4
                         self.need_redraw = True
                     case keys.A:  # toggle autoexposure on/off (current tile)
-                        self.ae_per_tile[self.tileidx] = not self.ae_per_tile[self.tileidx]
-                        self.ae_reset_per_tile[self.tileidx] = True
+                        self.state.toggle_ae()
                         self.need_redraw = True
                     case keys.C:  # toggle tone mapping on/off (current tile)
-                        self.tonemap_per_tile[self.tileidx] = not self.tonemap_per_tile[self.tileidx]
-                        self.ae_reset_per_tile[self.tileidx] = True
+                        self.state.toggle_tonemap()
                         self.need_redraw = True
                     case keys.K:  # toggle gamut mapping on/off (current tile)
-                        self.gamutmap_per_tile[self.tileidx] = not self.gamutmap_per_tile[self.tileidx]
+                        self.state.toggle_gamutmap()
                         self.need_redraw = True
                     case keys.Z:  # toggle sharpening on/off (current tile)
-                        self.sharpen_per_tile[self.tileidx] = not self.sharpen_per_tile[self.tileidx]
+                        self.state.toggle_sharpen()
                         self.need_redraw = True
                     case keys.I:  # input color space (global)
                         self.cs_in = (self.cs_in + 1) % 4
@@ -490,32 +561,18 @@ class PygletUI:
                         self.need_redraw = True
                     case keys.N:  # normalize off/max/... (global)
                         self.normalize = (self.normalize + 1) % 8
-                        self.ae_reset_per_tile = [True, True, True, True]
+                        self.state.reset_ae()
                         self.need_redraw = True
                     case keys.T:  # texture filtering (global)
                         self.texture_filter = "LINEAR" if self.texture_filter == "NEAREST" else "NEAREST"
                         self.need_redraw = True
                     case keys.S:  # split
-                        state = uistate.SplitState(
-                            numtiles=self.numtiles,
-                            layout=self.layout,
-                            tileidx=self.tileidx,
-                            img_per_tile=np.asarray(self.img_per_tile),
-                        )
-                        state = uistate.cycle_split_state(state, self.files.numfiles)
-                        self.numtiles = state.numtiles
-                        self.layout = state.layout
-                        self.tileidx = state.tileidx
-                        self.img_per_tile = state.img_per_tile
+                        self.state.cycle_split(self.files.numfiles)
                         self.viewports = self._retile(self.numtiles, self.winsize, self.layout)
                         self.window.set_caption(self._caption())
                         self.need_redraw = True
                     case keys.P if self.numtiles == 2:  # flip image pair
-                        self.img_per_tile = uistate.flip_pair(self.img_per_tile)
-                        self.ae_per_tile = uistate.flip_pair(self.ae_per_tile)
-                        self.ae_reset_per_tile[:2] = [True, True]
-                        self.tonemap_per_tile = uistate.flip_pair(self.tonemap_per_tile)
-                        self.sharpen_per_tile = uistate.flip_pair(self.sharpen_per_tile)
+                        self.state.flip_pair()
                         self.window.set_caption(self._caption())
                         self.need_redraw = True
                     case keys.R:  # rotate (current image)
@@ -524,7 +581,7 @@ class PygletUI:
                         self.files.orientations[imgidx] %= 360
                         self.need_redraw = True
                     case keys.M:  # mirror (current tile)
-                        self.mirror_per_tile[self.tileidx] = (self.mirror_per_tile[self.tileidx] + 1) % 4
+                        self.state.cycle_mirror()
                         self.need_redraw = True
                     case keys.U:  # reload currently visible images from disk
                         for imgidx in self.img_per_tile[:self.numtiles]:
@@ -560,14 +617,12 @@ class PygletUI:
                                 self.running = False
                                 self.event_loop.has_exit = True
                             else:
-                                self.img_per_tile = uistate.repair_visible_images_after_removal(
-                                    self.img_per_tile, self.numtiles, self.files.numfiles
-                                )
+                                self.state.repair_after_removal(self.files.numfiles)
                                 self.window.set_caption(self._caption())
                                 self.need_redraw = True
                     case keys._1 | keys._2 | keys._3 | keys._4:
                         tileidx = symbol - keys._1
-                        self.tileidx = tileidx if tileidx < self.numtiles else self.tileidx
+                        self.state.select_tile(tileidx)
                         self.need_redraw = True
 
         @self.window.event
@@ -577,17 +632,15 @@ class PygletUI:
                 # PageUp / PageDown
                 self._vprint(f"on_text_motion({keys.symbol_string(motion)})")
                 incr = 1 if motion == keys.MOTION_NEXT_PAGE else -1
-                self.img_per_tile = uistate.step_active_tile(self.img_per_tile, self.tileidx, incr, self.files.numfiles)
-                self.ae_reset_per_tile[self.tileidx] = True
+                self.state.step_active_tile(incr, self.files.numfiles)
                 self.window.set_caption(self._caption())
                 self.need_redraw = True
             if motion in [keys.MOTION_NEXT_WORD, keys.MOTION_PREVIOUS_WORD]:
                 # Ctrl + Left / Right
                 self._vprint(f"on_text_motion({keys.symbol_string(motion)})")
                 incr = 1 if motion == keys.MOTION_NEXT_WORD else -1
-                self.img_per_tile = uistate.step_all_tiles(self.img_per_tile, self.numtiles, incr, self.files.numfiles)
+                self.state.step_all_tiles(incr, self.files.numfiles)
                 self.window.set_caption(self._caption())
-                self.ae_reset_per_tile = [True, True, True, True]
                 self.need_redraw = True
 
     def _try(self, func):
