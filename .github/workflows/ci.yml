@@ -31,7 +31,10 @@ jobs:
         run: uv sync --extra dev
 
       - name: Lint
-        run: uv run ruff check glview/[^a]*.py
+        run: make lint
+
+      - name: Test
+        run: make test
 
       - name: Build distributions
         run: uv build
