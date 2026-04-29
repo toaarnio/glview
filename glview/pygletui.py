@@ -475,6 +475,22 @@ class PygletUI:
         self.texture_filter = "LINEAR" if self.texture_filter == "NEAREST" else "NEAREST"
         self.need_redraw = True
 
+    def _toggle_ae_command(self):
+        self.state.toggle_ae()
+        self.need_redraw = True
+
+    def _toggle_tonemap_command(self):
+        self.state.toggle_tonemap()
+        self.need_redraw = True
+
+    def _toggle_gamutmap_command(self):
+        self.state.toggle_gamutmap()
+        self.need_redraw = True
+
+    def _toggle_sharpen_command(self):
+        self.state.toggle_sharpen()
+        self.need_redraw = True
+
     def _cycle_split_command(self):
         self.state.cycle_split(self.files.numfiles)
         self.viewports = self._retile(self.numtiles, self.winsize, self.layout)
@@ -490,6 +506,10 @@ class PygletUI:
         imgidx = self.img_per_tile[self.tileidx]
         self.files.orientations[imgidx] += 90
         self.files.orientations[imgidx] %= 360
+        self.need_redraw = True
+
+    def _cycle_mirror_command(self):
+        self.state.cycle_mirror()
         self.need_redraw = True
 
     def _reload_visible_images(self):
@@ -537,6 +557,30 @@ class PygletUI:
         self.state.step_all_tiles(incr, self.files.numfiles)
         self.window.set_caption(self._caption())
         self.need_redraw = True
+
+    def _simple_key_actions(self, keys):
+        return {
+            keys.ESCAPE: self._request_exit,
+            keys.Q: self._request_exit,
+            keys.F: self._toggle_fullscreen,
+            keys.H: self._reset_view_command,
+            keys.L: self._toggle_linearize_current,
+            keys.G: self._cycle_gamma,
+            keys.A: self._toggle_ae_command,
+            keys.C: self._toggle_tonemap_command,
+            keys.K: self._toggle_gamutmap_command,
+            keys.Z: self._toggle_sharpen_command,
+            keys.I: self._cycle_input_colorspace,
+            keys.O: self._cycle_output_colorspace,
+            keys.B: self._toggle_exposure_range,
+            keys.N: self._cycle_normalize,
+            keys.T: self._toggle_texture_filter,
+            keys.S: self._cycle_split_command,
+            keys.R: self._rotate_current_image,
+            keys.M: self._cycle_mirror_command,
+            keys.U: self._reload_visible_images,
+            keys.SPACE: self._toggle_debug_mode,
+        }
 
     def _setup_events(self):
         self._vprint("setting up Pyglet window event handlers...")
@@ -635,74 +679,32 @@ class PygletUI:
             if symbol == keys.C and modifiers == keys.MOD_CTRL:
                 self._request_exit()
             if (modifiers & disallowed_keys) == 0:  # ignore NumLock, ScrollLock, CapsLock, Shift
-                match symbol:
-                    case keys.ESCAPE | keys.Q:  # exit
-                        self._request_exit()
-                    case keys.F:  # fullscreen
-                        self._toggle_fullscreen()
-                    case keys.H:  # reset exposure + zoom & pan
-                        self._reset_view_command()
-                    case keys.L:  # toggle linearization on/off (current image)
-                        self._toggle_linearize_current()
-                    case keys.G:  # cycle through gamma modes (global)
-                        self._cycle_gamma()
-                    case keys.A:  # toggle autoexposure on/off (current tile)
-                        self.state.toggle_ae()
-                        self.need_redraw = True
-                    case keys.C:  # toggle tone mapping on/off (current tile)
-                        self.state.toggle_tonemap()
-                        self.need_redraw = True
-                    case keys.K:  # toggle gamut mapping on/off (current tile)
-                        self.state.toggle_gamutmap()
-                        self.need_redraw = True
-                    case keys.Z:  # toggle sharpening on/off (current tile)
-                        self.state.toggle_sharpen()
-                        self.need_redraw = True
-                    case keys.I:  # input color space (global)
-                        self._cycle_input_colorspace()
-                    case keys.O:  # output color space (global)
-                        self._cycle_output_colorspace()
-                    case keys.B:  # toggle narrow/wide exposure control (global)
-                        self._toggle_exposure_range()
-                    case keys.N:  # normalize off/max/... (global)
-                        self._cycle_normalize()
-                    case keys.T:  # texture filtering (global)
-                        self._toggle_texture_filter()
-                    case keys.S:  # split
-                        self._cycle_split_command()
-                    case keys.P if self.numtiles == 2:  # flip image pair
+                action = self._simple_key_actions(keys).get(symbol)
+                if action is not None:
+                    action()
+                elif symbol == keys.P and self.numtiles == 2:
                         self._flip_pair_command()
-                    case keys.R:  # rotate (current image)
-                        self._rotate_current_image()
-                    case keys.M:  # mirror (current tile)
-                        self.state.cycle_mirror()
-                        self.need_redraw = True
-                    case keys.U:  # reload currently visible images from disk
-                        self._reload_visible_images()
-                    case keys.X:  # EXIF info (current image)
-                        imgidx = self.img_per_tile[self.tileidx]
-                        filespec = self.files.filespecs[imgidx]
-                        fileinfo = imsize.read(filespec)
-                        print(fileinfo)
-                        self._print_exif(filespec)
-                    case keys.W:  # take a screenshot
-                        screenshot_uint8 = self.renderer.screenshot(np.uint8)
-                        screenshot_fp32 = self.renderer.screenshot(np.float32)
-                        screenshot_uint8 = self._crop_borders(screenshot_uint8)
-                        screenshot_fp32 = self._crop_borders(screenshot_fp32)
-                        imgio.imwrite(f"screenshot{self.ss_idx:02d}.jpg", screenshot_uint8, maxval=255, verbose=True)
-                        imgio.imwrite(f"screenshot{self.ss_idx:02d}.pfm", screenshot_fp32, maxval=1.0, verbose=True)
-                        self.ss_idx += 1
-                    case keys.SPACE:  # toggle debug mode on/off
-                        self._toggle_debug_mode()
-                    case keys.D | keys.DELETE:
-                        if symbol == keys.D:
-                            self._remove_visible_images()
-                        if symbol == keys.DELETE:
-                            self._delete_current_image()
-                    case keys._1 | keys._2 | keys._3 | keys._4:
-                        tileidx = symbol - keys._1
-                        self._select_tile_command(tileidx)
+                elif symbol == keys.X:
+                    imgidx = self.img_per_tile[self.tileidx]
+                    filespec = self.files.filespecs[imgidx]
+                    fileinfo = imsize.read(filespec)
+                    print(fileinfo)
+                    self._print_exif(filespec)
+                elif symbol == keys.W:
+                    screenshot_uint8 = self.renderer.screenshot(np.uint8)
+                    screenshot_fp32 = self.renderer.screenshot(np.float32)
+                    screenshot_uint8 = self._crop_borders(screenshot_uint8)
+                    screenshot_fp32 = self._crop_borders(screenshot_fp32)
+                    imgio.imwrite(f"screenshot{self.ss_idx:02d}.jpg", screenshot_uint8, maxval=255, verbose=True)
+                    imgio.imwrite(f"screenshot{self.ss_idx:02d}.pfm", screenshot_fp32, maxval=1.0, verbose=True)
+                    self.ss_idx += 1
+                elif symbol == keys.D:
+                    self._remove_visible_images()
+                elif symbol == keys.DELETE:
+                    self._delete_current_image()
+                elif symbol in [keys._1, keys._2, keys._3, keys._4]:
+                    tileidx = symbol - keys._1
+                    self._select_tile_command(tileidx)
 
         @self.window.event
         def on_text_motion(motion):
