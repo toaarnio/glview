@@ -10,11 +10,13 @@ import numpy as np             # pip install numpy
 try:
     from glview import uistate
     from glview import uiops
+    from glview.viewconfig import ViewConfigState
     from glview.imagestate import ImageStatus
     from glview.viewerstate import ViewerState
 except ImportError:
     import uistate
     import uiops
+    from viewconfig import ViewConfigState
     from imagestate import ImageStatus
     from viewerstate import ViewerState
 
@@ -25,8 +27,7 @@ class PygletUI:
     def __init__(self, files, debug, verbose=False):
         """ Create a new PygletUI with the given (hardcoded) FileList instance. """
         self.thread_name = "UIThread"
-        self.debug_mode = debug  # selected debug rendering mode: 1|2|3|4|r|g|b|...
-        self.debug_mode_on = False  # start in normal mode, toggle on/off with space
+        self.config = ViewConfigState(debug_mode=debug)
         self.verbose = verbose
         self.files = files
         self.version = None
@@ -47,18 +48,7 @@ class PygletUI:
         self.event_loop = None
         self.loader = None
         self.renderer = None
-        self.texture_filter = "NEAREST"
         self.images_pending = True
-        self.cs_in = 0
-        self.cs_out = 0
-        self.gamma = 1
-        self.normalize = 0  # 0|1|2|...
-        self.ev_range = 2
-        self.ev_linear = 0.0
-        self.ev = 0.0
-        self.gamut_pow = np.ones(3) * 5.0
-        self.gamut_lim = np.ones(3) * 1.1
-        self.gamut_thr = np.ones(3) * 0.8
         self.ss_idx = 0
 
     @property
@@ -92,6 +82,22 @@ class PygletUI:
     @img_per_tile.setter
     def img_per_tile(self, value):
         self.state.img_per_tile = np.asarray(value, dtype=int)
+
+    @property
+    def debug_mode(self):
+        return self.config.debug_mode
+
+    @debug_mode.setter
+    def debug_mode(self, value):
+        self.config.debug_mode = value
+
+    @property
+    def debug_mode_on(self):
+        return self.config.debug_mode_on
+
+    @debug_mode_on.setter
+    def debug_mode_on(self, value):
+        self.config.debug_mode_on = value
 
     @property
     def scale(self):
@@ -156,6 +162,94 @@ class PygletUI:
     @mirror_per_tile.setter
     def mirror_per_tile(self, value):
         self.state.mirror_per_tile = list(value)
+
+    @property
+    def texture_filter(self):
+        return self.config.texture_filter
+
+    @texture_filter.setter
+    def texture_filter(self, value):
+        self.config.texture_filter = value
+
+    @property
+    def cs_in(self):
+        return self.config.cs_in
+
+    @cs_in.setter
+    def cs_in(self, value):
+        self.config.cs_in = value
+
+    @property
+    def cs_out(self):
+        return self.config.cs_out
+
+    @cs_out.setter
+    def cs_out(self, value):
+        self.config.cs_out = value
+
+    @property
+    def gamma(self):
+        return self.config.gamma
+
+    @gamma.setter
+    def gamma(self, value):
+        self.config.gamma = value
+
+    @property
+    def normalize(self):
+        return self.config.normalize
+
+    @normalize.setter
+    def normalize(self, value):
+        self.config.normalize = value
+
+    @property
+    def ev_range(self):
+        return self.config.ev_range
+
+    @ev_range.setter
+    def ev_range(self, value):
+        self.config.ev_range = value
+
+    @property
+    def ev_linear(self):
+        return self.config.ev_linear
+
+    @ev_linear.setter
+    def ev_linear(self, value):
+        self.config.ev_linear = value
+
+    @property
+    def ev(self):
+        return self.config.ev
+
+    @ev.setter
+    def ev(self, value):
+        self.config.ev = value
+
+    @property
+    def gamut_pow(self):
+        return self.config.gamut_pow
+
+    @gamut_pow.setter
+    def gamut_pow(self, value):
+        self.config.gamut_pow = np.asarray(value, dtype=float)
+
+    @property
+    def gamut_lim(self):
+        return self.config.gamut_lim
+
+    @gamut_lim.setter
+    def gamut_lim(self, value):
+        self.config.gamut_lim = np.asarray(value, dtype=float) if value is not None else None
+
+    @property
+    def gamut_thr(self):
+        return self.config.gamut_thr
+
+    @gamut_thr.setter
+    def gamut_thr(self, value):
+        self.config.gamut_thr = np.asarray(value, dtype=float)
 
     def start(self, renderer):
         """ Start the UI thread. """
@@ -401,10 +495,12 @@ class PygletUI:
         # so exposure control is pretty fast
         keys = pyglet.window.key
         shift_down = self.key_state[keys.LSHIFT] or self.key_state[keys.RSHIFT]
-        if not shift_down and self.key_state[keys.E]:
-            self.ev_linear += 0.005 * self.key_state[keys.E]
+        changed = self.config.update_exposure(
+            increase=bool(not shift_down and self.key_state[keys.E]),
+            triangle_wave=self._triangle_wave,
+        )
+        if changed:
             self.need_redraw = True
-        self.ev = self._triangle_wave(self.ev_linear, self.ev_range)
 
     def _crop_borders(self, img):
         return self.ops.crop_borders(img)
@@ -417,7 +513,7 @@ class PygletUI:
 
     def _reset_view_command(self):
         self.state.reset_view()
-        self.ev_linear = 0.0
+        self.config.reset_exposure()
         self.need_redraw = True
 
     def _toggle_linearize_current(self):
@@ -426,28 +522,28 @@ class PygletUI:
         self.need_redraw = True
 
     def _cycle_gamma(self):
-        self.gamma = (self.gamma + 1) % 4
+        self.config.cycle_gamma()
         self.need_redraw = True
 
     def _cycle_input_colorspace(self):
-        self.cs_in = (self.cs_in + 1) % 4
+        self.config.cycle_input_colorspace()
         self.need_redraw = True
 
     def _cycle_output_colorspace(self):
-        self.cs_out = (self.cs_out + 1) % 4
+        self.config.cycle_output_colorspace()
         self.need_redraw = True
 
     def _toggle_exposure_range(self):
-        self.ev_range = (self.ev_range + 6) % 12
+        self.config.toggle_exposure_range()
         self.need_redraw = True
 
     def _cycle_normalize(self):
-        self.normalize = (self.normalize + 1) % 8
+        self.config.cycle_normalize()
         self.state.reset_ae()
         self.need_redraw = True
 
     def _toggle_texture_filter(self):
-        self.texture_filter = "LINEAR" if self.texture_filter == "NEAREST" else "NEAREST"
+        self.config.toggle_texture_filter()
         self.need_redraw = True
 
     def _toggle_ae_command(self):
