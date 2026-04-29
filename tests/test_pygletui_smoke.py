@@ -44,6 +44,23 @@ class _FakeLoader:
         self.reload_calls.append(imgidx)
 
 
+class _FakeWindow:
+
+    def __init__(self):
+        self.caption = None
+        self.fullscreen = None
+        self.mouse_visible = None
+
+    def set_caption(self, caption):
+        self.caption = caption
+
+    def set_fullscreen(self, fullscreen):
+        self.fullscreen = fullscreen
+
+    def set_mouse_visible(self, visible):
+        self.mouse_visible = visible
+
+
 class PygletUISmokeTests(unittest.TestCase):
 
     def _ui(self, filespecs):
@@ -52,6 +69,10 @@ class PygletUISmokeTests(unittest.TestCase):
         ui.version = "test"
         ui.loader = _FakeLoader()
         ui.renderer = _FakeRenderer(loader=ui.loader)
+        ui.window = _FakeWindow()
+        ui.winsize = (120, 80)
+        ui.viewports = ui._retile(ui.numtiles, ui.winsize, ui.layout)
+        ui.event_loop = type("EventLoop", (), {"has_exit": False})()
         return ui
 
     def test_poll_loading_requests_redraw_when_visible_images_finish_loading(self):
@@ -172,9 +193,7 @@ class PygletUISmokeTests(unittest.TestCase):
         ui.files.consume_image(0, np.full((1, 1, 3), 2, dtype=np.uint8))
         ui.files.consume_image(1, np.full((1, 1, 3), 3, dtype=np.uint8))
 
-        for imgidx in ui.img_per_tile[:ui.numtiles]:
-            ui.loader.reload_image(imgidx)
-            ui.files.mark_pending(imgidx)
+        ui._reload_visible_images()
 
         self.assertEqual(ui.files.image_status(0), ImageStatus.PENDING)
         self.assertEqual(ui.files.image_status(1), ImageStatus.PENDING)
@@ -183,6 +202,30 @@ class PygletUISmokeTests(unittest.TestCase):
         self.assertIsNone(ui.files.images[0])
         self.assertIsNone(ui.files.images[1])
         self.assertEqual(ui.loader.reload_calls, [0, 1])
+
+    def test_cycle_split_command_updates_state_and_viewports(self):
+        ui = self._ui(["a.png", "b.png", "c.png"])
+
+        ui._cycle_split_command()
+
+        self.assertEqual(ui.numtiles, 2)
+        self.assertEqual(ui.layout, "N x 1")
+        self.assertEqual(ui.viewports[1], (60, 0, 60, 80))
+        self.assertTrue(ui.need_redraw)
+        self.assertIsNotNone(ui.window.caption)
+
+    def test_remove_visible_images_repairs_view_and_requests_redraw(self):
+        ui = self._ui(["a.png", "b.png", "c.png", "d.png"])
+        ui.numtiles = 2
+        ui.img_per_tile = [2, 3, 0, 1]
+        ui.need_redraw = False
+
+        ui._remove_visible_images()
+
+        self.assertEqual(ui.files.numfiles, 2)
+        np.testing.assert_array_equal(ui.img_per_tile, np.array([0, 1, 0, 1]))
+        self.assertTrue(ui.need_redraw)
+        self.assertIsNotNone(ui.window.caption)
 
 
 if __name__ == "__main__":

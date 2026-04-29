@@ -429,6 +429,115 @@ class PygletUI:
         img = img[:, span(colmask)]
         return img
 
+    def _request_exit(self):
+        self.running = False
+        self.event_loop.has_exit = True
+
+    def _toggle_fullscreen(self):
+        self.fullscreen = not self.fullscreen
+        self.need_redraw = True
+        self.was_resized = True
+        self.window.set_fullscreen(self.fullscreen)
+        self.window.set_mouse_visible(not self.fullscreen)
+
+    def _reset_view_command(self):
+        self.state.reset_view()
+        self.ev_linear = 0.0
+        self.need_redraw = True
+
+    def _toggle_linearize_current(self):
+        imgidx = self.img_per_tile[self.tileidx]
+        self.files.linearize[imgidx] = not self.files.linearize[imgidx]
+        self.need_redraw = True
+
+    def _cycle_gamma(self):
+        self.gamma = (self.gamma + 1) % 4
+        self.need_redraw = True
+
+    def _cycle_input_colorspace(self):
+        self.cs_in = (self.cs_in + 1) % 4
+        self.need_redraw = True
+
+    def _cycle_output_colorspace(self):
+        self.cs_out = (self.cs_out + 1) % 4
+        self.need_redraw = True
+
+    def _toggle_exposure_range(self):
+        self.ev_range = (self.ev_range + 6) % 12
+        self.need_redraw = True
+
+    def _cycle_normalize(self):
+        self.normalize = (self.normalize + 1) % 8
+        self.state.reset_ae()
+        self.need_redraw = True
+
+    def _toggle_texture_filter(self):
+        self.texture_filter = "LINEAR" if self.texture_filter == "NEAREST" else "NEAREST"
+        self.need_redraw = True
+
+    def _cycle_split_command(self):
+        self.state.cycle_split(self.files.numfiles)
+        self.viewports = self._retile(self.numtiles, self.winsize, self.layout)
+        self.window.set_caption(self._caption())
+        self.need_redraw = True
+
+    def _flip_pair_command(self):
+        self.state.flip_pair()
+        self.window.set_caption(self._caption())
+        self.need_redraw = True
+
+    def _rotate_current_image(self):
+        imgidx = self.img_per_tile[self.tileidx]
+        self.files.orientations[imgidx] += 90
+        self.files.orientations[imgidx] %= 360
+        self.need_redraw = True
+
+    def _reload_visible_images(self):
+        for imgidx in self.img_per_tile[:self.numtiles]:
+            self.loader.reload_image(imgidx)
+            self.files.mark_pending(imgidx)
+
+    def _toggle_debug_mode(self):
+        self.debug_mode_on = not self.debug_mode_on
+        self._vprint(f"debug rendering mode {self.debug_mode}")
+        self.need_redraw = True
+
+    def _remove_visible_images(self):
+        if self.files.mutex.locked():
+            return
+        indices = self.img_per_tile[:self.numtiles]
+        self.files.drop(indices)
+        self._finish_removal()
+
+    def _delete_current_image(self):
+        if self.files.mutex.locked() or self.numtiles != 1:
+            return
+        imgidx = self.img_per_tile[self.tileidx]
+        self.files.delete(imgidx)
+        self._finish_removal()
+
+    def _finish_removal(self):
+        if self.files.numfiles == 0:
+            self._request_exit()
+            return
+        self.state.repair_after_removal(self.files.numfiles)
+        self.window.set_caption(self._caption())
+        self.need_redraw = True
+
+    def _select_tile_command(self, tileidx: int):
+        self.state.select_tile(tileidx)
+        self.need_redraw = True
+
+    def _step_active_tile_command(self, incr: int):
+        self.state.step_active_tile(incr, self.files.numfiles)
+        self.window.set_caption(self._caption())
+        self.need_redraw = True
+
+    def _step_all_tiles_command(self, incr: int):
+        self.state.step_all_tiles(incr, self.files.numfiles)
+        self.window.set_caption(self._caption())
+        self.need_redraw = True
+
     def _setup_events(self):
         self._vprint("setting up Pyglet window event handlers...")
         self._setup_draw_event()
@@ -524,30 +633,19 @@ class PygletUI:
             self._vprint(f"on_key_press({keys.symbol_string(symbol)}, modifiers={keys.modifiers_string(modifiers)})")
             disallowed_keys = keys.MOD_CTRL | keys.MOD_ALT | keys.MOD_WINDOWS | keys.MOD_COMMAND
             if symbol == keys.C and modifiers == keys.MOD_CTRL:
-                self.running = False
-                self.event_loop.has_exit = True
+                self._request_exit()
             if (modifiers & disallowed_keys) == 0:  # ignore NumLock, ScrollLock, CapsLock, Shift
                 match symbol:
                     case keys.ESCAPE | keys.Q:  # exit
-                        self.running = False
-                        self.event_loop.has_exit = True
+                        self._request_exit()
                     case keys.F:  # fullscreen
-                        self.fullscreen = not self.fullscreen
-                        self.need_redraw = True
-                        self.was_resized = True
-                        self.window.set_fullscreen(self.fullscreen)
-                        self.window.set_mouse_visible(not self.fullscreen)
+                        self._toggle_fullscreen()
                     case keys.H:  # reset exposure + zoom & pan
-                        self.state.reset_view()
-                        self.ev_linear = 0.0
-                        self.need_redraw = True
+                        self._reset_view_command()
                     case keys.L:  # toggle linearization on/off (current image)
-                        imgidx = self.img_per_tile[self.tileidx]
-                        self.files.linearize[imgidx] = not self.files.linearize[imgidx]
-                        self.need_redraw = True
+                        self._toggle_linearize_current()
                     case keys.G:  # cycle through gamma modes (global)
-                        self.gamma = (self.gamma + 1) % 4
-                        self.need_redraw = True
+                        self._cycle_gamma()
                     case keys.A:  # toggle autoexposure on/off (current tile)
                         self.state.toggle_ae()
                         self.need_redraw = True
@@ -561,41 +659,26 @@ class PygletUI:
                         self.state.toggle_sharpen()
                         self.need_redraw = True
                     case keys.I:  # input color space (global)
-                        self.cs_in = (self.cs_in + 1) % 4
-                        self.need_redraw = True
+                        self._cycle_input_colorspace()
                     case keys.O:  # output color space (global)
-                        self.cs_out = (self.cs_out + 1) % 4
-                        self.need_redraw = True
+                        self._cycle_output_colorspace()
                     case keys.B:  # toggle narrow/wide exposure control (global)
-                        self.ev_range = (self.ev_range + 6) % 12
-                        self.need_redraw = True
+                        self._toggle_exposure_range()
                     case keys.N:  # normalize off/max/... (global)
-                        self.normalize = (self.normalize + 1) % 8
-                        self.state.reset_ae()
-                        self.need_redraw = True
+                        self._cycle_normalize()
                     case keys.T:  # texture filtering (global)
-                        self.texture_filter = "LINEAR" if self.texture_filter == "NEAREST" else "NEAREST"
-                        self.need_redraw = True
+                        self._toggle_texture_filter()
                     case keys.S:  # split
-                        self.state.cycle_split(self.files.numfiles)
-                        self.viewports = self._retile(self.numtiles, self.winsize, self.layout)
-                        self.window.set_caption(self._caption())
-                        self.need_redraw = True
+                        self._cycle_split_command()
                     case keys.P if self.numtiles == 2:  # flip image pair
-                        self.state.flip_pair()
-                        self.window.set_caption(self._caption())
-                        self.need_redraw = True
+                        self._flip_pair_command()
                     case keys.R:  # rotate (current image)
-                        imgidx = self.img_per_tile[self.tileidx]
-                        self.files.orientations[imgidx] += 90
-                        self.files.orientations[imgidx] %= 360
-                        self.need_redraw = True
+                        self._rotate_current_image()
                     case keys.M:  # mirror (current tile)
                         self.state.cycle_mirror()
                         self.need_redraw = True
                     case keys.U:  # reload currently visible images from disk
-                        for imgidx in self.img_per_tile[:self.numtiles]:
-                            self.loader.reload_image(imgidx)
+                        self._reload_visible_images()
                     case keys.X:  # EXIF info (current image)
                         imgidx = self.img_per_tile[self.tileidx]
                         filespec = self.files.filespecs[imgidx]
@@ -611,29 +694,15 @@ class PygletUI:
                         imgio.imwrite(f"screenshot{self.ss_idx:02d}.pfm", screenshot_fp32, maxval=1.0, verbose=True)
                         self.ss_idx += 1
                     case keys.SPACE:  # toggle debug mode on/off
-                        self.debug_mode_on = not self.debug_mode_on
-                        self._vprint(f"debug rendering mode {self.debug_mode}")
-                        self.need_redraw = True
+                        self._toggle_debug_mode()
                     case keys.D | keys.DELETE:
-                        if not self.files.mutex.locked():
-                            if symbol == keys.D:  # drop
-                                indices = self.img_per_tile[:self.numtiles]
-                                self.files.drop(indices)
-                            if symbol == keys.DELETE:  # delete
-                                if self.numtiles == 1:  # only in single-tile mode
-                                    imgidx = self.img_per_tile[self.tileidx]
-                                    self.files.delete(imgidx)
-                            if self.files.numfiles == 0:
-                                self.running = False
-                                self.event_loop.has_exit = True
-                            else:
-                                self.state.repair_after_removal(self.files.numfiles)
-                                self.window.set_caption(self._caption())
-                                self.need_redraw = True
+                        if symbol == keys.D:
+                            self._remove_visible_images()
+                        if symbol == keys.DELETE:
+                            self._delete_current_image()
                     case keys._1 | keys._2 | keys._3 | keys._4:
                         tileidx = symbol - keys._1
-                        self.state.select_tile(tileidx)
-                        self.need_redraw = True
+                        self._select_tile_command(tileidx)
 
         @self.window.event
         def on_text_motion(motion):
@@ -642,16 +711,12 @@ class PygletUI:
                 # PageUp / PageDown
                 self._vprint(f"on_text_motion({keys.symbol_string(motion)})")
                 incr = 1 if motion == keys.MOTION_NEXT_PAGE else -1
-                self.state.step_active_tile(incr, self.files.numfiles)
-                self.window.set_caption(self._caption())
-                self.need_redraw = True
+                self._step_active_tile_command(incr)
             if motion in [keys.MOTION_NEXT_WORD, keys.MOTION_PREVIOUS_WORD]:
                 # Ctrl + Left / Right
                 self._vprint(f"on_text_motion({keys.symbol_string(motion)})")
                 incr = 1 if motion == keys.MOTION_NEXT_WORD else -1
-                self.state.step_all_tiles(incr, self.files.numfiles)
-                self.window.set_caption(self._caption())
-                self.need_redraw = True
+                self._step_all_tiles_command(incr)
 
     def _try(self, func):
         try:
