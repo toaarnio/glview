@@ -52,6 +52,7 @@ class GLRenderer:
         self.fps = np.zeros(20)
         self.ae_gain_per_tile = np.ones(4)
         self.ae_converged = [True, True, True, True]
+        self.texture_cache = {}
 
     def init(self):
         """ Initialize an OpenGL context and attach it to an existing window. """
@@ -88,10 +89,11 @@ class GLRenderer:
             offscreen_tile.filter = self.filters["NEAREST"]
             self.fbo = self.ctx.framebuffer([offscreen_tile])
 
+        snapshot = self.files.snapshot()
+        self._prune_texture_cache(snapshot)
         for i in range(self.ui.numtiles):
-            snapshot = self.files.snapshot()
             imgidx = self.ui.img_per_tile[i]
-            texture = self.upload_texture(imgidx, piecewise=False)
+            texture = self.upload_texture(imgidx, piecewise=False, snapshot=snapshot)
             gpu_texture = texture.texture
             gpu_texture.filter = self.filters[self.ui.texture_filter]
             if not texture.mipmaps_done:
@@ -208,9 +210,9 @@ class GLRenderer:
         Must be called before the window closes to avoid errors from the GC
         trying to call glDeleteBuffers after the context is gone.
         """
-        for tex in (self.files.textures or []):
-            if tex is not None:
-                tex.release()
+        for tex in self.texture_cache.values():
+            tex.release()
+        self.texture_cache.clear()
         for obj in [self.vao_post, self.vao, self.vbo, self.postprocess, self.prog, self.fbo]:
             if obj is not None:
                 obj.release()
@@ -241,18 +243,20 @@ class GLRenderer:
         self._vprint(f"Taking a screenshot took {elapsed:.1f} ms")
         return screenshot
 
-    def upload_texture(self, idx: int, piecewise: bool) -> texture.Texture:
+    def upload_texture(self, idx: int, piecewise: bool, snapshot=None) -> texture.Texture:
         """
         Upload the image at the given index to GPU memory, either all at once
         or piecewise, to avoid freezing the user interface. Create a new texture
         object on the GPU if necessary, otherwise use an existing one.
         """
-        tex = self.files.textures[idx]  # None | Texture
+        snapshot = snapshot or self.files.snapshot()
+        slot_id = snapshot.image_slots[idx].slot_id
+        tex = self.texture_cache.get(slot_id)
         img, token = self.loader.get_image_record(idx)  # <ndarray> | PENDING | RELEASED | ...
         if not tex:
             img = img if isinstance(img, np.ndarray) else None
             tex = texture.Texture(self.ctx, img, idx, self.verbose)
-            self.files.textures[idx] = tex
+            self.texture_cache[slot_id] = tex
         elif isinstance(img, np.ndarray):
             tex.reuse(img)
         if isinstance(img, np.ndarray):
@@ -260,6 +264,17 @@ class GLRenderer:
             self.loader.release_image(idx, token=token)
         tex.upload(piecewise)
         return tex
+
+    def get_cached_texture(self, slot_id: int):
+        """Return the cached texture for the given slot id, if any."""
+        return self.texture_cache.get(slot_id)
+
+    def _prune_texture_cache(self, snapshot):
+        """Release textures whose slot ids are no longer present in the catalog."""
+        active_slot_ids = {slot.slot_id for slot in snapshot.image_slots}
+        stale_slot_ids = [slot_id for slot_id in self.texture_cache if slot_id not in active_slot_ids]
+        for slot_id in stale_slot_ids:
+            self.texture_cache.pop(slot_id).release()
 
     def _sharpen(self, magnification: float) -> np.ndarray:
         """

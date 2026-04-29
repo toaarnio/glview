@@ -49,7 +49,6 @@ class FileListSnapshot:
     orientations: tuple
     linearize: tuple
     image_slots: tuple
-    textures: tuple
     metadata: tuple
     is_url: tuple
 
@@ -71,7 +70,6 @@ class FileList:
         self.image_slots = [self._new_slot() for _ in range(self.numfiles)]
         self.loaded_images = [None] * self.numfiles
         self.images = [None] * self.numfiles  # payloads already consumed by the UI/render thread
-        self.textures = [None] * self.numfiles     # None | <Texture>
         self.metadata = [None] * self.numfiles
         self.is_url = [None] * self.numfiles
         self._update()
@@ -131,7 +129,6 @@ class FileList:
                 orientations=tuple(self.orientations),
                 linearize=tuple(self.linearize),
                 image_slots=tuple(self.image_slots),
-                textures=tuple(self.textures),
                 metadata=tuple(self.metadata),
                 is_url=tuple(self.is_url),
             )
@@ -140,13 +137,11 @@ class FileList:
         """ Drop the given images from this FileList, do not delete the files. """
         with self.mutex:
             try:
-                self.release_textures(indices)
                 self.filespecs = self._drop(self.filespecs, indices)
                 self.orientations = self._drop(self.orientations, indices)
                 self.linearize = self._drop(self.linearize, indices)
                 self.image_slots = self._drop(self.image_slots, indices)
                 self.loaded_images = self._drop(self.loaded_images, indices)
-                self.textures = self._drop(self.textures, indices)
                 self.metadata = self._drop(self.metadata, indices)
                 self.images = self._drop(self.images, indices)
                 self._update()
@@ -158,14 +153,12 @@ class FileList:
         """ Remove the given image from this FileList and delete the file from disk. """
         with self.mutex:
             try:
-                self.release_textures([idx])
                 filespec = self.filespecs[idx]
                 self.filespecs = self._drop(self.filespecs, [idx])
                 self.orientations = self._drop(self.orientations, [idx])
                 self.linearize = self._drop(self.linearize, [idx])
                 self.image_slots = self._drop(self.image_slots, [idx])
                 self.loaded_images = self._drop(self.loaded_images, [idx])
-                self.textures = self._drop(self.textures, [idx])
                 self.metadata = self._drop(self.metadata, [idx])
                 self.images = self._drop(self.images, [idx])
                 self._update()
@@ -173,12 +166,6 @@ class FileList:
                 print(f"[{threading.current_thread().name}] Deleted {filespec}")
             except IndexError:
                 pass
-
-    def release_textures(self, indices):
-        for idx in indices:
-            texture = self.textures[idx]
-            if texture is not None:
-                texture.release()
 
     def _drop(self, arr, indices):
         arr = np.asarray(arr, dtype=object)

@@ -21,10 +21,14 @@ class _FakeRenderer:
         self.upload_results = upload_results or {}
         self.upload_calls = []
         self.loader = loader
+        self.cached_textures = {}
 
     def upload_texture(self, imgidx, piecewise):
         self.upload_calls.append((imgidx, piecewise))
         return self.upload_results[imgidx]
+
+    def get_cached_texture(self, slot_id):
+        return self.cached_textures.get(slot_id)
 
 
 class _FakeLoader:
@@ -85,12 +89,12 @@ class PygletUISmokeTests(unittest.TestCase):
         ui.files.mark_released(0)
         ui.files.mark_loaded(1, np.zeros((1, 1, 3), dtype=np.uint8))
         ui.files.mark_loaded(2, np.zeros((1, 1, 3), dtype=np.uint8))
-        ui.files.textures = [None, None, None]
         ui.renderer = _FakeRenderer(
             upload_results={
                 1: _FakeUploadedTexture(done=True),
                 2: _FakeUploadedTexture(done=False),
-            }
+            },
+            loader=ui.loader,
         )
 
         ui._upload_textures()
@@ -102,7 +106,7 @@ class PygletUISmokeTests(unittest.TestCase):
         ui = self._ui(["a.png"])
         ui.need_redraw = False
         ui.files.mark_loaded(0, np.zeros((1, 1, 3), dtype=np.uint8))
-        ui.renderer = _FakeRenderer(upload_results={0: _FakeUploadedTexture(done=True)})
+        ui.renderer = _FakeRenderer(upload_results={0: _FakeUploadedTexture(done=True)}, loader=ui.loader)
 
         ui._upload_textures()
 
@@ -113,7 +117,18 @@ class PygletUISmokeTests(unittest.TestCase):
         ui = self._ui(["a.png"])
         ui.need_redraw = True
         ui.files.mark_loaded(0, np.zeros((1, 1, 3), dtype=np.uint8))
-        ui.renderer = _FakeRenderer(upload_results={0: _FakeUploadedTexture(done=True)})
+        ui.renderer = _FakeRenderer(upload_results={0: _FakeUploadedTexture(done=True)}, loader=ui.loader)
+
+        ui._upload_textures()
+
+        self.assertEqual(ui.renderer.upload_calls, [])
+
+    def test_upload_textures_skips_when_cached_texture_is_already_done(self):
+        ui = self._ui(["a.png"])
+        ui.need_redraw = False
+        ui.files.mark_loaded(0, np.zeros((1, 1, 3), dtype=np.uint8))
+        slot_id = ui.files.image_slot_id(0)
+        ui.renderer.cached_textures[slot_id] = _FakeUploadedTexture(done=True)
 
         ui._upload_textures()
 

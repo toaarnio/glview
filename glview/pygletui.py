@@ -196,7 +196,8 @@ class PygletUI:
             for imgidx in indices:
                 status = snapshot.image_slots[imgidx].status
                 if status not in [ImageStatus.PENDING, ImageStatus.INVALID]:
-                    texture = snapshot.textures[imgidx]
+                    slot_id = snapshot.image_slots[imgidx].slot_id
+                    texture = self.renderer.get_cached_texture(slot_id)
                     if texture is None or not texture.done:
                         texture = self.renderer.upload_texture(imgidx, piecewise=True)
                         self.need_redraw = texture.done
