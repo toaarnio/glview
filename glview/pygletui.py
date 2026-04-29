@@ -40,8 +40,6 @@ class PygletUI:
         self.window = None
         self.key_state = None
         self.winsize = None
-        self.scale = np.ones(4)  # per-tile scale
-        self.mousepos = np.zeros((4, 2))  # per-tile (x, y); clipped to [0, 1]
         self.mouse_speed = 2.0
         self.mouse_canvas_width = 1000
         self.keyboard_pan_speed = 100
@@ -95,6 +93,22 @@ class PygletUI:
     @img_per_tile.setter
     def img_per_tile(self, value):
         self.state.img_per_tile = np.asarray(value, dtype=int)
+
+    @property
+    def scale(self):
+        return self.state.scale
+
+    @scale.setter
+    def scale(self, value):
+        self.state.scale = np.asarray(value, dtype=float)
+
+    @property
+    def mousepos(self):
+        return self.state.mousepos
+
+    @mousepos.setter
+    def mousepos(self, value):
+        self.state.mousepos = np.asarray(value, dtype=float)
 
     @property
     def ae_per_tile(self):
@@ -373,17 +387,17 @@ class PygletUI:
             self.key_state[keys.UP] = False
             self.key_state[keys.DOWN] = False
         if not ctrl_down and not win_down:
-            prev_scale = self.scale.copy()
-            self.scale *= 1.0 + 0.1 * self.key_state[keys.PLUS]  # zoom in
-            self.scale /= 1.0 + 0.1 * self.key_state[keys.MINUS]  # zoom out
             dx = self.key_state[keys.LEFT] - self.key_state[keys.RIGHT]
             dy = self.key_state[keys.DOWN] - self.key_state[keys.UP]
-            dxdy = np.tile((dx, dy), (4, 1))
-            dxdy = dxdy * self.keyboard_pan_speed
-            dxdy = dxdy / self.scale[:, np.newaxis]
-            dxdy = dxdy / self.mouse_canvas_width
-            self.mousepos = np.clip(self.mousepos + dxdy, -1.0, 1.0)
-            if np.any(dxdy != 0.0) or np.any(self.scale != prev_scale):
+            changed = self.state.keyboard_pan_zoom(
+                key_zoom_in=self.key_state[keys.PLUS],
+                key_zoom_out=self.key_state[keys.MINUS],
+                dx=dx,
+                dy=dy,
+                pan_speed=self.keyboard_pan_speed,
+                canvas_width=self.mouse_canvas_width,
+            )
+            if changed:
                 self.need_redraw = True
 
     def _triangle_wave(self, x, amplitude):
@@ -471,22 +485,20 @@ class PygletUI:
             if buttons & pyglet.window.mouse.LEFT:
                 keys = pyglet.window.key
                 shift_down = modifiers & keys.MOD_SHIFT
-                tidx = self.tileidx if shift_down else np.s_[:]
-                dxdy = np.tile((dx, dy), (4, 1))
-                dxdy = dxdy * self.mouse_speed
-                dxdy = dxdy / self.scale[tidx, np.newaxis]
-                dxdy = dxdy / self.mouse_canvas_width
-                mousepos = np.clip(self.mousepos[tidx] + dxdy[tidx], -1.0, 1.0)
-                self.mousepos[tidx] = mousepos
+                self.state.drag_mouse(
+                    dx=dx,
+                    dy=dy,
+                    pan_speed=self.mouse_speed,
+                    canvas_width=self.mouse_canvas_width,
+                    active_only=bool(shift_down),
+                )
                 self.need_redraw = True
 
         @self.window.event
         def on_mouse_scroll(_x, _y, _scroll_x, scroll_y):
             keys = pyglet.window.key
             shift_down = self.key_state[keys.LSHIFT] or self.key_state[keys.RSHIFT]
-            tidx = self.tileidx if shift_down else np.s_[:]
-            scale_factor = 1.0 + 0.1 * scroll_y
-            self.scale[tidx] *= scale_factor
+            self.state.scroll_zoom(scroll_y=scroll_y, active_only=shift_down)
             self.need_redraw = True
 
     def _setup_keyboard_events(self):  # noqa: PLR0915, C901
@@ -526,10 +538,8 @@ class PygletUI:
                         self.window.set_fullscreen(self.fullscreen)
                         self.window.set_mouse_visible(not self.fullscreen)
                     case keys.H:  # reset exposure + zoom & pan
-                        self.scale = np.ones(4)
-                        self.mousepos = np.zeros((4, 2))
+                        self.state.reset_view()
                         self.ev_linear = 0.0
-                        self.state.reset_ae()
                         self.need_redraw = True
                     case keys.L:  # toggle linearization on/off (current image)
                         imgidx = self.img_per_tile[self.tileidx]

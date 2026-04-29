@@ -15,6 +15,8 @@ class ViewerState:
     numtiles: int = 1
     layout: str = "N x 1"
     tileidx: int = 0
+    scale: np.ndarray = field(default_factory=lambda: np.ones(4))
+    mousepos: np.ndarray = field(default_factory=lambda: np.zeros((4, 2)))
     img_per_tile: np.ndarray = field(default_factory=lambda: np.array([0, 1, 2, 3], dtype=int))
     ae_per_tile: list[bool] = field(default_factory=lambda: [False, False, False, False])
     ae_reset_per_tile: list[bool] = field(default_factory=lambda: [False, False, False, False])
@@ -25,6 +27,11 @@ class ViewerState:
 
     def visible_indices(self):
         return self.img_per_tile[:self.numtiles]
+
+    def reset_view(self):
+        self.scale = np.ones(4)
+        self.mousepos = np.zeros((4, 2))
+        self.reset_ae()
 
     def split_state(self) -> uistate.SplitState:
         return uistate.SplitState(
@@ -82,3 +89,28 @@ class ViewerState:
     def step_all_tiles(self, incr: int, numfiles: int):
         self.img_per_tile = uistate.step_all_tiles(self.img_per_tile, self.numtiles, incr, numfiles)
         self.reset_ae()
+
+    def keyboard_pan_zoom(self, key_zoom_in: int, key_zoom_out: int, dx: int, dy: int, pan_speed: float, canvas_width: float):
+        prev_scale = self.scale.copy()
+        self.scale *= 1.0 + 0.1 * key_zoom_in
+        self.scale /= 1.0 + 0.1 * key_zoom_out
+        dxdy = np.tile((dx, dy), (4, 1))
+        dxdy = dxdy * pan_speed
+        dxdy = dxdy / self.scale[:, np.newaxis]
+        dxdy = dxdy / canvas_width
+        self.mousepos = np.clip(self.mousepos + dxdy, -1.0, 1.0)
+        return np.any(dxdy != 0.0) or np.any(self.scale != prev_scale)
+
+    def drag_mouse(self, dx: float, dy: float, pan_speed: float, canvas_width: float, active_only: bool):
+        tidx = self.tileidx if active_only else np.s_[:]
+        dxdy = np.tile((dx, dy), (4, 1))
+        dxdy = dxdy * pan_speed
+        dxdy = dxdy / self.scale[tidx, np.newaxis]
+        dxdy = dxdy / canvas_width
+        mousepos = np.clip(self.mousepos[tidx] + dxdy[tidx], -1.0, 1.0)
+        self.mousepos[tidx] = mousepos
+
+    def scroll_zoom(self, scroll_y: float, active_only: bool):
+        tidx = self.tileidx if active_only else np.s_[:]
+        scale_factor = 1.0 + 0.1 * scroll_y
+        self.scale[tidx] *= scale_factor
