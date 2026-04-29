@@ -1,22 +1,20 @@
 """ A graphical user interface for glview, based on Pyglet and ModernGL. """
 
 import threading               # built-in library
-import pprint                  # built-in library
 import traceback               # built-in library
 from pathlib import Path       # built-in library
 
 import pyglet                  # pip install pyglet
-import piexif                  # pip install piexif
 import numpy as np             # pip install numpy
-import imsize                  # pip install imsize
-import imgio                   # pip install imgio
 
 try:
     from glview import uistate
+    from glview import uiops
     from glview.imagestate import ImageStatus
     from glview.viewerstate import ViewerState
 except ImportError:
     import uistate
+    import uiops
     from imagestate import ImageStatus
     from viewerstate import ViewerState
 
@@ -38,6 +36,7 @@ class PygletUI:
         self.need_redraw = True
         self.was_resized = True
         self.window = None
+        self.ops = uiops.UIOperations(self)
         self.key_state = None
         self.winsize = None
         self.mouse_speed = 2.0
@@ -359,19 +358,6 @@ class PygletUI:
                 viewports[3] = (3 * vpw, 0, vpw, vph)
         return viewports
 
-    def _print_exif(self, filespec):
-        try:
-            exif_all = piexif.load(filespec)
-            exif_tags = {tag: name for name, tag in piexif.ExifIFD.__dict__.items() if isinstance(tag, int)}
-            image_tags = {tag: name for name, tag in piexif.ImageIFD.__dict__.items() if isinstance(tag, int)}
-            exif_dict = {exif_tags[name]: val for name, val in exif_all.pop("Exif").items()}
-            image_dict = {image_tags[name]: val for name, val in exif_all.pop("0th").items()}
-            merged_dict = {**exif_dict, **image_dict}
-            print(f"EXIF data for {filespec}:")
-            pprint.pprint(merged_dict)
-        except piexif.InvalidImageDataError as e:
-            print(f"Failed to extract EXIF metadata from {filespec}: {e}")
-
     def _keyboard_zoom_pan(self):
         # this is invoked 50 times per second, so zooming/panning is pretty fast
         keys = pyglet.window.key
@@ -421,24 +407,13 @@ class PygletUI:
         self.ev = self._triangle_wave(self.ev_linear, self.ev_range)
 
     def _crop_borders(self, img):
-        span = lambda a: slice(a.argmax(), a.size - a[::-1].argmax())
-        nonzero = np.any(img != 0.0, axis=2)
-        rowmask = np.any(nonzero, axis=1)
-        colmask = np.any(nonzero, axis=0)
-        img = img[span(rowmask), :]
-        img = img[:, span(colmask)]
-        return img
+        return self.ops.crop_borders(img)
 
     def _request_exit(self):
-        self.running = False
-        self.event_loop.has_exit = True
+        self.ops.request_exit()
 
     def _toggle_fullscreen(self):
-        self.fullscreen = not self.fullscreen
-        self.need_redraw = True
-        self.was_resized = True
-        self.window.set_fullscreen(self.fullscreen)
-        self.window.set_mouse_visible(not self.fullscreen)
+        self.ops.toggle_fullscreen()
 
     def _reset_view_command(self):
         self.state.reset_view()
@@ -513,50 +488,28 @@ class PygletUI:
         self.need_redraw = True
 
     def _reload_visible_images(self):
-        for imgidx in self.img_per_tile[:self.numtiles]:
-            self.loader.reload_image(imgidx)
-            self.files.mark_pending(imgidx)
+        self.ops.reload_visible_images()
 
     def _toggle_debug_mode(self):
-        self.debug_mode_on = not self.debug_mode_on
-        self._vprint(f"debug rendering mode {self.debug_mode}")
-        self.need_redraw = True
+        self.ops.toggle_debug_mode()
 
     def _remove_visible_images(self):
-        if self.files.mutex.locked():
-            return
-        indices = self.img_per_tile[:self.numtiles]
-        self.files.drop(indices)
-        self._finish_removal()
+        self.ops.remove_visible_images()
 
     def _delete_current_image(self):
-        if self.files.mutex.locked() or self.numtiles != 1:
-            return
-        imgidx = self.img_per_tile[self.tileidx]
-        self.files.delete(imgidx)
-        self._finish_removal()
+        self.ops.delete_current_image()
 
     def _finish_removal(self):
-        if self.files.numfiles == 0:
-            self._request_exit()
-            return
-        self.state.repair_after_removal(self.files.numfiles)
-        self.window.set_caption(self._caption())
-        self.need_redraw = True
+        self.ops.finish_removal()
 
     def _select_tile_command(self, tileidx: int):
-        self.state.select_tile(tileidx)
-        self.need_redraw = True
+        self.ops.select_tile(tileidx)
 
     def _step_active_tile_command(self, incr: int):
-        self.state.step_active_tile(incr, self.files.numfiles)
-        self.window.set_caption(self._caption())
-        self.need_redraw = True
+        self.ops.step_active_tile(incr)
 
     def _step_all_tiles_command(self, incr: int):
-        self.state.step_all_tiles(incr, self.files.numfiles)
-        self.window.set_caption(self._caption())
-        self.need_redraw = True
+        self.ops.step_all_tiles(incr)
 
     def _simple_key_actions(self, keys):
         return {
@@ -685,19 +638,9 @@ class PygletUI:
                 elif symbol == keys.P and self.numtiles == 2:
                         self._flip_pair_command()
                 elif symbol == keys.X:
-                    imgidx = self.img_per_tile[self.tileidx]
-                    filespec = self.files.filespecs[imgidx]
-                    fileinfo = imsize.read(filespec)
-                    print(fileinfo)
-                    self._print_exif(filespec)
+                    self.ops.show_exif_for_current()
                 elif symbol == keys.W:
-                    screenshot_uint8 = self.renderer.screenshot(np.uint8)
-                    screenshot_fp32 = self.renderer.screenshot(np.float32)
-                    screenshot_uint8 = self._crop_borders(screenshot_uint8)
-                    screenshot_fp32 = self._crop_borders(screenshot_fp32)
-                    imgio.imwrite(f"screenshot{self.ss_idx:02d}.jpg", screenshot_uint8, maxval=255, verbose=True)
-                    imgio.imwrite(f"screenshot{self.ss_idx:02d}.pfm", screenshot_fp32, maxval=1.0, verbose=True)
-                    self.ss_idx += 1
+                    self.ops.take_screenshot()
                 elif symbol == keys.D:
                     self._remove_visible_images()
                 elif symbol == keys.DELETE:
