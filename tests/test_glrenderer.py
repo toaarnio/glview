@@ -5,6 +5,7 @@ from unittest import mock
 import numpy as np
 
 from glview.glrenderer import GLRenderer
+from glview.rendertextures import RenderTextureManager
 from glview.glview import FileList
 
 
@@ -48,11 +49,48 @@ class _FakeTextureObject:
         self.release_count += 1
 
 
+class RenderTextureManagerTests(unittest.TestCase):
+
+    def test_upload_caches_by_slot_id_and_releases_with_token(self):
+        files = FileList(["a.png"])
+        img = np.ones((2, 3, 3), dtype=np.uint8)
+        token = files.image_token(0)
+        loader = _FakeLoader(img, token)
+        manager = RenderTextureManager(ctx=object(), files=files, loader=loader, verbose=False)
+
+        with mock.patch("glview.rendertextures.texture.Texture", _FakeTextureObject):
+            tex = manager.upload(0, piecewise=False)
+
+        slot_id = files.image_slot_id(0)
+        self.assertIs(manager.get_cached(slot_id), tex)
+        self.assertEqual(loader.release_calls, [(0, token)])
+        self.assertEqual(tex.upload_calls, [False])
+
+    def test_prune_releases_removed_slot_ids(self):
+        files = FileList(["a.png", "b.png"])
+        manager = RenderTextureManager(ctx=None, files=files, loader=SimpleNamespace(), verbose=False)
+        tex0 = _FakeTextureObject(None, np.zeros((1, 1, 3), dtype=np.uint8), 0, False)
+        tex1 = _FakeTextureObject(None, np.zeros((1, 1, 3), dtype=np.uint8), 1, False)
+        slot0 = files.image_slot_id(0)
+        slot1 = files.image_slot_id(1)
+        manager.cache.store(slot0, tex0)
+        manager.cache.store(slot1, tex1)
+
+        files.drop([0])
+        manager.prune(files.snapshot())
+
+        self.assertEqual(tex0.release_count, 1)
+        self.assertEqual(tex1.release_count, 0)
+        self.assertEqual(set(manager.cache.keys()), {slot1})
+
+
 class GLRendererTextureCacheTests(unittest.TestCase):
 
     def _renderer(self, files, loader):
         ui = SimpleNamespace()
-        return GLRenderer(ui, files, loader, verbose=False)
+        renderer = GLRenderer(ui, files, loader, verbose=False)
+        renderer.textures = RenderTextureManager(ctx=object(), files=files, loader=loader, verbose=False)
+        return renderer
 
     def test_upload_texture_caches_by_slot_id_and_releases_with_token(self):
         files = FileList(["a.png"])
@@ -60,13 +98,12 @@ class GLRendererTextureCacheTests(unittest.TestCase):
         token = files.image_token(0)
         loader = _FakeLoader(img, token)
         renderer = self._renderer(files, loader)
-        renderer.ctx = object()
 
-        with mock.patch("glview.glrenderer.texture.Texture", _FakeTextureObject):
+        with mock.patch("glview.rendertextures.texture.Texture", _FakeTextureObject):
             tex = renderer.upload_texture(0, piecewise=False)
 
         slot_id = files.image_slot_id(0)
-        self.assertIs(renderer.texture_cache.get(slot_id), tex)
+        self.assertIs(renderer.textures.get_cached(slot_id), tex)
         self.assertEqual(loader.release_calls, [(0, token)])
         self.assertEqual(tex.upload_calls, [False])
 
@@ -77,15 +114,15 @@ class GLRendererTextureCacheTests(unittest.TestCase):
         tex1 = _FakeTextureObject(None, np.zeros((1, 1, 3), dtype=np.uint8), 1, False)
         slot0 = files.image_slot_id(0)
         slot1 = files.image_slot_id(1)
-        renderer.texture_cache.store(slot0, tex0)
-        renderer.texture_cache.store(slot1, tex1)
+        renderer.textures.cache.store(slot0, tex0)
+        renderer.textures.cache.store(slot1, tex1)
 
         files.drop([0])
-        renderer._prune_texture_cache(files.snapshot())
+        renderer.textures.prune(files.snapshot())
 
         self.assertEqual(tex0.release_count, 1)
         self.assertEqual(tex1.release_count, 0)
-        self.assertEqual(set(renderer.texture_cache.keys()), {slot1})
+        self.assertEqual(set(renderer.textures.cache.keys()), {slot1})
 
 
 class GLRendererParameterTests(unittest.TestCase):

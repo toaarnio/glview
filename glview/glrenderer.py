@@ -11,13 +11,11 @@ import moderngl                # pip install moderngl
 try:
     # package mode
     from glview import ae
-    from glview import texture
-    from glview import texturecache
+    from glview import rendertextures
 except ImportError:
     # stand-alone mode
     import ae
-    import texture
-    import texturecache
+    import rendertextures
 
 
 class GLRenderer:
@@ -54,7 +52,7 @@ class GLRenderer:
         self.fps = np.zeros(20)
         self.ae_gain_per_tile = np.ones(4)
         self.ae_converged = [True, True, True, True]
-        self.texture_cache = texturecache.TextureCache()
+        self.textures = None
 
     def init(self):
         """ Initialize an OpenGL context and attach it to an existing window. """
@@ -74,6 +72,7 @@ class GLRenderer:
         fshader = open(os.path.join(shader_path, "postprocess.fs"), encoding="utf-8").read()
         self.postprocess = self.ctx.program(vertex_shader=vshader, fragment_shader=fshader)
         self.vao_post = self.ctx.vertex_array(self.postprocess, [(self.vbo, "2f", "vert")])
+        self.textures = rendertextures.RenderTextureManager(self.ctx, self.files, self.loader, self.verbose)
         self.tprev = time.time()
         _ = self.ctx.error  # clear the GL error flag (workaround for a bug that prevents interoperability with Pyglet)
 
@@ -92,10 +91,10 @@ class GLRenderer:
             self.fbo = self.ctx.framebuffer([offscreen_tile])
 
         snapshot = self.files.snapshot()
-        self._prune_texture_cache(snapshot)
+        self.textures.prune(snapshot)
         for i in range(self.ui.numtiles):
             imgidx = self.ui.img_per_tile[i]
-            texture = self.upload_texture(imgidx, piecewise=False, snapshot=snapshot)
+            texture = self.textures.upload(imgidx, piecewise=False, snapshot=snapshot)
             gpu_texture = texture.texture
             gpu_texture.filter = self.filters[self.ui.texture_filter]
             if not texture.mipmaps_done:
@@ -184,7 +183,8 @@ class GLRenderer:
         Must be called before the window closes to avoid errors from the GC
         trying to call glDeleteBuffers after the context is gone.
         """
-        self.texture_cache.release_all()
+        if self.textures is not None:
+            self.textures.release_all()
         for obj in [self.vao_post, self.vao, self.vbo, self.postprocess, self.prog, self.fbo]:
             if obj is not None:
                 obj.release()
@@ -215,31 +215,13 @@ class GLRenderer:
         self._vprint(f"Taking a screenshot took {elapsed:.1f} ms")
         return screenshot
 
-    def upload_texture(self, idx: int, piecewise: bool, snapshot=None) -> texture.Texture:
-        """
-        Upload the image at the given index to GPU memory, either all at once
-        or piecewise, to avoid freezing the user interface. Create a new texture
-        object on the GPU if necessary, otherwise use an existing one.
-        """
-        snapshot = snapshot or self.files.snapshot()
-        slot_id = snapshot.image_slots[idx].slot_id
-        tex = self.texture_cache.get(slot_id)
-        img, token = self.loader.get_image_record(idx)  # <ndarray> | PENDING | RELEASED | ...
-        if not tex:
-            img = img if isinstance(img, np.ndarray) else None
-            tex = texture.Texture(self.ctx, img, idx, self.verbose)
-            self.texture_cache.store(slot_id, tex)
-        elif isinstance(img, np.ndarray):
-            tex.reuse(img)
-        if isinstance(img, np.ndarray):
-            self.files.consume_image(idx, img)
-            self.loader.release_image(idx, token=token)
-        tex.upload(piecewise)
-        return tex
+    def upload_texture(self, idx: int, piecewise: bool, snapshot=None):
+        """Backward-compatible wrapper around renderer-owned texture management."""
+        return self.textures.upload(idx, piecewise=piecewise, snapshot=snapshot)
 
     def get_cached_texture(self, slot_id: int):
         """Return the cached texture for the given slot id, if any."""
-        return self.texture_cache.get(slot_id)
+        return self.textures.get_cached(slot_id)
 
     def _normalization_levels(self, texture_obj):
         norm_maxvals = np.r_[1, texture_obj.maxval, texture_obj.maxval, texture_obj.percentiles, texture_obj.diffuse_white]
@@ -308,11 +290,6 @@ class GLRenderer:
             'gamma': self.ui.gamma,
             'debug': self.ui.debug_mode * int(self.ui.debug_mode_on),
         }
-
-    def _prune_texture_cache(self, snapshot):
-        """Release textures whose slot ids are no longer present in the catalog."""
-        active_slot_ids = {slot.slot_id for slot in snapshot.image_slots}
-        self.texture_cache.prune(active_slot_ids)
 
     def _sharpen(self, magnification: float) -> np.ndarray:
         """
