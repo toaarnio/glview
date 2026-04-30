@@ -275,11 +275,6 @@ class PygletUI:
         y = 4 * amplitude * np.abs((x - 0.25) % 1 - 0.5) - amplitude
         return y
 
-    def _sine_wave(self, x, amplitude):
-        # [0, 1] => [-amplitude, +amplitude]
-        y = np.sin(x * 2 * np.pi) * amplitude
-        return y
-
     def _smooth_exposure(self):
         # this is typically invoked 60 times per second,
         # so exposure control is pretty fast

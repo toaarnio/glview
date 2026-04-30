@@ -315,12 +315,5 @@ def enforce(expression, message_if_false):
         sys.exit(-1)
 
 
-def warn(expression, message_if_true):
-    """ Display the given warning message if 'expression' is True. """
-    if expression:
-        print(message_if_true)
-    return expression
-
-
 if __name__ == "__main__":
     main()

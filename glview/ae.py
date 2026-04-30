@@ -1,6 +1,8 @@
 import numpy as np    # pip install numpy
 import moderngl       # pip install moderngl
 
+from glview.imageutils import crop_borders
+
 
 def autoexposure(texture: moderngl.Texture, whitelevel: float, clip_pct: float) -> float:
     """
@@ -102,18 +104,6 @@ def estimate_diffuse_white(img: np.ndarray) -> float:
     mean_level = np.exp(np.mean(np.log(img + 1e-6)))
     diffuse_white = 2.5 * mean_level
     return diffuse_white
-
-
-def crop_borders(img):
-    span = lambda a: slice(a.argmax(), a.size - a[::-1].argmax())
-    nonzero = np.any(img != 0.0, axis=2)
-    rowmask = np.any(nonzero, axis=1)
-    colmask = np.any(nonzero, axis=0)
-    img = img[span(rowmask), :]
-    img = img[:, span(colmask)]
-    return img
-
-
 def sdiv(nominator, denominator):
     nominator, denominator = np.broadcast_arrays(nominator, denominator)
     nonzero = np.abs(denominator) > 0.0

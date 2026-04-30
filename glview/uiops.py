@@ -7,6 +7,8 @@ import imsize
 import numpy as np
 import piexif
 
+from glview.imageutils import crop_borders
+
 
 class UIOperations:
     """Imperative UI commands that coordinate window, files, and renderer state."""
@@ -26,15 +28,6 @@ class UIOperations:
             pprint.pprint(merged_dict)
         except piexif.InvalidImageDataError as exc:
             print(f"Failed to extract EXIF metadata from {filespec}: {exc}")
-
-    def crop_borders(self, img):
-        span = lambda a: slice(a.argmax(), a.size - a[::-1].argmax())
-        nonzero = np.any(img != 0.0, axis=2)
-        rowmask = np.any(nonzero, axis=1)
-        colmask = np.any(nonzero, axis=0)
-        img = img[span(rowmask), :]
-        img = img[:, span(colmask)]
-        return img
 
     def request_exit(self):
         self.ui.running = False
@@ -103,8 +96,8 @@ class UIOperations:
     def take_screenshot(self):
         screenshot_uint8 = self.ui.renderer.screenshot(np.uint8)
         screenshot_fp32 = self.ui.renderer.screenshot(np.float32)
-        screenshot_uint8 = self.crop_borders(screenshot_uint8)
-        screenshot_fp32 = self.crop_borders(screenshot_fp32)
+        screenshot_uint8 = crop_borders(screenshot_uint8)
+        screenshot_fp32 = crop_borders(screenshot_fp32)
         imgio.imwrite(f"screenshot{self.ui.ss_idx:02d}.jpg", screenshot_uint8, maxval=255, verbose=True)
         imgio.imwrite(f"screenshot{self.ui.ss_idx:02d}.pfm", screenshot_fp32, maxval=1.0, verbose=True)
         self.ui.ss_idx += 1
