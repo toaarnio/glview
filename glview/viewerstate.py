@@ -25,9 +25,6 @@ class ViewerState:
     sharpen_per_tile: list[bool] = field(default_factory=lambda: [False, False, False, False])
     mirror_per_tile: list[int] = field(default_factory=lambda: [0, 0, 0, 0])
 
-    def visible_indices(self):
-        return self.img_per_tile[:self.numtiles]
-
     def reset_view(self):
         self.scale = np.ones(4)
         self.mousepos = np.zeros((4, 2))

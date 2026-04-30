@@ -18,16 +18,22 @@ class _FakeRenderer:
 
     def __init__(self, upload_results=None, loader=None):
         self.fps = np.array([58.0, 60.0, 62.0])
-        self.upload_results = upload_results or {}
-        self.upload_calls = []
         self.loader = loader
+        self.textures = _FakeTextureManager(upload_results or {})
+
+
+class _FakeTextureManager:
+
+    def __init__(self, upload_results):
+        self.upload_results = upload_results
+        self.upload_calls = []
         self.cached_textures = {}
 
-    def upload_texture(self, imgidx, piecewise):
+    def upload(self, imgidx, piecewise, snapshot=None):
         self.upload_calls.append((imgidx, piecewise))
         return self.upload_results[imgidx]
 
-    def get_cached_texture(self, slot_id):
+    def get_cached(self, slot_id):
         return self.cached_textures.get(slot_id)
 
 
@@ -120,7 +126,7 @@ class PygletUISmokeTests(unittest.TestCase):
 
         ui._upload_textures()
 
-        self.assertEqual(ui.renderer.upload_calls, [(2, True)])
+        self.assertEqual(ui.renderer.textures.upload_calls, [(2, True)])
         self.assertFalse(ui.need_redraw)
 
     def test_upload_textures_sets_redraw_when_uploaded_texture_completes(self):
@@ -131,7 +137,7 @@ class PygletUISmokeTests(unittest.TestCase):
 
         ui._upload_textures()
 
-        self.assertEqual(ui.renderer.upload_calls, [(0, True)])
+        self.assertEqual(ui.renderer.textures.upload_calls, [(0, True)])
         self.assertTrue(ui.need_redraw)
 
     def test_upload_textures_is_skipped_while_redraw_is_pending(self):
@@ -142,18 +148,18 @@ class PygletUISmokeTests(unittest.TestCase):
 
         ui._upload_textures()
 
-        self.assertEqual(ui.renderer.upload_calls, [])
+        self.assertEqual(ui.renderer.textures.upload_calls, [])
 
     def test_upload_textures_skips_when_cached_texture_is_already_done(self):
         ui = self._ui(["a.png"])
         ui.need_redraw = False
         ui.files.mark_loaded(0, np.zeros((1, 1, 3), dtype=np.uint8))
         slot_id = ui.files.image_slot_id(0)
-        ui.renderer.cached_textures[slot_id] = _FakeUploadedTexture(done=True)
+        ui.renderer.textures.cached_textures[slot_id] = _FakeUploadedTexture(done=True)
 
         ui._upload_textures()
 
-        self.assertEqual(ui.renderer.upload_calls, [])
+        self.assertEqual(ui.renderer.textures.upload_calls, [])
 
     def test_caption_uses_filenames_when_all_files_share_directory(self):
         ui = self._ui(["/tmp/set/a.png", "/tmp/set/b.png"])

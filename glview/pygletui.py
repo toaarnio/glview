@@ -375,9 +375,9 @@ class PygletUI:
                 status = snapshot.image_slots[imgidx].status
                 if status not in [ImageStatus.PENDING, ImageStatus.INVALID]:
                     slot_id = snapshot.image_slots[imgidx].slot_id
-                    texture = self.renderer.get_cached_texture(slot_id)
+                    texture = self.renderer.textures.get_cached(slot_id)
                     if texture is None or not texture.done:
-                        texture = self.renderer.upload_texture(imgidx, piecewise=True)
+                        texture = self.renderer.textures.upload(imgidx, piecewise=True)
                         self.need_redraw = texture.done
                         break  # upload only one slice of one texture per call
 
@@ -590,9 +590,6 @@ class PygletUI:
 
     def _delete_current_image(self):
         self.ops.delete_current_image()
-
-    def _finish_removal(self):
-        self.ops.finish_removal()
 
     def _select_tile_command(self, tileidx: int):
         self.ops.select_tile(tileidx)

@@ -46,9 +46,6 @@ class GLRenderer:
         self.vao = None             # <VertexArray> 2D rectangle vertices + shader
         self.postprocess = None     # <Program> screen-space postprocessing shader
         self.vao_post = None        # <VertexArray> 2D rectangle vertices + shader
-        self.texture_filter = None  # filter_nearest or filter_linear
-        self.running = None
-        self.render_thread = None
         self.tprev = None
         self.tile_colors = self.tile_debug_colors if verbose else self.tile_normal_colors
         self.fps = np.zeros(20)
@@ -197,14 +194,6 @@ class GLRenderer:
         elapsed = (time.time() - t0) * 1000
         self._vprint(f"Taking a screenshot took {elapsed:.1f} ms")
         return screenshot
-
-    def upload_texture(self, idx: int, piecewise: bool, snapshot=None):
-        """Backward-compatible wrapper around renderer-owned texture management."""
-        return self.textures.upload(idx, piecewise=piecewise, snapshot=snapshot)
-
-    def get_cached_texture(self, slot_id: int):
-        """Return the cached texture for the given slot id, if any."""
-        return self.textures.get_cached(slot_id)
 
     def _prepare_tile_texture(self, imgidx: int, texture, snapshot, vpw: int, vph: int):
         gpu_texture = texture.texture
