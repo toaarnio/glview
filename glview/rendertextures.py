@@ -2,12 +2,8 @@
 
 import numpy as np
 
-try:
-    from glview import texture
-    from glview import texturecache
-except ImportError:
-    import texture
-    import texturecache
+from glview import texture
+from glview import texturecache
 
 
 class RenderTextureManager:

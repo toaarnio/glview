@@ -7,16 +7,10 @@ from pathlib import Path       # built-in library
 import pyglet                  # pip install pyglet
 import numpy as np             # pip install numpy
 
-try:
-    from glview import uiops
-    from glview.viewconfig import ViewConfigState
-    from glview.imagestate import ImageStatus
-    from glview.viewerstate import ViewerState
-except ImportError:
-    import uiops
-    from viewconfig import ViewConfigState
-    from imagestate import ImageStatus
-    from viewerstate import ViewerState
+from glview import uiops
+from glview.imagestate import ImageStatus
+from glview.viewconfig import ViewConfigState
+from glview.viewerstate import ViewerState
 
 
 class PygletUI:

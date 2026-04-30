@@ -4,10 +4,7 @@ from dataclasses import dataclass, field
 
 import numpy as np
 
-try:
-    from glview import uistate
-except ImportError:
-    import uistate
+from glview import uistate
 
 
 @dataclass

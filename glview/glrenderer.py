@@ -8,16 +8,9 @@ import numpy as np             # pip install numpy
 import scipy                   # pip install scipy
 import moderngl                # pip install moderngl
 
-try:
-    # package mode
-    from glview import ae
-    from glview import rendertargets
-    from glview import rendertextures
-except ImportError:
-    # stand-alone mode
-    import ae
-    import rendertargets
-    import rendertextures
+from glview import ae
+from glview import rendertargets
+from glview import rendertextures
 
 
 class GLRenderer:

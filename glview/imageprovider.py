@@ -12,10 +12,7 @@ import imsize                  # pip install imsize
 import imgio                   # pip install imgio
 from pqdm.threads import pqdm  # pip install pqdm
 
-try:
-    from glview.imagestate import ImageStatus
-except ImportError:
-    from imagestate import ImageStatus
+from glview.imagestate import ImageStatus
 
 
 class ImageProvider:

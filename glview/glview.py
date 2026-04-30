@@ -16,23 +16,12 @@ import natsort                 # pip install natsort
 import psutil                  # pip install psutil
 import imgio                   # pip install imgio
 
-
-try:
-    # package mode
-    from glview import version        # local import
-    from glview import argv           # local import
-    from glview import pygletui       # local import
-    from glview import glrenderer     # local import
-    from glview import imageprovider  # local import
-    from glview.imagestate import ImageSlot, ImageStatus
-except ImportError:
-    # stand-alone mode
-    import version                 # local import
-    import argv                    # local import
-    import pygletui                # local import
-    import glrenderer              # local import
-    import imageprovider           # local import
-    from imagestate import ImageSlot, ImageStatus
+from glview import argv
+from glview import glrenderer
+from glview import imageprovider
+from glview import pygletui
+from glview import version
+from glview.imagestate import ImageSlot, ImageStatus
 
 
 IMAGE_TYPES = imgio.RO_FORMATS
