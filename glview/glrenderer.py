@@ -79,7 +79,7 @@ class GLRenderer:
         self.tprev = time.time()
         _ = self.ctx.error  # clear the GL error flag (workaround for a bug that prevents interoperability with Pyglet)
 
-    def redraw(self, target: moderngl.Framebuffer | None = None):
+    def redraw(self, target: moderngl.Framebuffer | None = None, gamma_override: int | None = None):
         """ Redraw the tiled image view with refreshed pan & zoom, filtering, etc. """
         t0 = time.time()
         target = target or self.ctx.screen
@@ -139,6 +139,7 @@ class GLRenderer:
                 tileidx=i,
                 imgidx=imgidx,
                 target=target,
+                gamma_override=gamma_override,
                 vpw=vpw,
                 vph=vph,
                 gpu_texture=gpu_texture,
@@ -186,10 +187,8 @@ class GLRenderer:
         dt = "f4" if dtype == np.float32 else "f1"
         w, h = self.ui.window.get_size()
         fbo = self.ctx.simple_framebuffer((w, h), components=3, dtype=dt)
-        gamma = self.ui.gamma
-        self.ui.gamma = (dtype == np.uint8)  # float32 => linear RGB
-        self.redraw(fbo)
-        self.ui.gamma = gamma
+        gamma_override = int(dtype == np.uint8)  # float32 => linear RGB
+        self.redraw(fbo, gamma_override=gamma_override)
         self.ctx.screen.use()
         screenshot = fbo.read(components=3, dtype=dt, clamp=False)
         screenshot = np.frombuffer(screenshot, dtype=dtype)
@@ -241,6 +240,7 @@ class GLRenderer:
         tileidx: int,
         imgidx: int,
         target,
+        gamma_override: int | None,
         vpw: int,
         vph: int,
         gpu_texture,
@@ -258,6 +258,7 @@ class GLRenderer:
         uniforms = self._build_postprocess_uniforms(
             tileidx=tileidx,
             imgidx=imgidx,
+            gamma_override=gamma_override,
             vpw=vpw,
             vph=vph,
             gpu_texture=gpu_texture,
@@ -301,6 +302,7 @@ class GLRenderer:
         self,
         tileidx: int,
         imgidx: int,
+        gamma_override: int | None,
         vpw: int,
         vph: int,
         gpu_texture,
@@ -340,7 +342,7 @@ class GLRenderer:
             'gamut.thr': self.ui.gamut_thr,
             'gamut.scale': self._gamut(imgidx),
             'contrast': 0.25 if self.ui.tonemap_per_tile[tileidx] else 0.0,
-            'gamma': self.ui.gamma,
+            'gamma': self.ui.gamma if gamma_override is None else gamma_override,
             'debug': self.ui.debug_mode * int(self.ui.debug_mode_on),
         }
 

@@ -297,6 +297,7 @@ class GLRendererParameterTests(unittest.TestCase):
                 uniforms = renderer._build_postprocess_uniforms(
                     tileidx=0,
                     imgidx=0,
+                    gamma_override=None,
                     vpw=200,
                     vph=100,
                     gpu_texture=gpu_texture,
@@ -378,6 +379,7 @@ class GLRendererParameterTests(unittest.TestCase):
                 tileidx=0,
                 imgidx=5,
                 target=target,
+                gamma_override=1,
                 vpw=10,
                 vph=20,
                 gpu_texture=SimpleNamespace(width=100),
@@ -396,6 +398,7 @@ class GLRendererParameterTests(unittest.TestCase):
         build_uniforms.assert_called_once_with(
             tileidx=0,
             imgidx=5,
+            gamma_override=1,
             vpw=10,
             vph=20,
             gpu_texture=mock.ANY,
@@ -409,6 +412,64 @@ class GLRendererParameterTests(unittest.TestCase):
         self.assertEqual(renderer.postprocess["img"], 0)
         self.assertEqual(renderer.postprocess["gamma"], 3)
         renderer.vao_post.render.assert_called_once()
+
+    def test_build_postprocess_uniforms_prefers_gamma_override(self):
+        ui = SimpleNamespace(
+            mirror_per_tile=[0, 0, 0, 0],
+            sharpen_per_tile=[False, False, False, False],
+            ae_per_tile=[False, False, False, False],
+            tonemap_per_tile=[False, False, False, False],
+            gamutmap_per_tile=[False, False, False, False],
+            gamut_pow=np.ones(3) * 5.0,
+            gamut_thr=np.ones(3) * 0.8,
+            gamma=3,
+            ev=0.0,
+            cs_in=0,
+            cs_out=0,
+            scale=np.ones(4),
+            debug_mode=1,
+            debug_mode_on=False,
+            gamut_lim=np.ones(3) * 1.1,
+        )
+        renderer = self._renderer(ui=ui)
+
+        with mock.patch.object(renderer, "_sharpen", return_value=np.ones((3, 3))):
+            with mock.patch.object(renderer, "_gamut", return_value=np.array([1.0, 1.0, 1.0])):
+                uniforms = renderer._build_postprocess_uniforms(
+                    tileidx=0,
+                    imgidx=0,
+                    gamma_override=0,
+                    vpw=200,
+                    vph=100,
+                    gpu_texture=SimpleNamespace(width=100),
+                    scalex=0.5,
+                    whitelevel=2.0,
+                    blacklevel=0.1,
+                    diffuse_white=1.5,
+                    peak_white=4.0,
+                    ae_gain=1.75,
+                )
+
+        self.assertEqual(uniforms["gamma"], 0)
+
+    def test_screenshot_uses_gamma_override_without_mutating_ui(self):
+        ui = SimpleNamespace(window=SimpleNamespace(get_size=lambda: (20, 10)), gamma=3)
+        renderer = GLRenderer(ui, files=SimpleNamespace(), loader=SimpleNamespace(), verbose=False)
+        renderer.ctx = SimpleNamespace(
+            simple_framebuffer=lambda size, components, dtype: SimpleNamespace(
+                read=lambda components, dtype, clamp: bytes(20 * 10 * 3),
+            ),
+            screen=SimpleNamespace(use=mock.Mock()),
+        )
+
+        with mock.patch.object(renderer, "redraw") as redraw_mock:
+            screenshot = renderer.screenshot(np.uint8)
+
+        redraw_mock.assert_called_once()
+        _, kwargs = redraw_mock.call_args
+        self.assertEqual(kwargs["gamma_override"], 1)
+        self.assertEqual(renderer.ui.gamma, 3)
+        self.assertEqual(screenshot.shape, (10, 20, 3))
 
 
 if __name__ == "__main__":
