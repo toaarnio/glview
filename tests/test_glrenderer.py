@@ -5,6 +5,7 @@ from unittest import mock
 import numpy as np
 
 from glview.glrenderer import GLRenderer
+from glview.rendertargets import TileRenderTarget
 from glview.rendertextures import RenderTextureManager
 from glview.glview import FileList
 
@@ -47,6 +48,69 @@ class _FakeTextureObject:
 
     def release(self):
         self.release_count += 1
+
+
+class _FakeFramebuffer:
+
+    def __init__(self, size, attachment):
+        self.size = size
+        self.color_attachments = [attachment]
+        self.use = mock.Mock()
+        self.clear = mock.Mock()
+        self.release = mock.Mock()
+
+
+class _FakeContext:
+
+    def __init__(self):
+        self.textures = []
+        self.framebuffers = []
+
+    def texture(self, size, components, dtype):
+        texture = SimpleNamespace(
+            size=size,
+            components=components,
+            dtype=dtype,
+            repeat_x=None,
+            repeat_y=None,
+            filter=None,
+            use=mock.Mock(),
+        )
+        self.textures.append(texture)
+        return texture
+
+    def framebuffer(self, attachments):
+        fbo = _FakeFramebuffer(size=attachments[0].size, attachment=attachments[0])
+        self.framebuffers.append(fbo)
+        return fbo
+
+
+class TileRenderTargetTests(unittest.TestCase):
+
+    def test_ensure_reuses_matching_framebuffer_and_recreates_on_resize(self):
+        ctx = _FakeContext()
+        target = TileRenderTarget(ctx, {"NEAREST": ("near", "near")})
+
+        fbo0 = target.ensure(64, 32)
+        fbo1 = target.ensure(64, 32)
+        fbo2 = target.ensure(80, 40)
+
+        self.assertIs(fbo0, fbo1)
+        self.assertIsNot(fbo0, fbo2)
+        self.assertEqual(len(ctx.textures), 2)
+        self.assertEqual(ctx.textures[0].filter, ("near", "near"))
+        self.assertFalse(ctx.textures[0].repeat_x)
+        self.assertFalse(ctx.textures[0].repeat_y)
+
+    def test_release_releases_existing_framebuffer(self):
+        ctx = _FakeContext()
+        target = TileRenderTarget(ctx, {"NEAREST": ("near", "near")})
+        fbo = target.ensure(64, 32)
+
+        target.release()
+
+        fbo.release.assert_called_once_with()
+        self.assertIsNone(target.fbo)
 
 
 class RenderTextureManagerTests(unittest.TestCase):
@@ -274,7 +338,7 @@ class GLRendererParameterTests(unittest.TestCase):
             scale=np.array([1.5, 1.0, 1.0, 1.0]),
         )
         renderer = self._renderer(ui=ui)
-        renderer.fbo = SimpleNamespace(use=mock.Mock(), clear=mock.Mock())
+        renderer.tile_target = SimpleNamespace(fbo=SimpleNamespace(use=mock.Mock(), clear=mock.Mock()))
         renderer.prog = {}
         renderer.vao = SimpleNamespace(render=mock.Mock())
         snapshot = SimpleNamespace(linearize=(True,))
@@ -290,8 +354,8 @@ class GLRendererParameterTests(unittest.TestCase):
             snapshot=snapshot,
         )
 
-        renderer.fbo.use.assert_called_once_with()
-        renderer.fbo.clear.assert_called_once()
+        renderer.tile_target.fbo.use.assert_called_once_with()
+        renderer.tile_target.fbo.clear.assert_called_once()
         self.assertEqual(renderer.prog["img"], 0)
         self.assertEqual(renderer.prog["mousepos"], (0.25, -0.5))
         self.assertEqual(renderer.prog["scale"], 1.5)
@@ -304,7 +368,7 @@ class GLRendererParameterTests(unittest.TestCase):
     def test_render_postprocess_tile_applies_uniforms_and_renders(self):
         ui = SimpleNamespace(viewports={0: (1, 2, 3, 4)})
         renderer = self._renderer(ui=ui)
-        renderer.fbo = SimpleNamespace(color_attachments=[SimpleNamespace(use=mock.Mock())])
+        renderer.tile_target = SimpleNamespace(fbo=SimpleNamespace(color_attachments=[SimpleNamespace(use=mock.Mock())]))
         renderer.postprocess = {"kernel": SimpleNamespace(array_length=9)}
         renderer.vao_post = SimpleNamespace(render=mock.Mock())
         target = SimpleNamespace(use=mock.Mock(), clear=mock.Mock(), viewport=None)
@@ -328,7 +392,7 @@ class GLRendererParameterTests(unittest.TestCase):
         target.use.assert_called_once_with()
         self.assertEqual(target.viewport, (1, 2, 3, 4))
         target.clear.assert_called_once_with(viewport=(1, 2, 3, 4))
-        renderer.fbo.color_attachments[0].use.assert_called_once_with(location=0)
+        renderer.tile_target.fbo.color_attachments[0].use.assert_called_once_with(location=0)
         build_uniforms.assert_called_once_with(
             tileidx=0,
             imgidx=5,

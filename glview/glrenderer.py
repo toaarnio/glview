@@ -11,10 +11,12 @@ import moderngl                # pip install moderngl
 try:
     # package mode
     from glview import ae
+    from glview import rendertargets
     from glview import rendertextures
 except ImportError:
     # stand-alone mode
     import ae
+    import rendertargets
     import rendertextures
 
 
@@ -38,7 +40,7 @@ class GLRenderer:
         self.loader = loader        # <ImageProvider> Still image loader
         self.files = files          # <FileList> Image files + metadata
         self.ctx = None             # <Context> OpenGL rendering context
-        self.fbo = None             # <Framebuffer> Off-screen framebuffer
+        self.tile_target = None     # <TileRenderTarget> Off-screen per-tile framebuffer
         self.prog = None            # <Program> image renderer with zoom & pan
         self.vbo = None             # <Buffer> xy vertex coords for 2D rectangle
         self.vao = None             # <VertexArray> 2D rectangle vertices + shader
@@ -72,6 +74,7 @@ class GLRenderer:
         fshader = open(os.path.join(shader_path, "postprocess.fs"), encoding="utf-8").read()
         self.postprocess = self.ctx.program(vertex_shader=vshader, fragment_shader=fshader)
         self.vao_post = self.ctx.vertex_array(self.postprocess, [(self.vbo, "2f", "vert")])
+        self.tile_target = rendertargets.TileRenderTarget(self.ctx, self.filters)
         self.textures = rendertextures.RenderTextureManager(self.ctx, self.files, self.loader, self.verbose)
         self.tprev = time.time()
         _ = self.ctx.error  # clear the GL error flag (workaround for a bug that prevents interoperability with Pyglet)
@@ -82,13 +85,7 @@ class GLRenderer:
         target = target or self.ctx.screen
         w, h = self.ui.window.get_size()
         vpw, vph = self.ui.viewports[0][2:]
-
-        if not self.fbo or self.fbo.size != (vpw, vph):
-            offscreen_tile = self.ctx.texture((vpw, vph), components=3, dtype="f4")
-            offscreen_tile.repeat_x = False
-            offscreen_tile.repeat_y = False
-            offscreen_tile.filter = self.filters["NEAREST"]
-            self.fbo = self.ctx.framebuffer([offscreen_tile])
+        fbo = self.tile_target.ensure(vpw, vph)
 
         snapshot = self.files.snapshot()
         self.textures.prune(snapshot)
@@ -124,7 +121,7 @@ class GLRenderer:
 
             whitelevel, blacklevel = self._normalization_levels(texture)
 
-            ae_gain, tile_diffuse, tile_peak = ae.autoexposure(self.fbo.color_attachments[0], whitelevel, clip_pct=1.0)
+            ae_gain, tile_diffuse, tile_peak = ae.autoexposure(fbo.color_attachments[0], whitelevel, clip_pct=1.0)
             ae_gain, diffuse_white, peak_white = self._resolve_tile_exposure(
                 tileidx=i,
                 texture=texture,
@@ -170,7 +167,9 @@ class GLRenderer:
         """
         if self.textures is not None:
             self.textures.release_all()
-        for obj in [self.vao_post, self.vao, self.vbo, self.postprocess, self.prog, self.fbo]:
+        if self.tile_target is not None:
+            self.tile_target.release()
+        for obj in [self.vao_post, self.vao, self.vbo, self.postprocess, self.prog]:
             if obj is not None:
                 obj.release()
         # Don't release self.ctx: moderngl attaches to pyglet's context, so
@@ -225,8 +224,9 @@ class GLRenderer:
         return gpu_texture, orientation, scalex, scaley
 
     def _render_tile_scene(self, tileidx: int, imgidx: int, gpu_texture, orientation: int, scalex: float, scaley: float, snapshot):
-        self.fbo.use()
-        self.fbo.clear(*self._get_debug_tile_color(tileidx))
+        fbo = self.tile_target.fbo
+        fbo.use()
+        fbo.clear(*self._get_debug_tile_color(tileidx))
         self.prog['img'] = 0
         self.prog['mousepos'] = tuple(self.ui.mousepos[tileidx])
         self.prog['scale'] = self.ui.scale[tileidx]
@@ -254,7 +254,7 @@ class GLRenderer:
         target.use()
         target.viewport = self.ui.viewports[tileidx]
         target.clear(viewport=target.viewport)
-        self.fbo.color_attachments[0].use(location=0)
+        self.tile_target.fbo.color_attachments[0].use(location=0)
         uniforms = self._build_postprocess_uniforms(
             tileidx=tileidx,
             imgidx=imgidx,
