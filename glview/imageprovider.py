@@ -4,8 +4,6 @@ import os                      # built-in library
 import queue                   # built-in library
 import time                    # built-in library
 import threading               # built-in library
-import urllib.request          # built-in library
-import tempfile                # built-in library
 import traceback               # built-in library
 from pathlib import Path       # built-in library
 import numpy as np             # pip install numpy
@@ -63,20 +61,19 @@ class ImageProvider:
             print("Scanning images & estimating memory consumption...")
         invalid = []
         for idx, filespec in enumerate(self.files.filespecs):
-            if "://" not in filespec:
-                try:
-                    info = imsize.read(filespec)
-                    size_on_disk += info.filesize
-                    size_in_mem += info.nbytes
-                except imsize.ImageFileError as e:
-                    print(f"{os.path.basename(filespec)}: Skipping: {e}")
-                    invalid.append(idx)
-                except RuntimeError as e:
-                    print(f"{os.path.basename(filespec)}: Skipping: {e}")
-                    invalid.append(idx)
-                except TypeError:
-                    print(f"{os.path.basename(filespec)}: Skipping: Unable to determine image dimensions.")
-                    invalid.append(idx)
+            try:
+                info = imsize.read(filespec)
+                size_on_disk += info.filesize
+                size_in_mem += info.nbytes
+            except imsize.ImageFileError as e:
+                print(f"{os.path.basename(filespec)}: Skipping: {e}")
+                invalid.append(idx)
+            except RuntimeError as e:
+                print(f"{os.path.basename(filespec)}: Skipping: {e}")
+                invalid.append(idx)
+            except TypeError:
+                print(f"{os.path.basename(filespec)}: Skipping: Unable to determine image dimensions.")
+                invalid.append(idx)
         if invalid:
             self.files.drop(invalid)
         size_on_disk /= 1024 ** 2
@@ -251,29 +248,21 @@ class ImageProvider:
                 filespec = self.files.filespecs[idx]
                 suffix = Path(filespec).suffix.lower()
                 self.files.linearize[idx] = suffix in [".jpg", ".jpeg", ".png", ".bmp", ".ppm"]
-                if not self.files.is_url[idx]:
-                    info = imsize.read(filespec)
-                    if info.cfa_raw:
-                        packing = "unpacked"
-                        if info.packed_raw:
-                            packing = "plain"
-                        if info.mipi_raw:
-                            packing = "mipi"
-                        width = self.config.width or info.width
-                        height = self.config.height or info.height
-                        bpp = self.config.bpp or info.bitdepth
-                        stride = self.config.stride or info.stride
-                        packing = self.config.packing or packing
-                        img, maxval = imgio.rawread(filespec, width, height, bpp, stride, packing, verbose=verbose)
-                    else:
-                        img, maxval = imgio.imread(filespec, verbose=verbose)
+                info = imsize.read(filespec)
+                if info.cfa_raw:
+                    packing = "unpacked"
+                    if info.packed_raw:
+                        packing = "plain"
+                    if info.mipi_raw:
+                        packing = "mipi"
+                    width = self.config.width or info.width
+                    height = self.config.height or info.height
+                    bpp = self.config.bpp or info.bitdepth
+                    stride = self.config.stride or info.stride
+                    packing = self.config.packing or packing
+                    img, maxval = imgio.rawread(filespec, width, height, bpp, stride, packing, verbose=verbose)
                 else:
-                    assert filespec.startswith(("http:", "https:")), filespec
-                    data = urllib.request.urlopen(filespec).read()  # noqa: S310
-                    basename = os.path.basename(filespec)
-                    with tempfile.NamedTemporaryFile(suffix=f"_{basename}") as tmpfile:
-                        tmpfile.write(data)
-                        img, maxval = imgio.imread(tmpfile.name, verbose=verbose)
+                    img, maxval = imgio.imread(filespec, verbose=verbose)
                 img = img[::downsample, ::downsample]
                 img = np.atleast_3d(img)  # {2D, 3D} => 3D
                 img = img[:, :, :3]  # scrap alpha channel, if any

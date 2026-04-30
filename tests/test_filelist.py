@@ -22,7 +22,7 @@ class FileListTests(unittest.TestCase):
         self.assertTrue(files.ready_to_upload(3))
 
     def test_drop_reindexes_metadata_and_keeps_remaining_slot_state(self):
-        files = FileList(["a.png", "https://example.com/b.png", "c.png"])
+        files = FileList(["a.png", "b.png", "c.png"])
         files.mark_released(0)
         files.mark_invalid(1)
         files.mark_loaded(2, np.ones((2, 2, 3), dtype=np.uint8))
@@ -35,14 +35,13 @@ class FileListTests(unittest.TestCase):
         files.drop([0, 2])
 
         self.assertEqual(files.numfiles, 1)
-        self.assertEqual(files.filespecs, ["https://example.com/b.png"])
+        self.assertEqual(files.filespecs, ["b.png"])
         self.assertEqual(files.image_status(0), ImageStatus.INVALID)
         self.assertEqual(files.loaded_images, [None])
         self.assertEqual(files.images, [None])
         self.assertEqual(files.orientations, [180])
         self.assertEqual(files.linearize, [False])
         self.assertEqual(files.metadata, [{"name": "b"}])
-        self.assertEqual(files.is_url, [True])
         self.assertTrue(files.reindexed)
 
     def test_delete_removes_file_and_keeps_remaining_slot_state(self):
@@ -68,7 +67,6 @@ class FileListTests(unittest.TestCase):
             self.assertEqual(files.images, [None])
             self.assertEqual(files.metadata, [{"name": "b"}])
             self.assertEqual(files.numfiles, 1)
-            self.assertEqual(files.is_url, [False])
             self.assertTrue(files.reindexed)
 
     def test_mark_pending_clears_loaded_and_consumed_payloads(self):

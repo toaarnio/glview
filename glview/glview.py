@@ -50,7 +50,6 @@ class FileListSnapshot:
     linearize: tuple
     image_slots: tuple
     metadata: tuple
-    is_url: tuple
 
 
 class FileList:
@@ -71,7 +70,6 @@ class FileList:
         self.loaded_images = [None] * self.numfiles
         self.images = [None] * self.numfiles  # payloads already consumed by the UI/render thread
         self.metadata = [None] * self.numfiles
-        self.is_url = [None] * self.numfiles
         self._update()
         self.reindexed = False
 
@@ -130,7 +128,6 @@ class FileList:
                 linearize=tuple(self.linearize),
                 image_slots=tuple(self.image_slots),
                 metadata=tuple(self.metadata),
-                is_url=tuple(self.is_url),
             )
 
     def drop(self, indices):
@@ -175,7 +172,6 @@ class FileList:
 
     def _update(self):
         self.numfiles = len(self.filespecs)
-        self.is_url = ["://" in f for f in self.filespecs]
         self.reindexed = True
 
     def _new_slot(self):
@@ -189,7 +185,6 @@ def main():  # noqa: PLR0915
     config = types.SimpleNamespace()
     config.fullscreen = argv.exists("--fullscreen")
     config.numtiles = argv.intval("--split", default=1, accepted=[1, 2, 3, 4])
-    config.url = argv.stringval("--url", default=None)
     config.downsample = argv.intval("--downsample", default=1, condition="v >= 1")
     config.smooth = argv.exists("--filter")
     config.normalize = argv.stringval("--normalize", default="off", accepted=list(NORMS.keys()))
@@ -215,7 +210,6 @@ def main():  # noqa: PLR0915
         print("  options:")
         print("    --fullscreen            start in full-screen mode; default = windowed")
         print("    --split 1|2|3|4         display images in N separate tiles")
-        print("    --url <address>         load image from the given web address")
         print("    --downsample N          downsample images N-fold to save memory")
         print("    --normalize off|max|... exposure normalization mode; default = off")
         print("    --filter                use linear filtering; default = nearest")
@@ -285,10 +279,9 @@ def main():  # noqa: PLR0915
     else:
         print("See 'glview --help' for command-line options and keyboard commands.")
 
-    filepatterns = sys.argv[1:] or config.url or ["*"]
+    filepatterns = sys.argv[1:] or ["*"]
     filenames = argv.filenames(filepatterns, IMAGE_TYPES, allowAllCaps=True)
     filenames = natsort.natsorted(natsort.natsorted(filenames), key=lambda p: pathlib.Path(p).parent)
-    filenames += [config.url] if config.url is not None else []
     loader = imageprovider.ImageProvider(FileList(filenames), config)
     enforce(loader.files.numfiles > 0, "No valid images to show. Terminating.")
 
