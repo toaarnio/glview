@@ -95,19 +95,13 @@ class GLRenderer:
         for i in range(self.ui.numtiles):
             imgidx = self.ui.img_per_tile[i]
             texture = self.textures.upload(imgidx, piecewise=False, snapshot=snapshot)
-            gpu_texture = texture.texture
-            gpu_texture.filter = self.filters[self.ui.texture_filter]
-            if not texture.mipmaps_done:
-                gpu_texture.filter = self.filters["NEAREST"]
-                self._vprint(f"Texture #{imgidx} not fully uploaded yet, disabling mipmaps")
-            gpu_texture.repeat_x = False
-            gpu_texture.repeat_y = False
-            gpu_texture.swizzle = 'RGB1'
-            gpu_texture.use(location=0)
-            orientation = snapshot.orientations[imgidx]
-            texw, texh = gpu_texture.width, gpu_texture.height
-            texw, texh = (texh, texw) if orientation in [90, 270] else (texw, texh)
-            scalex, scaley = self._get_aspect_ratio(vpw, vph, texw, texh)
+            gpu_texture, orientation, scalex, scaley = self._prepare_tile_texture(
+                imgidx=imgidx,
+                texture=texture,
+                snapshot=snapshot,
+                vpw=vpw,
+                vph=vph,
+            )
 
             # Render the image into an offscreen texture representing the current
             # tile; note that all tiles are the same size, so we can use the same
@@ -115,16 +109,15 @@ class GLRenderer:
             # The second rendering pass expects linear colors, so it's important
             # to remove sRGB gamma in the first pass.
 
-            self.fbo.use()
-            self.fbo.clear(*self._get_debug_tile_color(i))
-            self.prog['img'] = 0
-            self.prog['mousepos'] = tuple(self.ui.mousepos[i])
-            self.prog['scale'] = self.ui.scale[i]
-            self.prog['aspect'] = (scalex, scaley)
-            self.prog['orientation'] = orientation
-            self.prog['grayscale'] = (gpu_texture.components == 1)
-            self.prog['degamma'] = snapshot.linearize[imgidx]
-            self.vao.render(moderngl.TRIANGLE_STRIP)
+            self._render_tile_scene(
+                tileidx=i,
+                imgidx=imgidx,
+                gpu_texture=gpu_texture,
+                orientation=orientation,
+                scalex=scalex,
+                scaley=scaley,
+                snapshot=snapshot,
+            )
 
             # Derive exposure parameters for the current tile, to be applied in the
             # second rendering pass
@@ -145,28 +138,20 @@ class GLRenderer:
             # effects on the fly, plus gamma as the final step. The input must be
             # in a linear color space.
 
-            target.use()
-            target.viewport = self.ui.viewports[i]
-            target.clear(viewport=target.viewport)
-            self.fbo.color_attachments[0].use(location=0)
-            uniforms = self._build_postprocess_uniforms(
+            self._render_postprocess_tile(
                 tileidx=i,
                 imgidx=imgidx,
-                params={
-                    "vpw": vpw,
-                    "vph": vph,
-                    "gpu_texture": gpu_texture,
-                    "scalex": scalex,
-                    "whitelevel": whitelevel,
-                    "blacklevel": blacklevel,
-                    "diffuse_white": diffuse_white,
-                    "peak_white": peak_white,
-                    "ae_gain": ae_gain,
-                },
+                target=target,
+                vpw=vpw,
+                vph=vph,
+                gpu_texture=gpu_texture,
+                scalex=scalex,
+                whitelevel=whitelevel,
+                blacklevel=blacklevel,
+                diffuse_white=diffuse_white,
+                peak_white=peak_white,
+                ae_gain=ae_gain,
             )
-            for key, value in uniforms.items():
-                self.postprocess[key] = value
-            self.vao_post.render(moderngl.TRIANGLE_STRIP)
 
         self.ctx.finish()
         elapsed = (time.time() - t0) * 1000
@@ -223,6 +208,70 @@ class GLRenderer:
         """Return the cached texture for the given slot id, if any."""
         return self.textures.get_cached(slot_id)
 
+    def _prepare_tile_texture(self, imgidx: int, texture, snapshot, vpw: int, vph: int):
+        gpu_texture = texture.texture
+        gpu_texture.filter = self.filters[self.ui.texture_filter]
+        if not texture.mipmaps_done:
+            gpu_texture.filter = self.filters["NEAREST"]
+            self._vprint(f"Texture #{imgidx} not fully uploaded yet, disabling mipmaps")
+        gpu_texture.repeat_x = False
+        gpu_texture.repeat_y = False
+        gpu_texture.swizzle = 'RGB1'
+        gpu_texture.use(location=0)
+        orientation = snapshot.orientations[imgidx]
+        texw, texh = gpu_texture.width, gpu_texture.height
+        texw, texh = (texh, texw) if orientation in [90, 270] else (texw, texh)
+        scalex, scaley = self._get_aspect_ratio(vpw, vph, texw, texh)
+        return gpu_texture, orientation, scalex, scaley
+
+    def _render_tile_scene(self, tileidx: int, imgidx: int, gpu_texture, orientation: int, scalex: float, scaley: float, snapshot):
+        self.fbo.use()
+        self.fbo.clear(*self._get_debug_tile_color(tileidx))
+        self.prog['img'] = 0
+        self.prog['mousepos'] = tuple(self.ui.mousepos[tileidx])
+        self.prog['scale'] = self.ui.scale[tileidx]
+        self.prog['aspect'] = (scalex, scaley)
+        self.prog['orientation'] = orientation
+        self.prog['grayscale'] = (gpu_texture.components == 1)
+        self.prog['degamma'] = snapshot.linearize[imgidx]
+        self.vao.render(moderngl.TRIANGLE_STRIP)
+
+    def _render_postprocess_tile(
+        self,
+        tileidx: int,
+        imgidx: int,
+        target,
+        vpw: int,
+        vph: int,
+        gpu_texture,
+        scalex: float,
+        whitelevel: float,
+        blacklevel: float,
+        diffuse_white: float,
+        peak_white: float,
+        ae_gain: float,
+    ):
+        target.use()
+        target.viewport = self.ui.viewports[tileidx]
+        target.clear(viewport=target.viewport)
+        self.fbo.color_attachments[0].use(location=0)
+        uniforms = self._build_postprocess_uniforms(
+            tileidx=tileidx,
+            imgidx=imgidx,
+            vpw=vpw,
+            vph=vph,
+            gpu_texture=gpu_texture,
+            scalex=scalex,
+            whitelevel=whitelevel,
+            blacklevel=blacklevel,
+            diffuse_white=diffuse_white,
+            peak_white=peak_white,
+            ae_gain=ae_gain,
+        )
+        for key, value in uniforms.items():
+            self.postprocess[key] = value
+        self.vao_post.render(moderngl.TRIANGLE_STRIP)
+
     def _normalization_levels(self, texture_obj):
         norm_maxvals = np.r_[1, texture_obj.maxval, texture_obj.maxval, texture_obj.percentiles, texture_obj.diffuse_white]
         norm_minvals = np.r_[0, 0, texture_obj.minval, 0, 0, 0, 0, 0]
@@ -248,16 +297,20 @@ class GLRenderer:
         diffuse_white = tile_diffuse
         return self.ae_gain_per_tile[tileidx], diffuse_white, peak_white
 
-    def _build_postprocess_uniforms(self, tileidx: int, imgidx: int, params: dict):
-        vpw = params["vpw"]
-        vph = params["vph"]
-        gpu_texture = params["gpu_texture"]
-        scalex = params["scalex"]
-        whitelevel = params["whitelevel"]
-        blacklevel = params["blacklevel"]
-        diffuse_white = params["diffuse_white"]
-        peak_white = params["peak_white"]
-        ae_gain = params["ae_gain"]
+    def _build_postprocess_uniforms(
+        self,
+        tileidx: int,
+        imgidx: int,
+        vpw: int,
+        vph: int,
+        gpu_texture,
+        scalex: float,
+        whitelevel: float,
+        blacklevel: float,
+        diffuse_white: float,
+        peak_white: float,
+        ae_gain: float,
+    ):
         magnification = scalex * vpw / (gpu_texture.width / self.ui.scale[tileidx])
         kernel = self._sharpen(magnification)
         max_kernel_size = self.postprocess['kernel'].array_length

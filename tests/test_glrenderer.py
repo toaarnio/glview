@@ -233,17 +233,15 @@ class GLRendererParameterTests(unittest.TestCase):
                 uniforms = renderer._build_postprocess_uniforms(
                     tileidx=0,
                     imgidx=0,
-                    params={
-                        "vpw": 200,
-                        "vph": 100,
-                        "gpu_texture": gpu_texture,
-                        "scalex": 0.5,
-                        "whitelevel": 2.0,
-                        "blacklevel": 0.1,
-                        "diffuse_white": 1.5,
-                        "peak_white": 4.0,
-                        "ae_gain": 1.75,
-                    },
+                    vpw=200,
+                    vph=100,
+                    gpu_texture=gpu_texture,
+                    scalex=0.5,
+                    whitelevel=2.0,
+                    blacklevel=0.1,
+                    diffuse_white=1.5,
+                    peak_white=4.0,
+                    ae_gain=1.75,
                 )
 
         sharpen_mock.assert_called_once_with(2.0)
@@ -269,6 +267,84 @@ class GLRendererParameterTests(unittest.TestCase):
         self.assertEqual(uniforms["contrast"], 0.25)
         self.assertEqual(uniforms["gamma"], 3)
         self.assertEqual(uniforms["debug"], 4)
+
+    def test_render_tile_scene_populates_first_pass_uniforms(self):
+        ui = SimpleNamespace(
+            mousepos=np.array([[0.25, -0.5], [0.0, 0.0], [0.0, 0.0], [0.0, 0.0]]),
+            scale=np.array([1.5, 1.0, 1.0, 1.0]),
+        )
+        renderer = self._renderer(ui=ui)
+        renderer.fbo = SimpleNamespace(use=mock.Mock(), clear=mock.Mock())
+        renderer.prog = {}
+        renderer.vao = SimpleNamespace(render=mock.Mock())
+        snapshot = SimpleNamespace(linearize=(True,))
+        gpu_texture = SimpleNamespace(components=1)
+
+        renderer._render_tile_scene(
+            tileidx=0,
+            imgidx=0,
+            gpu_texture=gpu_texture,
+            orientation=90,
+            scalex=0.8,
+            scaley=0.6,
+            snapshot=snapshot,
+        )
+
+        renderer.fbo.use.assert_called_once_with()
+        renderer.fbo.clear.assert_called_once()
+        self.assertEqual(renderer.prog["img"], 0)
+        self.assertEqual(renderer.prog["mousepos"], (0.25, -0.5))
+        self.assertEqual(renderer.prog["scale"], 1.5)
+        self.assertEqual(renderer.prog["aspect"], (0.8, 0.6))
+        self.assertEqual(renderer.prog["orientation"], 90)
+        self.assertTrue(renderer.prog["grayscale"])
+        self.assertTrue(renderer.prog["degamma"])
+        renderer.vao.render.assert_called_once()
+
+    def test_render_postprocess_tile_applies_uniforms_and_renders(self):
+        ui = SimpleNamespace(viewports={0: (1, 2, 3, 4)})
+        renderer = self._renderer(ui=ui)
+        renderer.fbo = SimpleNamespace(color_attachments=[SimpleNamespace(use=mock.Mock())])
+        renderer.postprocess = {"kernel": SimpleNamespace(array_length=9)}
+        renderer.vao_post = SimpleNamespace(render=mock.Mock())
+        target = SimpleNamespace(use=mock.Mock(), clear=mock.Mock(), viewport=None)
+
+        with mock.patch.object(renderer, "_build_postprocess_uniforms", return_value={"img": 0, "gamma": 3}) as build_uniforms:
+            renderer._render_postprocess_tile(
+                tileidx=0,
+                imgidx=5,
+                target=target,
+                vpw=10,
+                vph=20,
+                gpu_texture=SimpleNamespace(width=100),
+                scalex=0.5,
+                whitelevel=2.0,
+                blacklevel=0.1,
+                diffuse_white=1.5,
+                peak_white=4.0,
+                ae_gain=1.75,
+            )
+
+        target.use.assert_called_once_with()
+        self.assertEqual(target.viewport, (1, 2, 3, 4))
+        target.clear.assert_called_once_with(viewport=(1, 2, 3, 4))
+        renderer.fbo.color_attachments[0].use.assert_called_once_with(location=0)
+        build_uniforms.assert_called_once_with(
+            tileidx=0,
+            imgidx=5,
+            vpw=10,
+            vph=20,
+            gpu_texture=mock.ANY,
+            scalex=0.5,
+            whitelevel=2.0,
+            blacklevel=0.1,
+            diffuse_white=1.5,
+            peak_white=4.0,
+            ae_gain=1.75,
+        )
+        self.assertEqual(renderer.postprocess["img"], 0)
+        self.assertEqual(renderer.postprocess["gamma"], 3)
+        renderer.vao_post.render.assert_called_once()
 
 
 if __name__ == "__main__":

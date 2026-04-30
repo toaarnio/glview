@@ -3,6 +3,7 @@ target-version = "py311"
 line-length = 150
 
 lint.pylint.max-statements = 75
+lint.pylint.max-args = 12
 
 lint.select = ["ALL"]
 lint.ignore = [
