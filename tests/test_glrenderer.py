@@ -371,18 +371,18 @@ class GLRendererParameterTests(unittest.TestCase):
         target.clear.assert_called_once_with(viewport=(1, 2, 3, 4))
         renderer.tile_target.fbo.color_attachments[0].use.assert_called_once_with(location=0)
         build_uniforms.assert_called_once_with(
-            tileidx=0,
-            imgidx=5,
-            gamma_override=1,
-            vpw=10,
-            vph=20,
-            gpu_texture=mock.ANY,
-            scalex=0.5,
-            whitelevel=2.0,
-            blacklevel=0.1,
-            diffuse_white=1.5,
-            peak_white=4.0,
-            ae_gain=1.75,
+            0,
+            5,
+            1,
+            10,
+            20,
+            mock.ANY,
+            0.5,
+            2.0,
+            0.1,
+            1.5,
+            4.0,
+            1.75,
         )
         self.assertEqual(renderer.postprocess["img"], 0)
         self.assertEqual(renderer.postprocess["gamma"], 3)
@@ -444,9 +444,7 @@ class GLRendererParameterTests(unittest.TestCase):
         with mock.patch.object(renderer, "redraw") as redraw_mock:
             screenshot = renderer.screenshot(np.uint8)
 
-        redraw_mock.assert_called_once()
-        _, kwargs = redraw_mock.call_args
-        self.assertEqual(kwargs["gamma_override"], 1)
+        redraw_mock.assert_called_once_with(mock.ANY, 1)
         self.assertEqual(renderer.ui.config.gamma, 3)
         self.assertEqual(screenshot.shape, (10, 20, 3))
 

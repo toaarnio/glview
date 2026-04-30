@@ -478,11 +478,11 @@ class PygletUI:
                 keys = pyglet.window.key
                 shift_down = modifiers & keys.MOD_SHIFT
                 self.state.drag_mouse(
-                    dx=dx,
-                    dy=dy,
-                    pan_speed=self.mouse_speed,
-                    canvas_width=self.mouse_canvas_width,
-                    active_only=bool(shift_down),
+                    dx,
+                    dy,
+                    self.mouse_speed,
+                    self.mouse_canvas_width,
+                    bool(shift_down),
                 )
                 self.need_redraw = True
 
@@ -490,7 +490,7 @@ class PygletUI:
         def on_mouse_scroll(_x, _y, _scroll_x, scroll_y):
             keys = pyglet.window.key
             shift_down = self.key_state[keys.LSHIFT] or self.key_state[keys.RSHIFT]
-            self.state.scroll_zoom(scroll_y=scroll_y, active_only=shift_down)
+            self.state.scroll_zoom(scroll_y, shift_down)
             self.need_redraw = True
 
     def _setup_keyboard_events(self):

@@ -89,14 +89,8 @@ class GLRenderer:
         self.textures.prune(snapshot)
         for i in range(state.numtiles):
             imgidx = state.img_per_tile[i]
-            texture = self.textures.upload(imgidx, piecewise=False, snapshot=snapshot)
-            gpu_texture, orientation, scalex, scaley = self._prepare_tile_texture(
-                imgidx=imgidx,
-                texture=texture,
-                snapshot=snapshot,
-                vpw=vpw,
-                vph=vph,
-            )
+            texture = self.textures.upload(imgidx, False, snapshot)
+            gpu_texture, orientation, scalex, scaley = self._prepare_tile_texture(imgidx, texture, snapshot, vpw, vph)
 
             # Render the image into an offscreen texture representing the current
             # tile; note that all tiles are the same size, so we can use the same
@@ -104,15 +98,7 @@ class GLRenderer:
             # The second rendering pass expects linear colors, so it's important
             # to remove sRGB gamma in the first pass.
 
-            self._render_tile_scene(
-                tileidx=i,
-                imgidx=imgidx,
-                gpu_texture=gpu_texture,
-                orientation=orientation,
-                scalex=scalex,
-                scaley=scaley,
-                snapshot=snapshot,
-            )
+            self._render_tile_scene(i, imgidx, gpu_texture, orientation, scalex, scaley, snapshot)
 
             # Derive exposure parameters for the current tile, to be applied in the
             # second rendering pass
@@ -120,13 +106,7 @@ class GLRenderer:
             whitelevel, blacklevel = self._normalization_levels(texture)
 
             ae_gain, tile_diffuse, tile_peak = ae.autoexposure(fbo.color_attachments[0], whitelevel, clip_pct=1.0)
-            ae_gain, diffuse_white, peak_white = self._resolve_tile_exposure(
-                tileidx=i,
-                texture=texture,
-                ae_gain=ae_gain,
-                tile_diffuse=tile_diffuse,
-                tile_peak=tile_peak,
-            )
+            ae_gain, diffuse_white, peak_white = self._resolve_tile_exposure(i, texture, ae_gain, tile_diffuse, tile_peak)
 
             # Render the current tile from an offscreen texture to the screen (or
             # the given render target), applying any screen-space postprocessing
@@ -134,19 +114,19 @@ class GLRenderer:
             # in a linear color space.
 
             self._render_postprocess_tile(
-                tileidx=i,
-                imgidx=imgidx,
-                target=target,
-                gamma_override=gamma_override,
-                vpw=vpw,
-                vph=vph,
-                gpu_texture=gpu_texture,
-                scalex=scalex,
-                whitelevel=whitelevel,
-                blacklevel=blacklevel,
-                diffuse_white=diffuse_white,
-                peak_white=peak_white,
-                ae_gain=ae_gain,
+                i,
+                imgidx,
+                target,
+                gamma_override,
+                vpw,
+                vph,
+                gpu_texture,
+                scalex,
+                whitelevel,
+                blacklevel,
+                diffuse_white,
+                peak_white,
+                ae_gain,
             )
 
         self.ctx.finish()
@@ -186,7 +166,7 @@ class GLRenderer:
         w, h = self.ui.window.get_size()
         fbo = self.ctx.simple_framebuffer((w, h), components=3, dtype=dt)
         gamma_override = int(dtype == np.uint8)  # float32 => linear RGB
-        self.redraw(fbo, gamma_override=gamma_override)
+        self.redraw(fbo, gamma_override)
         self.ctx.screen.use()
         screenshot = fbo.read(components=3, dtype=dt, clamp=False)
         screenshot = np.frombuffer(screenshot, dtype=dtype)
@@ -246,18 +226,18 @@ class GLRenderer:
         target.clear(viewport=target.viewport)
         self.tile_target.fbo.color_attachments[0].use(location=0)
         uniforms = self._build_postprocess_uniforms(
-            tileidx=tileidx,
-            imgidx=imgidx,
-            gamma_override=gamma_override,
-            vpw=vpw,
-            vph=vph,
-            gpu_texture=gpu_texture,
-            scalex=scalex,
-            whitelevel=whitelevel,
-            blacklevel=blacklevel,
-            diffuse_white=diffuse_white,
-            peak_white=peak_white,
-            ae_gain=ae_gain,
+            tileidx,
+            imgidx,
+            gamma_override,
+            vpw,
+            vph,
+            gpu_texture,
+            scalex,
+            whitelevel,
+            blacklevel,
+            diffuse_white,
+            peak_white,
+            ae_gain,
         )
         for key, value in uniforms.items():
             self.postprocess[key] = value

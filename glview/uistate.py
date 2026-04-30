@@ -17,14 +17,14 @@ def cycle_split_state(state: SplitState, numfiles: int) -> SplitState:
     """Advance to the next split/layout state used by the UI."""
     if state.numtiles == 4 and state.layout == "N x 1":
         return SplitState(
-            numtiles=state.numtiles,
+            state.numtiles,
             layout="2 x 2",
             tileidx=state.tileidx,
             img_per_tile=state.img_per_tile.copy(),
         )
     if state.numtiles == 2 and state.layout == "N x 1":
         return SplitState(
-            numtiles=state.numtiles,
+            state.numtiles,
             layout="1 x N",
             tileidx=state.tileidx,
             img_per_tile=state.img_per_tile.copy(),
@@ -33,7 +33,7 @@ def cycle_split_state(state: SplitState, numfiles: int) -> SplitState:
     numtiles = (state.numtiles % 4) + 1
     tileidx = min(state.tileidx, numtiles - 1)
     return SplitState(
-        numtiles=numtiles,
+        numtiles,
         layout="N x 1",
         tileidx=tileidx,
         img_per_tile=img_per_tile,

@@ -38,7 +38,7 @@ class RenderTextureManager:
             tex.reuse(img)
         if isinstance(img, np.ndarray):
             self.files.consume_image(idx, img)
-            self.loader.release_image(idx, token=token)
+            self.loader.release_image(idx, token)
         tex.upload(piecewise)
         return tex
 
