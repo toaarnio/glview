@@ -48,26 +48,26 @@ class UIOperations:
         self.ui.window.set_mouse_visible(not self.ui.fullscreen)
 
     def reload_visible_images(self):
-        for imgidx in self.ui.img_per_tile[:self.ui.numtiles]:
+        for imgidx in self.ui.state.img_per_tile[:self.ui.state.numtiles]:
             self.ui.loader.reload_image(imgidx)
             self.ui.files.mark_pending(imgidx)
 
     def toggle_debug_mode(self):
-        self.ui.debug_mode_on = not self.ui.debug_mode_on
-        self.ui._vprint(f"debug rendering mode {self.ui.debug_mode}")
+        self.ui.config.toggle_debug_mode()
+        self.ui._vprint(f"debug rendering mode {self.ui.config.debug_mode}")
         self.ui.need_redraw = True
 
     def remove_visible_images(self):
         if self.ui.files.mutex.locked():
             return
-        indices = self.ui.img_per_tile[:self.ui.numtiles]
+        indices = self.ui.state.img_per_tile[:self.ui.state.numtiles]
         self.ui.files.drop(indices)
         self.finish_removal()
 
     def delete_current_image(self):
-        if self.ui.files.mutex.locked() or self.ui.numtiles != 1:
+        if self.ui.files.mutex.locked() or self.ui.state.numtiles != 1:
             return
-        imgidx = self.ui.img_per_tile[self.ui.tileidx]
+        imgidx = self.ui.state.img_per_tile[self.ui.state.tileidx]
         self.ui.files.delete(imgidx)
         self.finish_removal()
 
@@ -94,7 +94,7 @@ class UIOperations:
         self.ui.need_redraw = True
 
     def show_exif_for_current(self):
-        imgidx = self.ui.img_per_tile[self.ui.tileidx]
+        imgidx = self.ui.state.img_per_tile[self.ui.state.tileidx]
         filespec = self.ui.files.filespecs[imgidx]
         fileinfo = imsize.read(filespec)
         print(fileinfo)

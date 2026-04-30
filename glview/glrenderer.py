@@ -79,6 +79,7 @@ class GLRenderer:
     def redraw(self, target: moderngl.Framebuffer | None = None, gamma_override: int | None = None):
         """ Redraw the tiled image view with refreshed pan & zoom, filtering, etc. """
         t0 = time.time()
+        state = self.ui.state
         target = target or self.ctx.screen
         w, h = self.ui.window.get_size()
         vpw, vph = self.ui.viewports[0][2:]
@@ -86,8 +87,8 @@ class GLRenderer:
 
         snapshot = self.files.snapshot()
         self.textures.prune(snapshot)
-        for i in range(self.ui.numtiles):
-            imgidx = self.ui.img_per_tile[i]
+        for i in range(state.numtiles):
+            imgidx = state.img_per_tile[i]
             texture = self.textures.upload(imgidx, piecewise=False, snapshot=snapshot)
             gpu_texture, orientation, scalex, scaley = self._prepare_tile_texture(
                 imgidx=imgidx,
@@ -197,7 +198,7 @@ class GLRenderer:
 
     def _prepare_tile_texture(self, imgidx: int, texture, snapshot, vpw: int, vph: int):
         gpu_texture = texture.texture
-        gpu_texture.filter = self.filters[self.ui.texture_filter]
+        gpu_texture.filter = self.filters[self.ui.config.texture_filter]
         if not texture.mipmaps_done:
             gpu_texture.filter = self.filters["NEAREST"]
             self._vprint(f"Texture #{imgidx} not fully uploaded yet, disabling mipmaps")
@@ -216,8 +217,8 @@ class GLRenderer:
         fbo.use()
         fbo.clear(*self._get_debug_tile_color(tileidx))
         self.prog['img'] = 0
-        self.prog['mousepos'] = tuple(self.ui.mousepos[tileidx])
-        self.prog['scale'] = self.ui.scale[tileidx]
+        self.prog['mousepos'] = tuple(self.ui.state.mousepos[tileidx])
+        self.prog['scale'] = self.ui.state.scale[tileidx]
         self.prog['aspect'] = (scalex, scaley)
         self.prog['orientation'] = orientation
         self.prog['grayscale'] = (gpu_texture.components == 1)
@@ -265,14 +266,14 @@ class GLRenderer:
     def _normalization_levels(self, texture_obj):
         norm_maxvals = np.r_[1, texture_obj.maxval, texture_obj.maxval, texture_obj.percentiles, texture_obj.diffuse_white]
         norm_minvals = np.r_[0, 0, texture_obj.minval, 0, 0, 0, 0, 0]
-        return norm_maxvals[self.ui.normalize], norm_minvals[self.ui.normalize]
+        return norm_maxvals[self.ui.config.normalize], norm_minvals[self.ui.config.normalize]
 
     def _resolve_tile_exposure(self, tileidx: int, texture, ae_gain, tile_diffuse, tile_peak):
-        if self.ui.ae_per_tile[tileidx]:
+        if self.ui.state.ae_per_tile[tileidx]:
             if ae_gain is not None:
-                if self.ui.ae_reset_per_tile[tileidx]:
+                if self.ui.state.ae_reset_per_tile[tileidx]:
                     self.ae_gain_per_tile[tileidx] = ae_gain
-                    self.ui.ae_reset_per_tile[tileidx] = False
+                    self.ui.state.ae_reset_per_tile[tileidx] = False
                 else:
                     self.ae_gain_per_tile[tileidx] = ae_gain * 0.1 + self.ae_gain_per_tile[tileidx] * 0.9
                 self.ae_converged[tileidx] = np.isclose(ae_gain, self.ae_gain_per_tile[tileidx], rtol=0.01)
@@ -302,7 +303,7 @@ class GLRenderer:
         peak_white: float,
         ae_gain: float,
     ):
-        magnification = scalex * vpw / (gpu_texture.width / self.ui.scale[tileidx])
+        magnification = scalex * vpw / (gpu_texture.width / self.ui.state.scale[tileidx])
         kernel = self._sharpen(magnification)
         max_kernel_size = self.postprocess['kernel'].array_length
         return {
@@ -312,27 +313,27 @@ class GLRenderer:
             'aspect': (1.0, 1.0),
             'resolution': (vpw, vph),
             'magnification': magnification,
-            'mirror': self.ui.mirror_per_tile[tileidx],
-            'sharpen': self.ui.sharpen_per_tile[tileidx],
+            'mirror': self.ui.state.mirror_per_tile[tileidx],
+            'sharpen': self.ui.state.sharpen_per_tile[tileidx],
             'kernel': np.resize(kernel, max_kernel_size),
             'kernw': kernel.shape[0],
             'minval': blacklevel,
             'maxval': whitelevel,
             'diffuse_white': diffuse_white,
             'peak_white': peak_white,
-            'autoexpose': self.ui.ae_per_tile[tileidx],
+            'autoexpose': self.ui.state.ae_per_tile[tileidx],
             'ae_gain': ae_gain,
-            'ev': self.ui.ev,
-            'cs_in': self.ui.cs_in,
-            'cs_out': self.ui.cs_out,
-            'tonemap': int(self.ui.tonemap_per_tile[tileidx]) * 3,
-            'gamut.compress': self.ui.gamutmap_per_tile[tileidx],
-            'gamut.power': self.ui.gamut_pow,
-            'gamut.thr': self.ui.gamut_thr,
+            'ev': self.ui.config.ev,
+            'cs_in': self.ui.config.cs_in,
+            'cs_out': self.ui.config.cs_out,
+            'tonemap': int(self.ui.state.tonemap_per_tile[tileidx]) * 3,
+            'gamut.compress': self.ui.state.gamutmap_per_tile[tileidx],
+            'gamut.power': self.ui.config.gamut_pow,
+            'gamut.thr': self.ui.config.gamut_thr,
             'gamut.scale': self._gamut(imgidx),
-            'contrast': 0.25 if self.ui.tonemap_per_tile[tileidx] else 0.0,
-            'gamma': self.ui.gamma if gamma_override is None else gamma_override,
-            'debug': self.ui.debug_mode * int(self.ui.debug_mode_on),
+            'contrast': 0.25 if self.ui.state.tonemap_per_tile[tileidx] else 0.0,
+            'gamma': self.ui.config.gamma if gamma_override is None else gamma_override,
+            'debug': self.ui.config.debug_mode * int(self.ui.config.debug_mode_on),
         }
 
     def _sharpen(self, magnification: float) -> np.ndarray:
@@ -391,11 +392,11 @@ class GLRenderer:
         limit, and threshold) that control the shape of the compression curve. Per-image
         control of the 'limit' parameter is supported, but not currently used.
         """
-        if (gamut_lim := self.ui.gamut_lim) is None:  # use global limits by default
+        if (gamut_lim := self.ui.config.gamut_lim) is None:  # use global limits by default
             snapshot = self.files.snapshot()
             gamut_lim = snapshot.metadata[imgidx]['gamut_bounds']  # per-image limit
         gamut_lim = np.clip(gamut_lim, 1.01, np.inf)  # >1.01 to ensure no overflows
-        scale = self._gamut_curve(self.ui.gamut_pow, self.ui.gamut_thr, gamut_lim)
+        scale = self._gamut_curve(self.ui.config.gamut_pow, self.ui.config.gamut_thr, gamut_lim)
         return scale
 
     def _gamut_curve(self, power, thr, lim):

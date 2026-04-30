@@ -49,206 +49,6 @@ class PygletUI:
         self.images_pending = True
         self.ss_idx = 0
 
-    @property
-    def numtiles(self):
-        return self.state.numtiles
-
-    @numtiles.setter
-    def numtiles(self, value):
-        self.state.numtiles = value
-
-    @property
-    def tileidx(self):
-        return self.state.tileidx
-
-    @tileidx.setter
-    def tileidx(self, value):
-        self.state.tileidx = value
-
-    @property
-    def layout(self):
-        return self.state.layout
-
-    @layout.setter
-    def layout(self, value):
-        self.state.layout = value
-
-    @property
-    def img_per_tile(self):
-        return self.state.img_per_tile
-
-    @img_per_tile.setter
-    def img_per_tile(self, value):
-        self.state.img_per_tile = np.asarray(value, dtype=int)
-
-    @property
-    def debug_mode(self):
-        return self.config.debug_mode
-
-    @debug_mode.setter
-    def debug_mode(self, value):
-        self.config.debug_mode = value
-
-    @property
-    def debug_mode_on(self):
-        return self.config.debug_mode_on
-
-    @debug_mode_on.setter
-    def debug_mode_on(self, value):
-        self.config.debug_mode_on = value
-
-    @property
-    def scale(self):
-        return self.state.scale
-
-    @scale.setter
-    def scale(self, value):
-        self.state.scale = np.asarray(value, dtype=float)
-
-    @property
-    def mousepos(self):
-        return self.state.mousepos
-
-    @mousepos.setter
-    def mousepos(self, value):
-        self.state.mousepos = np.asarray(value, dtype=float)
-
-    @property
-    def ae_per_tile(self):
-        return self.state.ae_per_tile
-
-    @ae_per_tile.setter
-    def ae_per_tile(self, value):
-        self.state.ae_per_tile = list(value)
-
-    @property
-    def ae_reset_per_tile(self):
-        return self.state.ae_reset_per_tile
-
-    @ae_reset_per_tile.setter
-    def ae_reset_per_tile(self, value):
-        self.state.ae_reset_per_tile = list(value)
-
-    @property
-    def tonemap_per_tile(self):
-        return self.state.tonemap_per_tile
-
-    @tonemap_per_tile.setter
-    def tonemap_per_tile(self, value):
-        self.state.tonemap_per_tile = list(value)
-
-    @property
-    def gamutmap_per_tile(self):
-        return self.state.gamutmap_per_tile
-
-    @gamutmap_per_tile.setter
-    def gamutmap_per_tile(self, value):
-        self.state.gamutmap_per_tile = list(value)
-
-    @property
-    def sharpen_per_tile(self):
-        return self.state.sharpen_per_tile
-
-    @sharpen_per_tile.setter
-    def sharpen_per_tile(self, value):
-        self.state.sharpen_per_tile = list(value)
-
-    @property
-    def mirror_per_tile(self):
-        return self.state.mirror_per_tile
-
-    @mirror_per_tile.setter
-    def mirror_per_tile(self, value):
-        self.state.mirror_per_tile = list(value)
-
-    @property
-    def texture_filter(self):
-        return self.config.texture_filter
-
-    @texture_filter.setter
-    def texture_filter(self, value):
-        self.config.texture_filter = value
-
-    @property
-    def cs_in(self):
-        return self.config.cs_in
-
-    @cs_in.setter
-    def cs_in(self, value):
-        self.config.cs_in = value
-
-    @property
-    def cs_out(self):
-        return self.config.cs_out
-
-    @cs_out.setter
-    def cs_out(self, value):
-        self.config.cs_out = value
-
-    @property
-    def gamma(self):
-        return self.config.gamma
-
-    @gamma.setter
-    def gamma(self, value):
-        self.config.gamma = value
-
-    @property
-    def normalize(self):
-        return self.config.normalize
-
-    @normalize.setter
-    def normalize(self, value):
-        self.config.normalize = value
-
-    @property
-    def ev_range(self):
-        return self.config.ev_range
-
-    @ev_range.setter
-    def ev_range(self, value):
-        self.config.ev_range = value
-
-    @property
-    def ev_linear(self):
-        return self.config.ev_linear
-
-    @ev_linear.setter
-    def ev_linear(self, value):
-        self.config.ev_linear = value
-
-    @property
-    def ev(self):
-        return self.config.ev
-
-    @ev.setter
-    def ev(self, value):
-        self.config.ev = value
-
-    @property
-    def gamut_pow(self):
-        return self.config.gamut_pow
-
-    @gamut_pow.setter
-    def gamut_pow(self, value):
-        self.config.gamut_pow = np.asarray(value, dtype=float)
-
-    @property
-    def gamut_lim(self):
-        return self.config.gamut_lim
-
-    @gamut_lim.setter
-    def gamut_lim(self, value):
-        self.config.gamut_lim = np.asarray(value, dtype=float) if value is not None else None
-
-    @property
-    def gamut_thr(self):
-        return self.config.gamut_thr
-
-    @gamut_thr.setter
-    def gamut_thr(self, value):
-        self.config.gamut_thr = np.asarray(value, dtype=float)
-
     def start(self, renderer):
         """ Start the UI thread. """
         self._vprint(f"spawning {self.thread_name}...")
@@ -298,7 +98,7 @@ class PygletUI:
         display = pyglet.display.get_display()
         screen = display.get_default_screen()
         self.winsize = (screen.width // 3, screen.height // 3)
-        self.viewports = self._retile(self.numtiles, self.winsize, self.layout)
+        self.viewports = self._retile(self.state.numtiles, self.winsize, self.state.layout)
         self.window = pyglet.window.Window(*self.winsize, resizable=True, vsync=True)
         self.window.set_caption(self._caption())
         self.window.set_fullscreen(self.fullscreen)
@@ -347,7 +147,7 @@ class PygletUI:
         visible until the user performs some interaction.
         """
         snapshot = self.files.snapshot()
-        for imgidx in self.img_per_tile[:self.numtiles]:
+        for imgidx in self.state.img_per_tile[:self.state.numtiles]:
             if snapshot.image_slots[imgidx].status == ImageStatus.PENDING:
                 self.images_pending = True
                 break
@@ -369,7 +169,7 @@ class PygletUI:
         """
         if not self.need_redraw:
             snapshot = self.files.snapshot()
-            indices = self.img_per_tile[:self.numtiles]
+            indices = self.state.img_per_tile[:self.state.numtiles]
             indices = list(indices) + list(range(snapshot.numfiles))
             for imgidx in indices:
                 status = snapshot.image_slots[imgidx].status
@@ -386,18 +186,18 @@ class PygletUI:
         ver = self.version
         fps = np.median(self.renderer.fps)
         cspaces = ["sRGB", "DCI-P3", "Rec2020", "XYZ"]
-        csc = f"{cspaces[self.cs_in]} => {cspaces[self.cs_out]}"
-        norm = ["off", "max", "stretch", "99.5%", "98%", "95%", "90%", "mean"][self.normalize]
-        ae = np.asarray(["N", "Y"])[np.asarray(self.ae_per_tile).astype(int)]
-        ae = "".join(ae)[:self.numtiles]  # [False, True, True, False] => "NYYN"
-        gtm = np.asarray(["N", "Y"])[np.asarray(self.tonemap_per_tile).astype(int)]
-        gtm = "".join(gtm)[:self.numtiles]  # [False, True, True, False] => "NYYN"
-        gmap = np.asarray(["N", "Y"])[np.asarray(self.gamutmap_per_tile).astype(int)]
-        gmap = "".join(gmap)[:self.numtiles]  # [False, True, True, False] => "NYYN"
-        sharpen = np.asarray(["N", "Y"])[np.asarray(self.sharpen_per_tile).astype(int)]
-        sharpen = "".join(sharpen)[:self.numtiles]  # [False, True, True, False] => "NYYN"
-        gamma = ["off", "sRGB", "HLG", "HDR10"][self.gamma]
-        caption = f"glview {ver} | {self.ev:+1.2f}EV | norm {norm} | {csc} | "
+        csc = f"{cspaces[self.config.cs_in]} => {cspaces[self.config.cs_out]}"
+        norm = ["off", "max", "stretch", "99.5%", "98%", "95%", "90%", "mean"][self.config.normalize]
+        ae = np.asarray(["N", "Y"])[np.asarray(self.state.ae_per_tile).astype(int)]
+        ae = "".join(ae)[:self.state.numtiles]  # [False, True, True, False] => "NYYN"
+        gtm = np.asarray(["N", "Y"])[np.asarray(self.state.tonemap_per_tile).astype(int)]
+        gtm = "".join(gtm)[:self.state.numtiles]  # [False, True, True, False] => "NYYN"
+        gmap = np.asarray(["N", "Y"])[np.asarray(self.state.gamutmap_per_tile).astype(int)]
+        gmap = "".join(gmap)[:self.state.numtiles]  # [False, True, True, False] => "NYYN"
+        sharpen = np.asarray(["N", "Y"])[np.asarray(self.state.sharpen_per_tile).astype(int)]
+        sharpen = "".join(sharpen)[:self.state.numtiles]  # [False, True, True, False] => "NYYN"
+        gamma = ["off", "sRGB", "HLG", "HDR10"][self.config.gamma]
+        caption = f"glview {ver} | {self.config.ev:+1.2f}EV | norm {norm} | {csc} | "
         caption += f"ae {ae} | tonemap {gtm} | gamut {gmap} | sharpen {sharpen} | gamma {gamma} | {fps:.0f} fps"
 
         # Filenames and paths are hard to fit into the title bar in multi-tile mode,
@@ -407,10 +207,10 @@ class PygletUI:
         dirnames = [Path(fspec).parent for fspec in snapshot.filespecs]
         basenames = [Path(fspec).name for fspec in snapshot.filespecs]
         hide_dirname = np.unique(dirnames).size == 1
-        for tileidx in range(self.numtiles):
-            imgidx = self.img_per_tile[tileidx]
+        for tileidx in range(self.state.numtiles):
+            imgidx = self.state.img_per_tile[tileidx]
             label = Path(snapshot.filespecs[imgidx])
-            if self.numtiles > 1:  # show folder name or filename but not both
+            if self.state.numtiles > 1:  # show folder name or filename but not both
                 label = basenames[imgidx] if hide_dirname else dirnames[imgidx]
             caption = f"{caption} | {label} [{imgidx+1}/{snapshot.numfiles}]"
         return caption
@@ -498,22 +298,13 @@ class PygletUI:
         if changed:
             self.need_redraw = True
 
-    def _crop_borders(self, img):
-        return self.ops.crop_borders(img)
-
-    def _request_exit(self):
-        self.ops.request_exit()
-
-    def _toggle_fullscreen(self):
-        self.ops.toggle_fullscreen()
-
     def _reset_view_command(self):
         self.state.reset_view()
         self.config.reset_exposure()
         self.need_redraw = True
 
     def _toggle_linearize_current(self):
-        imgidx = self.img_per_tile[self.tileidx]
+        imgidx = self.state.img_per_tile[self.state.tileidx]
         self.files.linearize[imgidx] = not self.files.linearize[imgidx]
         self.need_redraw = True
 
@@ -560,7 +351,7 @@ class PygletUI:
 
     def _cycle_split_command(self):
         self.state.cycle_split(self.files.numfiles)
-        self.viewports = self._retile(self.numtiles, self.winsize, self.layout)
+        self.viewports = self._retile(self.state.numtiles, self.winsize, self.state.layout)
         self.window.set_caption(self._caption())
         self.need_redraw = True
 
@@ -570,7 +361,7 @@ class PygletUI:
         self.need_redraw = True
 
     def _rotate_current_image(self):
-        imgidx = self.img_per_tile[self.tileidx]
+        imgidx = self.state.img_per_tile[self.state.tileidx]
         self.files.orientations[imgidx] += 90
         self.files.orientations[imgidx] %= 360
         self.need_redraw = True
@@ -579,32 +370,11 @@ class PygletUI:
         self.state.cycle_mirror()
         self.need_redraw = True
 
-    def _reload_visible_images(self):
-        self.ops.reload_visible_images()
-
-    def _toggle_debug_mode(self):
-        self.ops.toggle_debug_mode()
-
-    def _remove_visible_images(self):
-        self.ops.remove_visible_images()
-
-    def _delete_current_image(self):
-        self.ops.delete_current_image()
-
-    def _select_tile_command(self, tileidx: int):
-        self.ops.select_tile(tileidx)
-
-    def _step_active_tile_command(self, incr: int):
-        self.ops.step_active_tile(incr)
-
-    def _step_all_tiles_command(self, incr: int):
-        self.ops.step_all_tiles(incr)
-
     def _simple_key_actions(self, keys):
         return {
-            keys.ESCAPE: self._request_exit,
-            keys.Q: self._request_exit,
-            keys.F: self._toggle_fullscreen,
+            keys.ESCAPE: self.ops.request_exit,
+            keys.Q: self.ops.request_exit,
+            keys.F: self.ops.toggle_fullscreen,
             keys.H: self._reset_view_command,
             keys.L: self._toggle_linearize_current,
             keys.G: self._cycle_gamma,
@@ -620,8 +390,8 @@ class PygletUI:
             keys.S: self._cycle_split_command,
             keys.R: self._rotate_current_image,
             keys.M: self._cycle_mirror_command,
-            keys.U: self._reload_visible_images,
-            keys.SPACE: self._toggle_debug_mode,
+            keys.U: self.ops.reload_visible_images,
+            keys.SPACE: self.ops.toggle_debug_mode,
         }
 
     def _handle_key_press(self, symbol, modifiers):
@@ -629,7 +399,7 @@ class PygletUI:
         self._vprint(f"on_key_press({keys.symbol_string(symbol)}, modifiers={keys.modifiers_string(modifiers)})")
         disallowed_keys = keys.MOD_CTRL | keys.MOD_ALT | keys.MOD_WINDOWS | keys.MOD_COMMAND
         if symbol == keys.C and modifiers == keys.MOD_CTRL:
-            self._request_exit()
+            self.ops.request_exit()
         if (modifiers & disallowed_keys) == 0:
             self._dispatch_key_press(symbol, keys)
 
@@ -637,19 +407,19 @@ class PygletUI:
         action = self._simple_key_actions(keys).get(symbol)
         if action is not None:
             action()
-        elif symbol == keys.P and self.numtiles == 2:
+        elif symbol == keys.P and self.state.numtiles == 2:
             self._flip_pair_command()
         elif symbol == keys.X:
             self.ops.show_exif_for_current()
         elif symbol == keys.W:
             self.ops.take_screenshot()
         elif symbol == keys.D:
-            self._remove_visible_images()
+            self.ops.remove_visible_images()
         elif symbol == keys.DELETE:
-            self._delete_current_image()
+            self.ops.delete_current_image()
         elif symbol in [keys._1, keys._2, keys._3, keys._4]:
             tileidx = symbol - keys._1
-            self._select_tile_command(tileidx)
+            self.ops.select_tile(tileidx)
 
     def _setup_events(self):
         self._vprint("setting up Pyglet window event handlers...")
@@ -680,7 +450,7 @@ class PygletUI:
         def on_resize(width, height):
             self._vprint(f"on_resize({width}, {height})")
             self.winsize = (width, height)
-            self.viewports = self._retile(self.numtiles, self.winsize, self.layout)
+            self.viewports = self._retile(self.state.numtiles, self.winsize, self.state.layout)
             self.need_redraw = True
             self.was_resized = True
 
@@ -751,12 +521,12 @@ class PygletUI:
                 # PageUp / PageDown
                 self._vprint(f"on_text_motion({keys.symbol_string(motion)})")
                 incr = 1 if motion == keys.MOTION_NEXT_PAGE else -1
-                self._step_active_tile_command(incr)
+                self.ops.step_active_tile(incr)
             if motion in [keys.MOTION_NEXT_WORD, keys.MOTION_PREVIOUS_WORD]:
                 # Ctrl + Left / Right
                 self._vprint(f"on_text_motion({keys.symbol_string(motion)})")
                 incr = 1 if motion == keys.MOTION_NEXT_WORD else -1
-                self._step_all_tiles_command(incr)
+                self.ops.step_all_tiles(incr)
 
     def _try(self, func):
         try:

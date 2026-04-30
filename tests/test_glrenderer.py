@@ -155,30 +155,38 @@ class GLRendererParameterTests(unittest.TestCase):
             files = FileList(["a.png"])
         if ui is None:
             ui = SimpleNamespace(
-                normalize=0,
-                ae_per_tile=[False, False, False, False],
-                ae_reset_per_tile=[False, False, False, False],
-                mirror_per_tile=[0, 0, 0, 0],
-                sharpen_per_tile=[False, False, False, False],
-                tonemap_per_tile=[False, False, False, False],
-                gamutmap_per_tile=[False, False, False, False],
-                gamut_pow=np.ones(3) * 5.0,
-                gamut_thr=np.ones(3) * 0.8,
-                gamma=1,
-                ev=0.0,
-                cs_in=0,
-                cs_out=0,
-                scale=np.ones(4),
-                debug_mode=1,
-                debug_mode_on=False,
-                gamut_lim=np.ones(3) * 1.1,
+                state=SimpleNamespace(
+                    ae_per_tile=[False, False, False, False],
+                    ae_reset_per_tile=[False, False, False, False],
+                    mirror_per_tile=[0, 0, 0, 0],
+                    sharpen_per_tile=[False, False, False, False],
+                    tonemap_per_tile=[False, False, False, False],
+                    gamutmap_per_tile=[False, False, False, False],
+                    scale=np.ones(4),
+                    mousepos=np.zeros((4, 2)),
+                    img_per_tile=np.array([0, 1, 2, 3], dtype=int),
+                    numtiles=1,
+                ),
+                config=SimpleNamespace(
+                    normalize=0,
+                    gamut_pow=np.ones(3) * 5.0,
+                    gamut_thr=np.ones(3) * 0.8,
+                    gamma=1,
+                    ev=0.0,
+                    cs_in=0,
+                    cs_out=0,
+                    debug_mode=1,
+                    debug_mode_on=False,
+                    gamut_lim=np.ones(3) * 1.1,
+                    texture_filter="NEAREST",
+                ),
             )
         renderer = GLRenderer(ui, files, loader=SimpleNamespace(), verbose=False)
         renderer.postprocess = {"kernel": SimpleNamespace(array_length=49)}
         return renderer
 
     def test_normalization_levels_follow_selected_mode(self):
-        renderer = self._renderer(ui=SimpleNamespace(normalize=3))
+        renderer = self._renderer(ui=SimpleNamespace(config=SimpleNamespace(normalize=3)))
         texture_obj = SimpleNamespace(
             maxval=10.0,
             minval=0.25,
@@ -193,8 +201,10 @@ class GLRendererParameterTests(unittest.TestCase):
 
     def test_resolve_tile_exposure_resets_or_falls_back_as_needed(self):
         ui = SimpleNamespace(
-            ae_per_tile=[True, False, False, False],
-            ae_reset_per_tile=[True, False, False, False],
+            state=SimpleNamespace(
+                ae_per_tile=[True, False, False, False],
+                ae_reset_per_tile=[True, False, False, False],
+            ),
         )
         renderer = self._renderer(ui=ui)
         renderer.ae_gain_per_tile = np.ones(4)
@@ -212,7 +222,7 @@ class GLRendererParameterTests(unittest.TestCase):
         self.assertEqual(ae_gain, 2.0)
         self.assertEqual(diffuse_white, 3.0)
         self.assertEqual(peak_white, 4.0)
-        self.assertFalse(renderer.ui.ae_reset_per_tile[0])
+        self.assertFalse(renderer.ui.state.ae_reset_per_tile[0])
         self.assertTrue(renderer.ae_converged[0])
 
         ae_gain, diffuse_white, peak_white = renderer._resolve_tile_exposure(
@@ -230,23 +240,27 @@ class GLRendererParameterTests(unittest.TestCase):
 
     def test_build_postprocess_uniforms_reflects_ui_flags(self):
         ui = SimpleNamespace(
-            normalize=0,
-            ae_per_tile=[True, False, False, False],
-            ae_reset_per_tile=[False, False, False, False],
-            mirror_per_tile=[2, 0, 0, 0],
-            sharpen_per_tile=[True, False, False, False],
-            tonemap_per_tile=[True, False, False, False],
-            gamutmap_per_tile=[True, False, False, False],
-            gamut_pow=np.array([5.0, 6.0, 7.0]),
-            gamut_thr=np.array([0.8, 0.7, 0.6]),
-            gamma=3,
-            ev=1.25,
-            cs_in=2,
-            cs_out=1,
-            scale=np.array([2.0, 1.0, 1.0, 1.0]),
-            debug_mode=4,
-            debug_mode_on=True,
-            gamut_lim=np.array([1.1, 1.2, 1.3]),
+            state=SimpleNamespace(
+                ae_per_tile=[True, False, False, False],
+                ae_reset_per_tile=[False, False, False, False],
+                mirror_per_tile=[2, 0, 0, 0],
+                sharpen_per_tile=[True, False, False, False],
+                tonemap_per_tile=[True, False, False, False],
+                gamutmap_per_tile=[True, False, False, False],
+                scale=np.array([2.0, 1.0, 1.0, 1.0]),
+            ),
+            config=SimpleNamespace(
+                normalize=0,
+                gamut_pow=np.array([5.0, 6.0, 7.0]),
+                gamut_thr=np.array([0.8, 0.7, 0.6]),
+                gamma=3,
+                ev=1.25,
+                cs_in=2,
+                cs_out=1,
+                debug_mode=4,
+                debug_mode_on=True,
+                gamut_lim=np.array([1.1, 1.2, 1.3]),
+            ),
         )
         renderer = self._renderer(ui=ui)
         gpu_texture = SimpleNamespace(width=100)
@@ -294,8 +308,10 @@ class GLRendererParameterTests(unittest.TestCase):
 
     def test_render_tile_scene_populates_first_pass_uniforms(self):
         ui = SimpleNamespace(
-            mousepos=np.array([[0.25, -0.5], [0.0, 0.0], [0.0, 0.0], [0.0, 0.0]]),
-            scale=np.array([1.5, 1.0, 1.0, 1.0]),
+            state=SimpleNamespace(
+                mousepos=np.array([[0.25, -0.5], [0.0, 0.0], [0.0, 0.0], [0.0, 0.0]]),
+                scale=np.array([1.5, 1.0, 1.0, 1.0]),
+            ),
         )
         renderer = self._renderer(ui=ui)
         renderer.tile_target = SimpleNamespace(fbo=SimpleNamespace(use=mock.Mock(), clear=mock.Mock()))
@@ -374,21 +390,25 @@ class GLRendererParameterTests(unittest.TestCase):
 
     def test_build_postprocess_uniforms_prefers_gamma_override(self):
         ui = SimpleNamespace(
-            mirror_per_tile=[0, 0, 0, 0],
-            sharpen_per_tile=[False, False, False, False],
-            ae_per_tile=[False, False, False, False],
-            tonemap_per_tile=[False, False, False, False],
-            gamutmap_per_tile=[False, False, False, False],
-            gamut_pow=np.ones(3) * 5.0,
-            gamut_thr=np.ones(3) * 0.8,
-            gamma=3,
-            ev=0.0,
-            cs_in=0,
-            cs_out=0,
-            scale=np.ones(4),
-            debug_mode=1,
-            debug_mode_on=False,
-            gamut_lim=np.ones(3) * 1.1,
+            state=SimpleNamespace(
+                mirror_per_tile=[0, 0, 0, 0],
+                sharpen_per_tile=[False, False, False, False],
+                ae_per_tile=[False, False, False, False],
+                tonemap_per_tile=[False, False, False, False],
+                gamutmap_per_tile=[False, False, False, False],
+                scale=np.ones(4),
+            ),
+            config=SimpleNamespace(
+                gamut_pow=np.ones(3) * 5.0,
+                gamut_thr=np.ones(3) * 0.8,
+                gamma=3,
+                ev=0.0,
+                cs_in=0,
+                cs_out=0,
+                debug_mode=1,
+                debug_mode_on=False,
+                gamut_lim=np.ones(3) * 1.1,
+            ),
         )
         renderer = self._renderer(ui=ui)
 
@@ -412,7 +432,7 @@ class GLRendererParameterTests(unittest.TestCase):
         self.assertEqual(uniforms["gamma"], 0)
 
     def test_screenshot_uses_gamma_override_without_mutating_ui(self):
-        ui = SimpleNamespace(window=SimpleNamespace(get_size=lambda: (20, 10)), gamma=3)
+        ui = SimpleNamespace(window=SimpleNamespace(get_size=lambda: (20, 10)), config=SimpleNamespace(gamma=3))
         renderer = GLRenderer(ui, files=SimpleNamespace(), loader=SimpleNamespace(), verbose=False)
         renderer.ctx = SimpleNamespace(
             simple_framebuffer=lambda size, components, dtype: SimpleNamespace(
@@ -427,7 +447,7 @@ class GLRendererParameterTests(unittest.TestCase):
         redraw_mock.assert_called_once()
         _, kwargs = redraw_mock.call_args
         self.assertEqual(kwargs["gamma_override"], 1)
-        self.assertEqual(renderer.ui.gamma, 3)
+        self.assertEqual(renderer.ui.config.gamma, 3)
         self.assertEqual(screenshot.shape, (10, 20, 3))
 
 

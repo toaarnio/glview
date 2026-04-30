@@ -287,12 +287,12 @@ def main():  # noqa: PLR0915
 
     ui = pygletui.PygletUI(loader.files, ord(config.debug) - ord("0"), bool(config.verbose))
     ui.version = version.__version__
-    ui.texture_filter = "LINEAR" if config.smooth else "NEAREST"
-    ui.normalize = NORMS[config.normalize]
-    ui.cs_in = COLORSPACES[config.idt]
-    ui.cs_out = COLORSPACES[config.odt]
+    ui.config.texture_filter = "LINEAR" if config.smooth else "NEAREST"
+    ui.config.normalize = NORMS[config.normalize]
+    ui.config.cs_in = COLORSPACES[config.idt]
+    ui.config.cs_out = COLORSPACES[config.odt]
     ui.fullscreen = config.fullscreen
-    ui.numtiles = config.numtiles
+    ui.state.numtiles = config.numtiles
 
     renderer = glrenderer.GLRenderer(ui, loader.files, loader, config.verbose)
     ui.start(renderer)

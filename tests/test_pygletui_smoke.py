@@ -77,14 +77,14 @@ class PygletUISmokeTests(unittest.TestCase):
         ui.renderer = _FakeRenderer(loader=ui.loader)
         ui.window = _FakeWindow()
         ui.winsize = (120, 80)
-        ui.viewports = ui._retile(ui.numtiles, ui.winsize, ui.layout)
+        ui.viewports = ui._retile(ui.state.numtiles, ui.winsize, ui.state.layout)
         ui.event_loop = type("EventLoop", (), {"has_exit": False})()
         return ui
 
     def test_poll_loading_requests_redraw_when_visible_images_finish_loading(self):
         ui = self._ui(["a.png", "b.png"])
-        ui.numtiles = 2
-        ui.img_per_tile = [0, 1, 2, 3]
+        ui.state.numtiles = 2
+        ui.state.img_per_tile = np.array([0, 1, 2, 3], dtype=int)
         ui.images_pending = True
         ui.need_redraw = False
         ui.files.mark_loaded(0, np.zeros((1, 1, 3), dtype=np.uint8))
@@ -97,8 +97,8 @@ class PygletUISmokeTests(unittest.TestCase):
 
     def test_poll_loading_keeps_waiting_when_any_visible_image_is_pending(self):
         ui = self._ui(["a.png", "b.png"])
-        ui.numtiles = 2
-        ui.img_per_tile = [0, 1, 2, 3]
+        ui.state.numtiles = 2
+        ui.state.img_per_tile = np.array([0, 1, 2, 3], dtype=int)
         ui.images_pending = False
         ui.need_redraw = False
         ui.files.mark_loaded(0, np.zeros((1, 1, 3), dtype=np.uint8))
@@ -110,8 +110,8 @@ class PygletUISmokeTests(unittest.TestCase):
 
     def test_upload_textures_prioritizes_visible_images_and_stops_after_one_upload(self):
         ui = self._ui(["a.png", "b.png", "c.png"])
-        ui.numtiles = 2
-        ui.img_per_tile = [2, 1, 0, 3]
+        ui.state.numtiles = 2
+        ui.state.img_per_tile = np.array([2, 1, 0, 3], dtype=int)
         ui.need_redraw = False
         ui.files.mark_released(0)
         ui.files.mark_loaded(1, np.zeros((1, 1, 3), dtype=np.uint8))
@@ -163,8 +163,8 @@ class PygletUISmokeTests(unittest.TestCase):
 
     def test_caption_uses_filenames_when_all_files_share_directory(self):
         ui = self._ui(["/tmp/set/a.png", "/tmp/set/b.png"])
-        ui.numtiles = 2
-        ui.img_per_tile = [0, 1, 2, 3]
+        ui.state.numtiles = 2
+        ui.state.img_per_tile = np.array([0, 1, 2, 3], dtype=int)
 
         caption = ui._caption()
 
@@ -173,8 +173,8 @@ class PygletUISmokeTests(unittest.TestCase):
 
     def test_caption_uses_directory_names_in_multi_tile_mixed_directory_mode(self):
         ui = self._ui(["/tmp/set1/a.png", "/var/set2/b.png"])
-        ui.numtiles = 2
-        ui.img_per_tile = [0, 1, 2, 3]
+        ui.state.numtiles = 2
+        ui.state.img_per_tile = np.array([0, 1, 2, 3], dtype=int)
 
         caption = ui._caption()
 
@@ -192,14 +192,14 @@ class PygletUISmokeTests(unittest.TestCase):
 
     def test_reload_marks_visible_images_pending_and_clears_payloads(self):
         ui = self._ui(["a.png", "b.png"])
-        ui.numtiles = 2
-        ui.img_per_tile = [0, 1, 2, 3]
+        ui.state.numtiles = 2
+        ui.state.img_per_tile = np.array([0, 1, 2, 3], dtype=int)
         ui.files.mark_loaded(0, np.zeros((1, 1, 3), dtype=np.uint8))
         ui.files.mark_loaded(1, np.ones((1, 1, 3), dtype=np.uint8))
         ui.files.consume_image(0, np.full((1, 1, 3), 2, dtype=np.uint8))
         ui.files.consume_image(1, np.full((1, 1, 3), 3, dtype=np.uint8))
 
-        ui._reload_visible_images()
+        ui.ops.reload_visible_images()
 
         self.assertEqual(ui.files.image_status(0), ImageStatus.PENDING)
         self.assertEqual(ui.files.image_status(1), ImageStatus.PENDING)
@@ -214,22 +214,22 @@ class PygletUISmokeTests(unittest.TestCase):
 
         ui._cycle_split_command()
 
-        self.assertEqual(ui.numtiles, 2)
-        self.assertEqual(ui.layout, "N x 1")
+        self.assertEqual(ui.state.numtiles, 2)
+        self.assertEqual(ui.state.layout, "N x 1")
         self.assertEqual(ui.viewports[1], (60, 0, 60, 80))
         self.assertTrue(ui.need_redraw)
         self.assertIsNotNone(ui.window.caption)
 
     def test_remove_visible_images_repairs_view_and_requests_redraw(self):
         ui = self._ui(["a.png", "b.png", "c.png", "d.png"])
-        ui.numtiles = 2
-        ui.img_per_tile = [2, 3, 0, 1]
+        ui.state.numtiles = 2
+        ui.state.img_per_tile = np.array([2, 3, 0, 1], dtype=int)
         ui.need_redraw = False
 
-        ui._remove_visible_images()
+        ui.ops.remove_visible_images()
 
         self.assertEqual(ui.files.numfiles, 2)
-        np.testing.assert_array_equal(ui.img_per_tile, np.array([0, 1, 0, 1]))
+        np.testing.assert_array_equal(ui.state.img_per_tile, np.array([0, 1, 0, 1]))
         self.assertTrue(ui.need_redraw)
         self.assertIsNotNone(ui.window.caption)
 
