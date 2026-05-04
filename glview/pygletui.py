@@ -47,22 +47,32 @@ class PygletUI:
         self.resize_deadline = 0.0
 
     def start(self, renderer):
-        """ Start the UI thread. """
+        """ Start the UI on a dedicated thread. """
         self._vprint(f"spawning {self.thread_name}...")
-        self.renderer = renderer
-        self.loader = renderer.loader
-        self.running = True
+        self._attach_renderer(renderer)
         self.ui_thread = threading.Thread(target=lambda: self._try(self._pyglet_runner), name=self.thread_name)
         self.ui_thread.daemon = True  # terminate when main process ends
         self.ui_thread.start()
+
+    def run(self, renderer):
+        """Run the UI on the current thread."""
+        self._attach_renderer(renderer)
+        self._try(self._pyglet_runner)
 
     def stop(self):
         """ Stop the UI thread. """
         self._vprint(f"killing {self.thread_name}...")
         self.running = False
-        self.event_loop.has_exit = True
-        self.ui_thread.join()
+        if self.event_loop is not None:
+            self.event_loop.has_exit = True
+        if self.ui_thread is not None:
+            self.ui_thread.join()
         self._vprint(f"{self.thread_name} killed")
+
+    def _attach_renderer(self, renderer):
+        self.renderer = renderer
+        self.loader = renderer.loader
+        self.running = True
 
     def _pyglet_runner(self):
         self._init_pyglet()

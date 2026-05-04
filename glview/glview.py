@@ -360,11 +360,19 @@ def main():  # noqa: PLR0915
     ui.state.numtiles = config.numtiles
 
     renderer = glrenderer.GLRenderer(ui, loader.files, loader, config.verbose)
-    ui.start(renderer)
-    loader.start()
-    main_loop([ui, loader])
-    loader.stop()
-    ui.stop()
+    if sys.platform == "darwin":
+        loader.start()
+        try:
+            ui.run(renderer)
+        finally:
+            if loader.running:
+                loader.stop()
+    else:
+        ui.start(renderer)
+        loader.start()
+        main_loop([ui, loader])
+        loader.stop()
+        ui.stop()
 
 
 def main_loop(modules):
