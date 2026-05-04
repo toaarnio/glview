@@ -1,5 +1,3 @@
-#version 300 es
-
 uniform vec2 aspect;
 uniform float scale;
 uniform vec2 mousepos;

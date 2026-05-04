@@ -55,19 +55,34 @@ class GLRenderer:
         self._vprint("compiling shaders...")
         # Initialize the main shader
         shader_path = os.path.dirname(os.path.realpath(__file__))
-        vshader = open(os.path.join(shader_path, "panzoom.vs"), encoding="utf-8").read()
-        fshader = open(os.path.join(shader_path, "texture.fs"), encoding="utf-8").read()
+        vshader = self._load_shader(os.path.join(shader_path, "panzoom.vs"))
+        fshader = self._load_shader(os.path.join(shader_path, "texture.fs"), fragment=True)
         self.prog = self.ctx.program(vertex_shader=vshader, fragment_shader=fshader)
         self.vbo = self.ctx.buffer(struct.pack('8f', -1.0, -1.0, -1.0, 1.0, 1.0, -1.0, 1.0, 1.0))
         self.vao = self.ctx.vertex_array(self.prog, [(self.vbo, "2f", "vert")])
         # Initialize the screen-space postprocessing shader
-        fshader = open(os.path.join(shader_path, "postprocess.fs"), encoding="utf-8").read()
+        fshader = self._load_shader(os.path.join(shader_path, "postprocess.fs"), fragment=True)
         self.postprocess = self.ctx.program(vertex_shader=vshader, fragment_shader=fshader)
         self.vao_post = self.ctx.vertex_array(self.postprocess, [(self.vbo, "2f", "vert")])
         self.tile_target = rendertargets.TileRenderTarget(self.ctx, self.filters)
         self.textures = rendertextures.RenderTextureManager(self.ctx, self.files, self.loader, self.verbose)
         self.tprev = time.time()
         _ = self.ctx.error  # clear the GL error flag (workaround for a bug that prevents interoperability with Pyglet)
+
+    def _load_shader(self, path: str, fragment: bool = False) -> str:
+        with open(path, encoding="utf-8") as fh:
+            body = fh.read().lstrip()
+        if self._is_gles_context():
+            header = "#version 300 es\n"
+            if fragment:
+                header += "\nprecision highp float;\n"
+        else:
+            header = "#version 330\n"
+        return f"{header}\n{body}"
+
+    def _is_gles_context(self) -> bool:
+        version = str(self.ctx.info.get("GL_VERSION", ""))
+        return "OpenGL ES" in version or "GLES" in version
 
     def redraw(self, target: moderngl.Framebuffer | None = None, gamma_override: int | None = None):
         """ Redraw the tiled image view with refreshed pan & zoom, filtering, etc. """

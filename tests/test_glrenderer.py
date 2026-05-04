@@ -1,4 +1,5 @@
 import unittest
+from pathlib import Path
 from types import SimpleNamespace
 from unittest import mock
 
@@ -456,6 +457,23 @@ class GLRendererParameterTests(unittest.TestCase):
         redraw_mock.assert_called_once_with(mock.ANY, 1)
         self.assertEqual(renderer.ui.config.gamma, 3)
         self.assertEqual(screenshot.shape, (10, 20, 3))
+
+    def test_load_shader_uses_desktop_or_es_headers_based_on_context(self):
+        renderer = self._renderer()
+        renderer.ctx = SimpleNamespace(info={"GL_VERSION": "4.1 Metal - 89.4"})
+        shader_path = Path(__file__).resolve().parent.parent / "glview" / "texture.fs"
+
+        desktop = renderer._load_shader(str(shader_path), fragment=True)
+
+        self.assertTrue(desktop.startswith("#version 330\n"))
+        self.assertNotIn("precision highp float;", desktop)
+
+        renderer.ctx = SimpleNamespace(info={"GL_VERSION": "OpenGL ES 3.2 Mesa"})
+
+        es = renderer._load_shader(str(shader_path), fragment=True)
+
+        self.assertTrue(es.startswith("#version 300 es\n"))
+        self.assertIn("precision highp float;", es)
 
     def test_redraw_returns_none_for_zero_sized_viewport(self):
         ui = SimpleNamespace(

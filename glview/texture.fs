@@ -1,7 +1,3 @@
-#version 300 es
-
-precision highp float;
-
 uniform sampler2D img;
 uniform int orientation;
 uniform bool degamma;

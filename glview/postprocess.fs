@@ -1,7 +1,3 @@
-#version 300 es
-
-precision highp float;
-
 // Inputs & outputs
 
 in vec2 texcoords;
