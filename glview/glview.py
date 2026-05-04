@@ -11,6 +11,7 @@ import threading               # built-in library
 import pathlib                 # built-in library
 import types                   # built-in library
 from dataclasses import dataclass  # built-in library
+from collections.abc import MutableSequence  # built-in library
 import numpy as np             # pip install numpy
 import natsort                 # pip install natsort
 import psutil                  # pip install psutil
@@ -31,14 +32,79 @@ COLORSPACES = {"sRGB": 0, "P3": 1, "Rec2020": 2, "XYZ": 3}
 NORMS = {"off": 0, "max": 1, "stretch": 2, "99": 3, "98": 4, "95": 5, "90": 6, "mean": 7}
 
 
+@dataclass
+class FileEntry:
+    filespec: str
+    orientation: int
+    linearize: bool
+    image_slot: ImageSlot
+    loaded_image: object = None
+    image: object = None
+    metadata: object = None
+
+
 @dataclass(frozen=True)
 class FileListSnapshot:
+    entries: tuple
     filespecs: tuple
     numfiles: int
     orientations: tuple
     linearize: tuple
     image_slots: tuple
     metadata: tuple
+
+
+class FileListFieldLengthError(ValueError):
+    """Assigned FileList field data must match the number of entries."""
+
+
+class ImmutableFieldViewError(TypeError):
+    """FileList field views do not support structural edits."""
+
+
+class _EntryFieldView(MutableSequence):
+    """List-like view over a specific field of FileList entries."""
+
+    __hash__ = None
+
+    def __init__(self, file_list, field_name):
+        self._file_list = file_list
+        self._field_name = field_name
+
+    @property
+    def _entries(self):
+        return self._file_list.entries
+
+    def __len__(self):
+        return len(self._entries)
+
+    def __getitem__(self, idx):
+        if isinstance(idx, slice):
+            return [getattr(entry, self._field_name) for entry in self._entries[idx]]
+        return getattr(self._entries[idx], self._field_name)
+
+    def __setitem__(self, idx, value):
+        if isinstance(idx, slice):
+            indices = range(*idx.indices(len(self)))
+            values = list(value)
+            if len(indices) != len(values):
+                raise FileListFieldLengthError
+            for entry_idx, item in zip(indices, values, strict=True):
+                setattr(self._entries[entry_idx], self._field_name, item)
+            return
+        setattr(self._entries[idx], self._field_name, value)
+
+    def __delitem__(self, _idx):
+        raise ImmutableFieldViewError
+
+    def insert(self, _idx, _value):
+        raise ImmutableFieldViewError
+
+    def __eq__(self, other):
+        return list(self) == list(other)
+
+    def __repr__(self):
+        return repr(list(self))
 
 
 class FileList:
@@ -50,17 +116,82 @@ class FileList:
         be removed from the list, not added or reordered.
         """
         self.mutex = threading.Lock()
-        self.filespecs = filespecs
-        self.numfiles = len(filespecs)
-        self.orientations = [0] * self.numfiles
-        self.linearize = [False] * self.numfiles
         self._next_slot_id = 0
-        self.image_slots = [self._new_slot() for _ in range(self.numfiles)]
-        self.loaded_images = [None] * self.numfiles
-        self.images = [None] * self.numfiles  # payloads already consumed by the UI/render thread
-        self.metadata = [None] * self.numfiles
+        self.entries = [
+            FileEntry(
+                filespec=filespec,
+                orientation=0,
+                linearize=False,
+                image_slot=self._new_slot(),
+            )
+            for filespec in filespecs
+        ]
+        self._filespecs_view = _EntryFieldView(self, "filespec")
+        self._orientations_view = _EntryFieldView(self, "orientation")
+        self._linearize_view = _EntryFieldView(self, "linearize")
+        self._image_slots_view = _EntryFieldView(self, "image_slot")
+        self._loaded_images_view = _EntryFieldView(self, "loaded_image")
+        self._images_view = _EntryFieldView(self, "image")
+        self._metadata_view = _EntryFieldView(self, "metadata")
         self._update()
         self.reindexed = False
+
+    @property
+    def filespecs(self):
+        return self._filespecs_view
+
+    @filespecs.setter
+    def filespecs(self, values):
+        self._replace_entry_field("filespec", values)
+
+    @property
+    def orientations(self):
+        return self._orientations_view
+
+    @orientations.setter
+    def orientations(self, values):
+        self._replace_entry_field("orientation", values)
+
+    @property
+    def linearize(self):
+        return self._linearize_view
+
+    @linearize.setter
+    def linearize(self, values):
+        self._replace_entry_field("linearize", values)
+
+    @property
+    def image_slots(self):
+        return self._image_slots_view
+
+    @image_slots.setter
+    def image_slots(self, values):
+        self._replace_entry_field("image_slot", values)
+
+    @property
+    def loaded_images(self):
+        return self._loaded_images_view
+
+    @loaded_images.setter
+    def loaded_images(self, values):
+        self._replace_entry_field("loaded_image", values)
+
+    @property
+    def images(self):
+        """Payloads already consumed by the UI/render thread."""
+        return self._images_view
+
+    @images.setter
+    def images(self, values):
+        self._replace_entry_field("image", values)
+
+    @property
+    def metadata(self):
+        return self._metadata_view
+
+    @metadata.setter
+    def metadata(self, values):
+        self._replace_entry_field("metadata", values)
 
     def ready_to_upload(self, idx):
         """
@@ -70,66 +201,66 @@ class FileList:
         return self.image_status(idx) not in [ImageStatus.PENDING, ImageStatus.INVALID]
 
     def image_status(self, idx) -> ImageStatus:
-        return self.image_slots[idx].status
+        return self.entries[idx].image_slot.status
 
     def image_revision(self, idx) -> int:
-        return self.image_slots[idx].revision
+        return self.entries[idx].image_slot.revision
 
     def image_slot_id(self, idx) -> int:
-        return self.image_slots[idx].slot_id
+        return self.entries[idx].image_slot.slot_id
 
     def image_token(self, idx):
-        slot = self.image_slots[idx]
+        slot = self.entries[idx].image_slot
         return (slot.slot_id, slot.revision)
 
     def mark_pending(self, idx):
-        self.image_slots[idx].status = ImageStatus.PENDING
-        self.image_slots[idx].revision += 1
-        self.loaded_images[idx] = None
-        self.images[idx] = None
+        entry = self.entries[idx]
+        entry.image_slot.status = ImageStatus.PENDING
+        entry.image_slot.revision += 1
+        entry.loaded_image = None
+        entry.image = None
 
     def mark_loaded(self, idx, img):
-        self.image_slots[idx].status = ImageStatus.LOADED
-        self.loaded_images[idx] = img
+        entry = self.entries[idx]
+        entry.image_slot.status = ImageStatus.LOADED
+        entry.loaded_image = img
 
     def mark_released(self, idx):
-        self.image_slots[idx].status = ImageStatus.RELEASED
-        self.loaded_images[idx] = None
+        entry = self.entries[idx]
+        entry.image_slot.status = ImageStatus.RELEASED
+        entry.loaded_image = None
 
     def mark_invalid(self, idx):
-        self.image_slots[idx].status = ImageStatus.INVALID
-        self.loaded_images[idx] = None
-        self.images[idx] = None
+        entry = self.entries[idx]
+        entry.image_slot.status = ImageStatus.INVALID
+        entry.loaded_image = None
+        entry.image = None
 
     def consume_image(self, idx, img):
-        self.images[idx] = img
+        self.entries[idx].image = img
 
     def clear_consumed_image(self, idx):
-        self.images[idx] = None
+        self.entries[idx].image = None
 
     def snapshot(self) -> FileListSnapshot:
         """Return a consistent read-only view of the catalog state."""
         with self.mutex:
+            entries = tuple(self.entries)
             return FileListSnapshot(
-                filespecs=tuple(self.filespecs),
+                entries=entries,
+                filespecs=tuple(entry.filespec for entry in entries),
                 numfiles=self.numfiles,
-                orientations=tuple(self.orientations),
-                linearize=tuple(self.linearize),
-                image_slots=tuple(self.image_slots),
-                metadata=tuple(self.metadata),
+                orientations=tuple(entry.orientation for entry in entries),
+                linearize=tuple(entry.linearize for entry in entries),
+                image_slots=tuple(entry.image_slot for entry in entries),
+                metadata=tuple(entry.metadata for entry in entries),
             )
 
     def drop(self, indices):
         """ Drop the given images from this FileList, do not delete the files. """
         with self.mutex:
             try:
-                self.filespecs = self._drop(self.filespecs, indices)
-                self.orientations = self._drop(self.orientations, indices)
-                self.linearize = self._drop(self.linearize, indices)
-                self.image_slots = self._drop(self.image_slots, indices)
-                self.loaded_images = self._drop(self.loaded_images, indices)
-                self.metadata = self._drop(self.metadata, indices)
-                self.images = self._drop(self.images, indices)
+                self.entries = self._drop(self.entries, indices)
                 self._update()
                 print(f"[{threading.current_thread().name}] Dropped images {indices}")
             except IndexError:
@@ -139,14 +270,8 @@ class FileList:
         """ Remove the given image from this FileList and delete the file from disk. """
         with self.mutex:
             try:
-                filespec = self.filespecs[idx]
-                self.filespecs = self._drop(self.filespecs, [idx])
-                self.orientations = self._drop(self.orientations, [idx])
-                self.linearize = self._drop(self.linearize, [idx])
-                self.image_slots = self._drop(self.image_slots, [idx])
-                self.loaded_images = self._drop(self.loaded_images, [idx])
-                self.metadata = self._drop(self.metadata, [idx])
-                self.images = self._drop(self.images, [idx])
+                filespec = self.entries[idx].filespec
+                self.entries = self._drop(self.entries, [idx])
                 self._update()
                 os.remove(filespec)
                 print(f"[{threading.current_thread().name}] Deleted {filespec}")
@@ -160,8 +285,14 @@ class FileList:
         return arr
 
     def _update(self):
-        self.numfiles = len(self.filespecs)
+        self.numfiles = len(self.entries)
         self.reindexed = True
+
+    def _replace_entry_field(self, field_name, values):
+        if len(values) != len(self.entries):
+            raise FileListFieldLengthError
+        for entry, value in zip(self.entries, values, strict=True):
+            setattr(entry, field_name, value)
 
     def _new_slot(self):
         slot = ImageSlot(slot_id=self._next_slot_id)
