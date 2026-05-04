@@ -268,6 +268,35 @@ class PygletUISmokeTests(unittest.TestCase):
         self.assertEqual(ui.state.img_per_tile[0], 0)
         self.assertEqual(window.events, ["on_draw"])
 
+    def test_event_loop_idle_stops_after_loader_removes_last_file(self):
+        ui = self._ui(["a.png"])
+        ui.loader.apply_updates_result = True
+        ui.files.drop([0])
+        ui.need_redraw = False
+        ui._keyboard_zoom_pan = mock.Mock()
+        ui._smooth_exposure = mock.Mock()
+        ui._poll_loading = mock.Mock()
+        ui._upload_textures = mock.Mock()
+        import pyglet
+        original_windows = pyglet.app.windows
+        window = _FakeWindow()
+        pyglet.app.windows = [window]
+        try:
+            loop = ui._create_eventloop()
+            delay = loop.idle()
+        finally:
+            pyglet.app.windows = original_windows
+
+        self.assertEqual(delay, 1/60)
+        self.assertEqual(ui.loader.apply_updates_calls, 1)
+        self.assertFalse(ui.running)
+        self.assertTrue(ui.event_loop.has_exit)
+        ui._keyboard_zoom_pan.assert_not_called()
+        ui._smooth_exposure.assert_not_called()
+        ui._poll_loading.assert_not_called()
+        ui._upload_textures.assert_not_called()
+        self.assertEqual(window.events, [])
+
     def test_event_loop_idle_skips_draw_while_resize_is_still_in_progress(self):
         ui = self._ui(["a.png"])
         ui.need_redraw = True

@@ -90,6 +90,8 @@ class PygletUI:
                 removed = parent.loader.apply_updates()
                 if removed:
                     parent.ops.finish_removal()
+                    if parent.running is False:
+                        return 1/60
                 parent._keyboard_zoom_pan()
                 parent._smooth_exposure()
                 parent._poll_loading()
@@ -165,6 +167,9 @@ class PygletUI:
         visible until the user performs some interaction.
         """
         snapshot = self.files.snapshot()
+        if snapshot.numfiles == 0:
+            self.images_pending = False
+            return
         for imgidx in self.state.img_per_tile[:self.state.numtiles]:
             if snapshot.entries[imgidx].status == ImageStatus.PENDING:
                 self.images_pending = True
@@ -187,6 +192,8 @@ class PygletUI:
         """
         if not self.need_redraw:
             snapshot = self.files.snapshot()
+            if snapshot.numfiles == 0:
+                return
             indices = self.state.img_per_tile[:self.state.numtiles]
             indices = list(indices) + list(range(snapshot.numfiles))
             for imgidx in indices:
@@ -201,6 +208,8 @@ class PygletUI:
 
     def _caption(self):
         snapshot = self.files.snapshot()
+        if snapshot.numfiles == 0:
+            return f"glview {self.version}"
         ver = self.version
         fps = np.median(self.renderer.fps)
         cspaces = ["sRGB", "DCI-P3", "Rec2020", "XYZ"]
