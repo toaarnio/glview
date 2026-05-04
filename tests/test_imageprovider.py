@@ -8,7 +8,7 @@ import numpy as np
 
 from glview.glview import FileList
 from glview.imagestate import ImageStatus
-from glview.imageprovider import ImageProvider
+from glview.imageprovider import ImageProvider, LoadRequest
 
 
 def _config(**overrides):
@@ -156,6 +156,22 @@ class ImageProviderTests(unittest.TestCase):
 
         self.assertEqual(provider.files.image_status(0), ImageStatus.PENDING)
         self.assertEqual(provider._loader_statuses[0], ImageStatus.PENDING)
+
+    def test_publish_result_ignores_decode_finished_after_release(self):
+        provider = self._provider(["a.png"])
+        request = LoadRequest(
+            idx=0,
+            token=provider.files.image_token(0),
+            filespec="a.png",
+            linearize=False,
+        )
+        provider.release_image(0, token=request.token)
+        with provider.files.mutex:
+            provider._drain_requests_locked()
+            published = provider._publish_result_locked(request, np.ones((1, 1, 3), dtype=np.uint8))
+
+        self.assertFalse(published)
+        self.assertEqual(provider._loader_statuses[0], ImageStatus.RELEASED)
 
     def test_load_single_returns_none_for_non_pending_slot(self):
         provider = self._provider(["a.png"])
