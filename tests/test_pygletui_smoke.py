@@ -42,9 +42,11 @@ class _FakeLoader:
     def __init__(self):
         self.reload_calls = []
         self.apply_updates_calls = 0
+        self.apply_updates_result = False
 
     def apply_updates(self):
         self.apply_updates_calls += 1
+        return self.apply_updates_result
 
     def reload_image(self, imgidx):
         self.reload_calls.append(imgidx)
@@ -232,6 +234,34 @@ class PygletUISmokeTests(unittest.TestCase):
         np.testing.assert_array_equal(ui.state.img_per_tile, np.array([0, 1, 0, 1]))
         self.assertTrue(ui.need_redraw)
         self.assertIsNotNone(ui.window.caption)
+
+    def test_event_loop_idle_repairs_view_after_loader_removal(self):
+        ui = self._ui(["a.png", "b.png"])
+        ui.loader.apply_updates_result = True
+        ui.state.numtiles = 1
+        ui.state.img_per_tile = np.array([0, 1, 2, 3], dtype=int)
+        ui.files.drop([0])
+        ui.need_redraw = False
+        ui._keyboard_zoom_pan = lambda: None
+        ui._smooth_exposure = lambda: None
+        ui._poll_loading = lambda: None
+        ui._upload_textures = lambda: None
+        class _DummyWindow:
+            def dispatch_event(self, _name):
+                return None
+        import pyglet
+        original_windows = pyglet.app.windows
+        pyglet.app.windows = [_DummyWindow()]
+        try:
+            loop = ui._create_eventloop()
+            delay = loop.idle()
+        finally:
+            pyglet.app.windows = original_windows
+
+        self.assertEqual(delay, 1/60)
+        self.assertEqual(ui.loader.apply_updates_calls, 1)
+        self.assertTrue(ui.need_redraw)
+        self.assertEqual(ui.state.img_per_tile[0], 0)
 
 
 if __name__ == "__main__":

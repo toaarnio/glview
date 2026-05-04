@@ -74,7 +74,9 @@ class PygletUI:
 
         class _EventLoop(pyglet.app.EventLoop):
             def idle(self):
-                parent.loader.apply_updates()
+                removed = parent.loader.apply_updates()
+                if removed:
+                    parent.ops.finish_removal()
                 parent._keyboard_zoom_pan()
                 parent._smooth_exposure()
                 parent._poll_loading()

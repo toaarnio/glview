@@ -111,22 +111,48 @@ class ImageProvider:
 
     def apply_updates(self):
         """Apply pending loader-thread updates on the UI/render thread."""
+        loaded_updates, invalid_updates = self._drain_update_queue()
+        removed = self._drop_invalid_updates(invalid_updates)
+        self._apply_loaded_updates(loaded_updates)
+        return removed
+
+    def _drain_update_queue(self):
+        loaded_updates = []
+        invalid_updates = []
         while True:
             try:
                 update = self._update_queue.get_nowait()
             except queue.Empty:
                 break
             action, idx, slot_id, revision, *payload = update
-            if idx >= self.files.numfiles:
-                continue
-            if (slot_id, revision) != self.files.image_token(idx):
+            if not self._matches_current_slot(idx, slot_id, revision):
                 continue
             if action == "loaded":
-                img = payload[0]
-                self.files.mark_loaded(idx, img)
-                self.files.consume_image(idx, img)
+                loaded_updates.append((idx, slot_id, revision, payload[0]))
             elif action == "invalid":
-                self.files.mark_invalid(idx)
+                invalid_updates.append((idx, slot_id, revision))
+        return loaded_updates, invalid_updates
+
+    def _drop_invalid_updates(self, invalid_updates):
+        removed = False
+        for idx, slot_id, revision in sorted(invalid_updates, reverse=True):
+            if not self._matches_current_slot(idx, slot_id, revision):
+                continue
+            self.files.drop([idx])
+            removed = True
+        return removed
+
+    def _apply_loaded_updates(self, loaded_updates):
+        for idx, slot_id, revision, img in loaded_updates:
+            if not self._matches_current_slot(idx, slot_id, revision):
+                continue
+            self.files.mark_loaded(idx, img)
+            self.files.consume_image(idx, img)
+
+    def _matches_current_slot(self, idx, slot_id, revision):
+        if idx >= self.files.numfiles:
+            return False
+        return (slot_id, revision) == self.files.image_token(idx)
 
     def _degamma(self, frame: np.ndarray) -> np.ndarray:
         """

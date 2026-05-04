@@ -58,14 +58,17 @@ class ImageProviderTests(unittest.TestCase):
         np.testing.assert_array_equal(provider.files.images[0], img)
         np.testing.assert_array_equal(provider.get_image(0), img)
 
-    def test_apply_updates_marks_invalid_slots(self):
-        provider = self._provider(["a.png"])
+    def test_apply_updates_drops_invalid_slots(self):
+        provider = self._provider(["a.png", "b.png"])
         slot_id, revision = provider.files.image_token(0)
         provider._update_queue.put(("invalid", 0, slot_id, revision))
 
-        provider.apply_updates()
+        removed = provider.apply_updates()
 
-        self.assertEqual(provider.files.image_status(0), ImageStatus.INVALID)
+        self.assertTrue(removed)
+        self.assertEqual(provider.files.filespecs, ["b.png"])
+        self.assertEqual(provider.files.numfiles, 1)
+        self.assertTrue(provider.files.reindexed)
 
     def test_apply_updates_ignores_stale_tokens(self):
         provider = self._provider(["a.png"])
@@ -93,6 +96,28 @@ class ImageProviderTests(unittest.TestCase):
         self.assertEqual(provider.files.filespecs, ["b.png"])
         self.assertEqual(provider.files.image_status(0), ImageStatus.PENDING)
         self.assertIsNone(provider.files.images[0])
+
+    def test_apply_updates_drops_multiple_invalid_slots(self):
+        provider = self._provider(["a.png", "b.png", "c.png"])
+        token0 = provider.files.image_token(0)
+        token2 = provider.files.image_token(2)
+        provider._update_queue.put(("invalid", 0, token0[0], token0[1]))
+        provider._update_queue.put(("invalid", 2, token2[0], token2[1]))
+
+        removed = provider.apply_updates()
+
+        self.assertTrue(removed)
+        self.assertEqual(provider.files.filespecs, ["b.png"])
+
+    def test_apply_updates_returns_false_when_no_invalid_slots_are_removed(self):
+        provider = self._provider(["a.png"])
+        img = np.ones((2, 2, 3), dtype=np.uint8)
+        slot_id, revision = provider.files.image_token(0)
+        provider._update_queue.put(("loaded", 0, slot_id, revision, img))
+
+        removed = provider.apply_updates()
+
+        self.assertFalse(removed)
 
     def test_release_request_is_queued_for_loader_thread(self):
         provider = self._provider(["a.png"])
