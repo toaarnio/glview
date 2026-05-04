@@ -42,6 +42,9 @@ Homepage = "http://github.com/toaarnio/glview"
 [project.scripts]
 glview = "glview:main"
 
+[project.gui-scripts]
+glview-launcher = "glview.winlaunch:main"
+
 [tool.hatch.version]
 path = "glview/version.py"
 

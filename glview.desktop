@@ -6,5 +6,5 @@ GenericName=Image Viewer
 Comment=Fast image viewer with zooming and tiling
 TryExec=glview
 Exec=glview %F
-MimeType=image/png;image/x-png;image/jpg;image/jpeg;image/x-portable-anymap;image/x-portable-graymap;image/x-portable-pixmap;
+MimeType=image/bmp;image/jpeg;image/png;image/tiff;image/vnd.radiance;image/x-exr;image/x-portable-anymap;image/x-portable-bitmap;image/x-portable-floatmap;image/x-portable-graymap;image/x-portable-pixmap;
 Categories=Graphics;Viewer;

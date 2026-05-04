@@ -17,8 +17,10 @@ import psutil                  # pip install psutil
 import imgio                   # pip install imgio
 
 from glview import argv
+from glview import desktop
 from glview import glrenderer
 from glview import imageprovider
+from glview import macosapp
 from glview import pygletui
 from glview import version
 from glview.imagestate import ImageSlot, ImageStatus
@@ -263,9 +265,15 @@ def main():  # noqa: PLR0915
     config.debug = argv.stringval("--debug", default="1", accepted=list("1234rgbl"))
     config.verbose = argv.exists("--verbose")
     config.verbose += argv.exists("--verbose")
+    install_default_handler = argv.exists("--install-default-handler")
+    create_macos_app = argv.exists("--create-macos-app")
     show_version = argv.exists("--version")
     show_help = argv.exists("--help")
     argv.exitIfAnyUnparsedOptions()
+    if install_default_handler:
+        _install_handler_and_exit()
+    if create_macos_app:
+        _create_macos_app_and_exit()
     if show_version:
         print(f"glview version {version.__version__}")
         sys.exit()
@@ -288,6 +296,8 @@ def main():  # noqa: PLR0915
         print("    --debug 1|2|...|r|g|b   select debug rendering mode; default = 1")
         print("    --verbose               print extra traces to the console")
         print("    --verbose               print even more traces to the console")
+        print("    --install-default-handler  register glview for desktop file associations")
+        print("    --create-macos-app      build a minimal macOS .app bundle into dist/")
         print("    --version               show glview version number & exit")
         print("    --help                  show this help message")
         print()
@@ -342,6 +352,7 @@ def main():  # noqa: PLR0915
         print()
         sys.exit()
     else:
+        print(f"glview version {version.__version__} [{pathlib.Path(__file__)}].")
         print("See 'glview --help' for command-line options and keyboard commands.")
 
     filepatterns = sys.argv[1:] or ["*"]
@@ -397,6 +408,37 @@ def enforce(expression, message_if_false):
     if not expression:
         print(message_if_false)
         sys.exit(-1)
+
+
+def _install_handler_and_exit():
+    try:
+        result = desktop.install_default_handler()
+    except NotImplementedError as exc:
+        print(exc)
+        sys.exit(-1)
+    if result.desktop_path is not None:
+        print(f"Installed desktop entry: {result.desktop_path}")
+    if result.mimeapps_path is not None:
+        print(f"Updated MIME defaults: {result.mimeapps_path}")
+    if result.bundle_path is not None:
+        print(f"Registered macOS app bundle: {result.bundle_path}")
+    if result.bundle_id is not None:
+        print(f"Using macOS bundle identifier: {result.bundle_id}")
+    if result.settings_uri is not None:
+        print(f"Opened Windows Default Apps settings: {result.settings_uri}")
+    if result.registry_paths:
+        print(f"Updated {len(result.registry_paths)} registry paths for glview.")
+    print(f"Registered {len(result.mime_types)} MIME types and {len(result.extensions)} file extensions for glview.")
+    if result.note:
+        print(result.note)
+    sys.exit()
+
+
+def _create_macos_app_and_exit():
+    bundle_path = macosapp.build_app_bundle()
+    print(f"Created macOS app bundle: {bundle_path}")
+    print("This bundle uses the current Python environment and source tree; it is not a standalone app.")
+    sys.exit()
 
 
 if __name__ == "__main__":

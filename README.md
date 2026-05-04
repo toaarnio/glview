@@ -9,6 +9,8 @@ and color-accurate output.
 pipx install glview
 glview --help
 glview <your-image-file>
+glview --install-default-handler   # register desktop file associations
+glview --create-macos-app          # [MACOS] create dist/glview.app from the current environment
 
 # [LINUX] If there's a failure due to missing libGL.so
 sudo apt update
@@ -16,6 +18,45 @@ sudo apt install libegl1 mesa-utils libegl1-mesa-dev
 
 # [MACOS] If there's a failure due to missing EXIF libraries
 brew install exiv2
+```
+
+`--install-default-handler` is implemented for:
+
+- Linux desktop environments that honor XDG desktop entries and `mimeapps.list`.
+  It installs a per-user desktop entry under `~/.local/share/applications/` and
+  updates `~/.config/mimeapps.list`.
+- Windows. It registers `glview` under `HKCU\Software\Classes` for supported file
+  types, adds a `RegisteredApplications`/Capabilities entry for the Default Apps
+  UI, and opens the `glview` page in Windows Default Apps directly. File
+  associations point at the `glview-launcher` GUI entrypoint so shell activations
+  can be batched without popping a console window for every file. On modern
+  Windows, the actual default app choice is still protected by the OS, so the
+  user still needs to confirm the default through the Windows Settings UI.
+- macOS, but only when `glview` is running from a proper `.app` bundle with a
+  `CFBundleIdentifier`. In that case it registers the bundle with Launch Services
+  and assigns the resolvable image UTIs to that bundle. A plain `python` or
+  `pipx` executable is not an app bundle, so macOS will reject that path.
+
+## macOS app bundle
+`glview --create-macos-app` builds a minimal `dist/glview.app` bundle that
+launches `glview` through the current Python interpreter and source tree. That
+gives macOS a real app bundle identity so `--install-default-handler` can work.
+
+This is intentionally a local development bundle, not a fully standalone app
+distribution. Moving it to a machine without the same Python environment or
+source checkout will break it.
+
+## Windows association checks from WSL
+Use `make windows-assoc-check` to print the Windows-side commands needed to
+verify the registration from within WSL. The helper prints `reg.exe` queries for
+the `RegisteredApplications`, Capabilities, `Applications\\glview.exe`, and
+`OpenWithProgids` entries, a deep link into the `glview` page in Default Apps,
+a `UserChoice` query for the current default app, and a `cmd.exe /c start`
+example to test the actual shell resolution path.
+
+You can also run the helper directly with custom paths:
+```bash
+bash scripts/windows_assoc_check.sh 'C:\path\to\glview.exe' 'C:\path\to\test.png'
 ```
 
 ## Usage
@@ -34,6 +75,10 @@ Usage: glview [options] [image.(pgm|ppm|pnm|png|jpg|..)] ...
     --debug 1|2|...|r|g|b   select debug rendering mode; default = 1
     --verbose               print extra traces to the console
     --verbose               print even more traces to the console
+    --install-default-handler
+                            register glview for desktop file associations
+    --install-handler       alias for --install-default-handler
+    --create-macos-app      build a minimal macOS .app bundle into dist/
     --version               show glview version number & exit
     --help                  show this help message
 
