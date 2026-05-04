@@ -80,8 +80,8 @@ dev = [
 
 [package.metadata]
 requires-dist = [
-    { name = "imgio", specifier = ">=1.7.1" },
-    { name = "imsize", specifier = ">=1.9.2" },
+    { name = "imgio", specifier = ">=1.7.2" },
+    { name = "imsize", specifier = ">=1.11.0" },
     { name = "moderngl", specifier = ">=5.12.0" },
     { name = "natsort", specifier = ">=8.4.0" },
     { name = "numpy", specifier = ">=2.2.6" },
@@ -110,7 +110,7 @@ wheels = [
 
 [[package]]
 name = "imgio"
-version = "1.7.1"
+version = "1.7.2"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "imageio" },
@@ -118,9 +118,9 @@ dependencies = [
     { name = "openexr" },
     { name = "pyexr" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/4f/87/ca0f2103a03cc800dde036d1e0382a55f43d0345fa374f5dc6b6d1eb15df/imgio-1.7.1.tar.gz", hash = "sha256:4308f3842b1410c48d1dd620ce82d0f17988e51966068ec2f85a9981632702cb", size = 9073, upload-time = "2026-04-28T08:20:02.63Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/9b/74/49a16983442a4124d09ddd288d1ed4d8d8b9a4e44ea62e3dd675faccdc4d/imgio-1.7.2.tar.gz", hash = "sha256:309de04dd0c03b1b5ac71e5519b3afefd948984ec0dcac54ffa378219bb0dc43", size = 9127, upload-time = "2026-05-04T12:52:22.439Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/82/9f/d22e8bbb8bdec17d4c33f842a91f8deab2728454e77b6c3c9e9199e63882/imgio-1.7.1-py3-none-any.whl", hash = "sha256:edec3ba3b1b1c2fd78a42427faed35596615b07b41928a47d6fbba56b04debc1", size = 11932, upload-time = "2026-04-28T08:20:01.126Z" },
+    { url = "https://files.pythonhosted.org/packages/8a/5b/4590a12a1ca7e551e0f405cfc32d4f7729c4670b5bd247b9c50b3c97ae3c/imgio-1.7.2-py3-none-any.whl", hash = "sha256:8a2404be352efa4bde455742088f9c105a9b00a87985dd406a33f453af877371", size = 11998, upload-time = "2026-05-04T12:52:21.381Z" },
 ]
 
 [[package]]

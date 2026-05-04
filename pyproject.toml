@@ -19,8 +19,8 @@ dependencies = [
   "psutil>=5.9.4",
   "moderngl>=5.12.0",
   "piexif>=1.1.3",
-  "imgio>=1.7.1",
-  "imsize>=1.9.2",
+  "imgio>=1.7.2",
+  "imsize>=1.11.0",
   "natsort>=8.4.0",
   "pqdm>=0.2.0",
 ]
