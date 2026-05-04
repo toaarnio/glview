@@ -1,5 +1,6 @@
 """ A graphical user interface for glview, based on Pyglet and ModernGL. """
 
+import time                    # built-in library
 import threading               # built-in library
 import traceback               # built-in library
 from pathlib import Path       # built-in library
@@ -16,6 +17,8 @@ from glview.viewerstate import ViewerState
 class PygletUI:
     """ A graphical user interface for glview, based on Pyglet and ModernGL. """
 
+    resize_draw_delay = 0.075
+
     def __init__(self, files, debug, verbose=False):
         """ Create a new PygletUI with the given (hardcoded) FileList instance. """
         self.thread_name = "UIThread"
@@ -27,7 +30,6 @@ class PygletUI:
         self.state = ViewerState()
         self.running = None
         self.need_redraw = True
-        self.was_resized = True
         self.window = None
         self.ops = uiops.UIOperations(self)
         self.key_state = None
@@ -42,6 +44,7 @@ class PygletUI:
         self.renderer = None
         self.images_pending = True
         self.ss_idx = 0
+        self.resize_deadline = 0.0
 
     def start(self, renderer):
         """ Start the UI thread. """
@@ -81,11 +84,20 @@ class PygletUI:
                 parent._smooth_exposure()
                 parent._poll_loading()
                 parent._upload_textures()
-                window = next(iter(pyglet.app.windows))
-                window.dispatch_event("on_draw")
+                if parent._frame_needed():
+                    window = next(iter(pyglet.app.windows))
+                    window.dispatch_event("on_draw")
                 return 1/60  # pan/zoom at max 60 fps
 
         return _EventLoop()
+
+    def _frame_needed(self):
+        if self._resize_pending():
+            return False
+        return self.need_redraw or not np.all(self.renderer.ae_converged)
+
+    def _resize_pending(self):
+        return time.monotonic() < self.resize_deadline
 
     def _init_pyglet(self):
         self._vprint("initializing Pyglet & native OpenGL...")
@@ -422,17 +434,12 @@ class PygletUI:
     def _setup_draw_event(self):
         @self.window.event
         def on_draw():
-            if self.need_redraw or not np.all(self.renderer.ae_converged):
-                self.renderer.redraw()
+            if self._frame_needed():
+                elapsed = self.renderer.redraw()
+                if elapsed is None:
+                    return
                 self.window.set_caption(self._caption())
                 self.window.flip()
-                if self.was_resized:
-                    # ensure that both buffers (back & front) are filled
-                    # with the same image after a resize event, or else
-                    # the window may be left black until the next redraw
-                    self.renderer.redraw()
-                    self.window.flip()
-                    self.was_resized = False
                 self.need_redraw = False
 
     def _setup_resize_event(self):
@@ -442,7 +449,7 @@ class PygletUI:
             self.winsize = (width, height)
             self.viewports = self._retile(self.state.numtiles, self.winsize, self.state.layout)
             self.need_redraw = True
-            self.was_resized = True
+            self.resize_deadline = time.monotonic() + self.resize_draw_delay
 
     def _setup_close_event(self):
         @self.window.event

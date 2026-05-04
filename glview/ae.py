@@ -25,8 +25,8 @@ def autoexposure(texture: moderngl.Texture, whitelevel: float, clip_pct: float) 
         stats_level = np.log2(max(texw, texh) / 128)
         stats_level = int(max(stats_level, 0))
         texture.build_mipmaps(max_level=stats_level)
-        statsw = texw // 2 ** stats_level
-        statsh = texh // 2 ** stats_level
+        statsw = max(texw // 2 ** stats_level, 1)
+        statsh = max(texh // 2 ** stats_level, 1)
         stats = texture.read(stats_level)
         stats = np.frombuffer(stats, dtype="f4")
         stats = stats.reshape(statsh, statsw, 3)[::-1]
@@ -104,6 +104,8 @@ def estimate_diffuse_white(img: np.ndarray) -> float:
     mean_level = np.exp(np.mean(np.log(img + 1e-6)))
     diffuse_white = 2.5 * mean_level
     return diffuse_white
+
+
 def sdiv(nominator, denominator):
     nominator, denominator = np.broadcast_arrays(nominator, denominator)
     nonzero = np.abs(denominator) > 0.0

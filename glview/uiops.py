@@ -36,7 +36,6 @@ class UIOperations:
     def toggle_fullscreen(self):
         self.ui.fullscreen = not self.ui.fullscreen
         self.ui.need_redraw = True
-        self.ui.was_resized = True
         self.ui.window.set_fullscreen(self.ui.fullscreen)
         self.ui.window.set_mouse_visible(not self.ui.fullscreen)
 

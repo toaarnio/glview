@@ -76,6 +76,8 @@ class GLRenderer:
         target = target or self.ctx.screen
         w, h = self.ui.window.get_size()
         vpw, vph = self.ui.viewports[0][2:]
+        if min(w, h, vpw, vph) <= 0:
+            return None
         fbo = self.tile_target.ensure(vpw, vph)
 
         snapshot = self.files.snapshot()
@@ -122,7 +124,6 @@ class GLRenderer:
                 ae_gain,
             )
 
-        self.ctx.finish()
         elapsed = (time.time() - t0) * 1000
         interval = (time.time() - self.tprev) * 1000
         self.fps[:-1] = self.fps[1:]

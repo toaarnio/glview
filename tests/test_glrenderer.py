@@ -75,6 +75,7 @@ class _FakeContext:
             repeat_y=None,
             filter=None,
             use=mock.Mock(),
+            release=mock.Mock(),
         )
         self.textures.append(texture)
         return texture
@@ -93,10 +94,15 @@ class TileRenderTargetTests(unittest.TestCase):
 
         fbo0 = target.ensure(64, 32)
         fbo1 = target.ensure(64, 32)
+        tex0 = target.texture
         fbo2 = target.ensure(80, 40)
+        tex1 = target.texture
 
         self.assertIs(fbo0, fbo1)
         self.assertIsNot(fbo0, fbo2)
+        self.assertIsNot(tex0, tex1)
+        fbo0.release.assert_called_once_with()
+        tex0.release.assert_called_once_with()
         self.assertEqual(len(ctx.textures), 2)
         self.assertEqual(ctx.textures[0].filter, ("near", "near"))
         self.assertFalse(ctx.textures[0].repeat_x)
@@ -106,11 +112,14 @@ class TileRenderTargetTests(unittest.TestCase):
         ctx = _FakeContext()
         target = TileRenderTarget(ctx, {"NEAREST": ("near", "near")})
         fbo = target.ensure(64, 32)
+        tex = target.texture
 
         target.release()
 
         fbo.release.assert_called_once_with()
+        tex.release.assert_called_once_with()
         self.assertIsNone(target.fbo)
+        self.assertIsNone(target.texture)
 
 
 class RenderTextureManagerTests(unittest.TestCase):
@@ -447,6 +456,21 @@ class GLRendererParameterTests(unittest.TestCase):
         redraw_mock.assert_called_once_with(mock.ANY, 1)
         self.assertEqual(renderer.ui.config.gamma, 3)
         self.assertEqual(screenshot.shape, (10, 20, 3))
+
+    def test_redraw_returns_none_for_zero_sized_viewport(self):
+        ui = SimpleNamespace(
+            window=SimpleNamespace(get_size=lambda: (0, 10)),
+            viewports={0: (0, 0, 0, 10)},
+            state=SimpleNamespace(numtiles=1),
+        )
+        renderer = GLRenderer(ui, files=SimpleNamespace(), loader=SimpleNamespace(), verbose=False)
+        renderer.ctx = SimpleNamespace(screen=SimpleNamespace())
+        renderer.tile_target = SimpleNamespace(ensure=mock.Mock())
+
+        elapsed = renderer.redraw()
+
+        self.assertIsNone(elapsed)
+        renderer.tile_target.ensure.assert_not_called()
 
 
 if __name__ == "__main__":

@@ -1,5 +1,6 @@
 import unittest
 from pathlib import Path
+from unittest import mock
 
 import numpy as np
 
@@ -58,6 +59,7 @@ class _FakeWindow:
         self.caption = None
         self.fullscreen = None
         self.mouse_visible = None
+        self.events = []
 
     def set_caption(self, caption):
         self.caption = caption
@@ -67,6 +69,10 @@ class _FakeWindow:
 
     def set_mouse_visible(self, visible):
         self.mouse_visible = visible
+
+    def dispatch_event(self, name):
+        self.events.append(name)
+        return None
 
 
 class PygletUISmokeTests(unittest.TestCase):
@@ -246,12 +252,10 @@ class PygletUISmokeTests(unittest.TestCase):
         ui._smooth_exposure = lambda: None
         ui._poll_loading = lambda: None
         ui._upload_textures = lambda: None
-        class _DummyWindow:
-            def dispatch_event(self, _name):
-                return None
         import pyglet
         original_windows = pyglet.app.windows
-        pyglet.app.windows = [_DummyWindow()]
+        window = _FakeWindow()
+        pyglet.app.windows = [window]
         try:
             loop = ui._create_eventloop()
             delay = loop.idle()
@@ -262,6 +266,51 @@ class PygletUISmokeTests(unittest.TestCase):
         self.assertEqual(ui.loader.apply_updates_calls, 1)
         self.assertTrue(ui.need_redraw)
         self.assertEqual(ui.state.img_per_tile[0], 0)
+        self.assertEqual(window.events, ["on_draw"])
+
+    def test_event_loop_idle_skips_draw_while_resize_is_still_in_progress(self):
+        ui = self._ui(["a.png"])
+        ui.need_redraw = True
+        ui._keyboard_zoom_pan = lambda: None
+        ui._smooth_exposure = lambda: None
+        ui._poll_loading = lambda: None
+        ui._upload_textures = lambda: None
+        import pyglet
+        original_windows = pyglet.app.windows
+        window = _FakeWindow()
+        pyglet.app.windows = [window]
+        with mock.patch("glview.pygletui.time.monotonic", return_value=10.0):
+            ui.resize_deadline = 10.05
+            try:
+                loop = ui._create_eventloop()
+                delay = loop.idle()
+            finally:
+                pyglet.app.windows = original_windows
+
+        self.assertEqual(delay, 1/60)
+        self.assertEqual(window.events, [])
+
+    def test_event_loop_idle_draws_after_resize_settles(self):
+        ui = self._ui(["a.png"])
+        ui.need_redraw = True
+        ui._keyboard_zoom_pan = lambda: None
+        ui._smooth_exposure = lambda: None
+        ui._poll_loading = lambda: None
+        ui._upload_textures = lambda: None
+        import pyglet
+        original_windows = pyglet.app.windows
+        window = _FakeWindow()
+        pyglet.app.windows = [window]
+        with mock.patch("glview.pygletui.time.monotonic", return_value=10.1):
+            ui.resize_deadline = 10.05
+            try:
+                loop = ui._create_eventloop()
+                delay = loop.idle()
+            finally:
+                pyglet.app.windows = original_windows
+
+        self.assertEqual(delay, 1/60)
+        self.assertEqual(window.events, ["on_draw"])
 
 
 if __name__ == "__main__":

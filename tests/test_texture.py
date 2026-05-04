@@ -148,6 +148,28 @@ class AutoExposureTests(unittest.TestCase):
 
         self.assertEqual(diffuse_white, 1.0)
 
+    def test_autoexposure_handles_thin_mipmap_levels_without_zero_height(self):
+        class _ThinTexture:
+            size = (492, 1)
+
+            def build_mipmaps(self, max_level):
+                self.max_level = max_level
+
+            def read(self, level):
+                self.level = level
+                stats = np.ones((1, 246, 3), dtype=np.float32)
+                return stats.tobytes()
+
+        texture = _ThinTexture()
+
+        ae_gain, diffuse_white, peak_white = ae.autoexposure(texture, whitelevel=1.0, clip_pct=1.0)
+
+        self.assertEqual(texture.max_level, 1)
+        self.assertEqual(texture.level, 1)
+        self.assertIsNotNone(ae_gain)
+        self.assertIsNotNone(diffuse_white)
+        self.assertIsNotNone(peak_white)
+
 
 if __name__ == "__main__":
     unittest.main()
