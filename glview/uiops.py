@@ -88,7 +88,7 @@ class UIOperations:
 
     def show_exif_for_current(self):
         imgidx = self.ui.state.img_per_tile[self.ui.state.tileidx]
-        filespec = self.ui.files.filespecs[imgidx]
+        filespec = self.ui.files.filespec(imgidx)
         fileinfo = imsize.read(filespec)
         print(fileinfo)
         self.print_exif(filespec)

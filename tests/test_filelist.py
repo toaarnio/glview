@@ -27,21 +27,27 @@ class FileListTests(unittest.TestCase):
         files.mark_invalid(1)
         files.mark_loaded(2, np.ones((2, 2, 3), dtype=np.uint8))
         files.consume_image(2, np.full((2, 2, 3), 9, dtype=np.uint8))
-        files.orientations = [90, 180, 270]
-        files.linearize = [True, False, True]
-        files.metadata = [{"name": "a"}, {"name": "b"}, {"name": "c"}]
+        files.entry(0).orientation = 90
+        files.entry(1).orientation = 180
+        files.entry(2).orientation = 270
+        files.set_linearize(0, True)
+        files.set_linearize(1, False)
+        files.set_linearize(2, True)
+        files.entry(0).metadata = {"name": "a"}
+        files.entry(1).metadata = {"name": "b"}
+        files.entry(2).metadata = {"name": "c"}
         files.reindexed = False
 
         files.drop([0, 2])
 
         self.assertEqual(files.numfiles, 1)
-        self.assertEqual(files.filespecs, ["b.png"])
+        self.assertEqual([entry.filespec for entry in files.entries], ["b.png"])
         self.assertEqual(files.image_status(0), ImageStatus.INVALID)
-        self.assertEqual(files.loaded_images, [None])
-        self.assertEqual(files.images, [None])
-        self.assertEqual(files.orientations, [180])
-        self.assertEqual(files.linearize, [False])
-        self.assertEqual(files.metadata, [{"name": "b"}])
+        self.assertIsNone(files.entry(0).loaded_image)
+        self.assertIsNone(files.entry(0).image)
+        self.assertEqual(files.entry(0).orientation, 180)
+        self.assertFalse(files.entry(0).linearize)
+        self.assertEqual(files.entry(0).metadata, {"name": "b"})
         self.assertTrue(files.reindexed)
 
     def test_delete_removes_file_and_keeps_remaining_slot_state(self):
@@ -54,18 +60,19 @@ class FileListTests(unittest.TestCase):
             files = FileList([str(file_a), str(file_b)])
             files.mark_loaded(0, np.zeros((1, 1, 3), dtype=np.uint8))
             files.consume_image(0, np.ones((1, 1, 3), dtype=np.uint8))
-            files.metadata = [{"name": "a"}, {"name": "b"}]
+            files.entry(0).metadata = {"name": "a"}
+            files.entry(1).metadata = {"name": "b"}
             files.reindexed = False
 
             files.delete(0)
 
             self.assertFalse(file_a.exists())
             self.assertTrue(file_b.exists())
-            self.assertEqual(files.filespecs, [str(file_b)])
+            self.assertEqual([entry.filespec for entry in files.entries], [str(file_b)])
             self.assertEqual(files.image_status(0), ImageStatus.PENDING)
-            self.assertEqual(files.loaded_images, [None])
-            self.assertEqual(files.images, [None])
-            self.assertEqual(files.metadata, [{"name": "b"}])
+            self.assertIsNone(files.entry(0).loaded_image)
+            self.assertIsNone(files.entry(0).image)
+            self.assertEqual(files.entry(0).metadata, {"name": "b"})
             self.assertEqual(files.numfiles, 1)
             self.assertTrue(files.reindexed)
 
@@ -81,23 +88,23 @@ class FileListTests(unittest.TestCase):
 
         self.assertEqual(files.image_status(0), ImageStatus.PENDING)
         self.assertEqual(files.image_revision(0), rev_before + 1)
-        self.assertIsNone(files.loaded_images[0])
-        self.assertIsNone(files.images[0])
+        self.assertIsNone(files.entry(0).loaded_image)
+        self.assertIsNone(files.entry(0).image)
 
     def test_snapshot_returns_consistent_read_only_view(self):
         files = FileList(["a.png", "b.png"])
         files.mark_loaded(0, np.zeros((1, 1, 3), dtype=np.uint8))
-        files.linearize[1] = True
-        files.metadata[1] = {"name": "b"}
+        files.set_linearize(1, True)
+        files.entry(1).metadata = {"name": "b"}
 
         snapshot = files.snapshot()
         files.drop([0])
 
         self.assertEqual(snapshot.numfiles, 2)
-        self.assertEqual(snapshot.filespecs, ("a.png", "b.png"))
-        self.assertEqual(snapshot.image_slots[0].status, ImageStatus.LOADED)
-        self.assertEqual(snapshot.linearize[1], True)
-        self.assertEqual(snapshot.metadata[1], {"name": "b"})
+        self.assertEqual(tuple(entry.filespec for entry in snapshot.entries), ("a.png", "b.png"))
+        self.assertEqual(snapshot.entries[0].status, ImageStatus.LOADED)
+        self.assertTrue(snapshot.entries[1].linearize)
+        self.assertEqual(snapshot.entries[1].metadata, {"name": "b"})
 
 
 if __name__ == "__main__":

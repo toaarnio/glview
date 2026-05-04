@@ -144,7 +144,7 @@ class PygletUI:
         """
         snapshot = self.files.snapshot()
         for imgidx in self.state.img_per_tile[:self.state.numtiles]:
-            if snapshot.image_slots[imgidx].status == ImageStatus.PENDING:
+            if snapshot.entries[imgidx].status == ImageStatus.PENDING:
                 self.images_pending = True
                 break
         else:
@@ -168,9 +168,9 @@ class PygletUI:
             indices = self.state.img_per_tile[:self.state.numtiles]
             indices = list(indices) + list(range(snapshot.numfiles))
             for imgidx in indices:
-                status = snapshot.image_slots[imgidx].status
+                status = snapshot.entries[imgidx].status
                 if status not in [ImageStatus.PENDING, ImageStatus.INVALID]:
-                    slot_id = snapshot.image_slots[imgidx].slot_id
+                    slot_id = snapshot.entries[imgidx].slot_id
                     texture = self.renderer.textures.get_cached(slot_id)
                     if texture is None or not texture.done:
                         texture = self.renderer.textures.upload(imgidx, piecewise=True)
@@ -200,12 +200,12 @@ class PygletUI:
         # so we need to make a compromise: show filenames if all files are in the same
         # directory; otherwise show the directory name but not the filename
 
-        dirnames = [Path(fspec).parent for fspec in snapshot.filespecs]
-        basenames = [Path(fspec).name for fspec in snapshot.filespecs]
+        dirnames = [Path(entry.filespec).parent for entry in snapshot.entries]
+        basenames = [Path(entry.filespec).name for entry in snapshot.entries]
         hide_dirname = np.unique(dirnames).size == 1
         for tileidx in range(self.state.numtiles):
             imgidx = self.state.img_per_tile[tileidx]
-            label = Path(snapshot.filespecs[imgidx])
+            label = Path(snapshot.entries[imgidx].filespec)
             if self.state.numtiles > 1:  # show folder name or filename but not both
                 label = basenames[imgidx] if hide_dirname else dirnames[imgidx]
             caption = f"{caption} | {label} [{imgidx+1}/{snapshot.numfiles}]"
@@ -296,7 +296,7 @@ class PygletUI:
 
     def _toggle_linearize_current(self):
         imgidx = self.state.img_per_tile[self.state.tileidx]
-        self.files.linearize[imgidx] = not self.files.linearize[imgidx]
+        self.files.toggle_linearize(imgidx)
         self.need_redraw = True
 
     def _cycle_gamma(self):
@@ -353,8 +353,7 @@ class PygletUI:
 
     def _rotate_current_image(self):
         imgidx = self.state.img_per_tile[self.state.tileidx]
-        self.files.orientations[imgidx] += 90
-        self.files.orientations[imgidx] %= 360
+        self.files.rotate_orientation(imgidx)
         self.need_redraw = True
 
     def _cycle_mirror_command(self):

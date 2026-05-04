@@ -317,7 +317,7 @@ class GLRendererParameterTests(unittest.TestCase):
         renderer.tile_target = SimpleNamespace(fbo=SimpleNamespace(use=mock.Mock(), clear=mock.Mock()))
         renderer.prog = {}
         renderer.vao = SimpleNamespace(render=mock.Mock())
-        snapshot = SimpleNamespace(linearize=(True,))
+        snapshot = SimpleNamespace(entries=(SimpleNamespace(linearize=True),))
         gpu_texture = SimpleNamespace(components=1)
 
         renderer._render_tile_scene(

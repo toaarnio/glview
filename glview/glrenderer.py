@@ -179,7 +179,7 @@ class GLRenderer:
         gpu_texture.repeat_y = False
         gpu_texture.swizzle = 'RGB1'
         gpu_texture.use(location=0)
-        orientation = snapshot.orientations[imgidx]
+        orientation = snapshot.entries[imgidx].orientation
         texw, texh = gpu_texture.width, gpu_texture.height
         texw, texh = (texh, texw) if orientation in [90, 270] else (texw, texh)
         scalex, scaley = self._get_aspect_ratio(vpw, vph, texw, texh)
@@ -195,7 +195,7 @@ class GLRenderer:
         self.prog['aspect'] = (scalex, scaley)
         self.prog['orientation'] = orientation
         self.prog['grayscale'] = (gpu_texture.components == 1)
-        self.prog['degamma'] = snapshot.linearize[imgidx]
+        self.prog['degamma'] = snapshot.entries[imgidx].linearize
         self.vao.render(moderngl.TRIANGLE_STRIP)
 
     def _render_postprocess_tile(
@@ -367,7 +367,7 @@ class GLRenderer:
         """
         if (gamut_lim := self.ui.config.gamut_lim) is None:  # use global limits by default
             snapshot = self.files.snapshot()
-            gamut_lim = snapshot.metadata[imgidx]['gamut_bounds']  # per-image limit
+            gamut_lim = snapshot.entries[imgidx].metadata['gamut_bounds']  # per-image limit
         gamut_lim = np.clip(gamut_lim, 1.01, np.inf)  # >1.01 to ensure no overflows
         scale = self._gamut_curve(self.ui.config.gamut_pow, self.ui.config.gamut_thr, gamut_lim)
         return scale

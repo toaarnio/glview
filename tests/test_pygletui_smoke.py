@@ -205,10 +205,10 @@ class PygletUISmokeTests(unittest.TestCase):
 
         self.assertEqual(ui.files.image_status(0), ImageStatus.PENDING)
         self.assertEqual(ui.files.image_status(1), ImageStatus.PENDING)
-        self.assertIsNone(ui.files.loaded_images[0])
-        self.assertIsNone(ui.files.loaded_images[1])
-        self.assertIsNone(ui.files.images[0])
-        self.assertIsNone(ui.files.images[1])
+        self.assertIsNone(ui.files.entry(0).loaded_image)
+        self.assertIsNone(ui.files.entry(1).loaded_image)
+        self.assertIsNone(ui.files.entry(0).image)
+        self.assertIsNone(ui.files.entry(1).image)
         self.assertEqual(ui.loader.reload_calls, [0, 1])
 
     def test_cycle_split_command_updates_state_and_viewports(self):

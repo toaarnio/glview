@@ -54,8 +54,8 @@ class ImageProviderTests(unittest.TestCase):
         provider.apply_updates()
 
         self.assertEqual(provider.files.image_status(0), ImageStatus.LOADED)
-        np.testing.assert_array_equal(provider.files.loaded_images[0], img)
-        np.testing.assert_array_equal(provider.files.images[0], img)
+        np.testing.assert_array_equal(provider.files.entry(0).loaded_image, img)
+        np.testing.assert_array_equal(provider.files.entry(0).image, img)
         np.testing.assert_array_equal(provider.get_image(0), img)
 
     def test_apply_updates_drops_invalid_slots(self):
@@ -66,7 +66,7 @@ class ImageProviderTests(unittest.TestCase):
         removed = provider.apply_updates()
 
         self.assertTrue(removed)
-        self.assertEqual(provider.files.filespecs, ["b.png"])
+        self.assertEqual([entry.filespec for entry in provider.files.entries], ["b.png"])
         self.assertEqual(provider.files.numfiles, 1)
         self.assertTrue(provider.files.reindexed)
 
@@ -80,7 +80,7 @@ class ImageProviderTests(unittest.TestCase):
         provider.apply_updates()
 
         self.assertEqual(provider.files.image_status(0), ImageStatus.PENDING)
-        self.assertIsNone(provider.files.images[0])
+        self.assertIsNone(provider.files.entry(0).image)
 
     def test_apply_updates_ignores_stale_indices_after_drop(self):
         provider = self._provider(["a.png", "b.png"])
@@ -93,9 +93,9 @@ class ImageProviderTests(unittest.TestCase):
 
         provider.apply_updates()
 
-        self.assertEqual(provider.files.filespecs, ["b.png"])
+        self.assertEqual([entry.filespec for entry in provider.files.entries], ["b.png"])
         self.assertEqual(provider.files.image_status(0), ImageStatus.PENDING)
-        self.assertIsNone(provider.files.images[0])
+        self.assertIsNone(provider.files.entry(0).image)
 
     def test_apply_updates_drops_multiple_invalid_slots(self):
         provider = self._provider(["a.png", "b.png", "c.png"])
@@ -107,7 +107,7 @@ class ImageProviderTests(unittest.TestCase):
         removed = provider.apply_updates()
 
         self.assertTrue(removed)
-        self.assertEqual(provider.files.filespecs, ["b.png"])
+        self.assertEqual([entry.filespec for entry in provider.files.entries], ["b.png"])
 
     def test_apply_updates_returns_false_when_no_invalid_slots_are_removed(self):
         provider = self._provider(["a.png"])
@@ -131,7 +131,7 @@ class ImageProviderTests(unittest.TestCase):
 
         self.assertEqual(provider.files.image_status(0), ImageStatus.RELEASED)
         self.assertEqual(provider._loader_statuses[0], ImageStatus.RELEASED)
-        self.assertIsNone(provider.files.images[0])
+        self.assertIsNone(provider.files.entry(0).image)
 
     def test_stale_release_request_is_ignored(self):
         provider = self._provider(["a.png"])
@@ -179,7 +179,7 @@ class ImageProviderTests(unittest.TestCase):
 
         self.assertEqual(result.shape, (2, 2, 1))
         np.testing.assert_array_equal(result[:, :, 0], gray[::2, ::2])
-        self.assertFalse(provider.files.linearize[0])
+        self.assertFalse(provider.files.entry(0).linearize)
 
     def test_load_single_drops_alpha_channel(self):
         provider = self._provider(["a.tif"])
@@ -210,7 +210,7 @@ class ImageProviderTests(unittest.TestCase):
 
         degamma_mock.assert_called_once()
         np.testing.assert_array_equal(result, degamma)
-        self.assertFalse(provider.files.linearize[0])
+        self.assertFalse(provider.files.entry(0).linearize)
 
     def test_load_single_converts_uint16_to_float32_using_max_of_image_and_header(self):
         provider = self._provider(["a.tif"])

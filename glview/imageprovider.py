@@ -54,10 +54,11 @@ class ImageProvider:
         """ Quickly validate all image files & estimate their memory consumption. """
         size_on_disk = 0.0
         size_in_mem = 0.0
-        if len(self.files.filespecs) > 100:
+        if self.files.numfiles > 100:
             print("Scanning images & estimating memory consumption...")
         invalid = []
-        for idx, filespec in enumerate(self.files.filespecs):
+        for idx, entry in enumerate(self.files.entries):
+            filespec = entry.filespec
             try:
                 info = imsize.read(filespec)
                 size_on_disk += info.filesize
@@ -85,7 +86,7 @@ class ImageProvider:
         in which case the return value is the corresponding slot-state label.
         """
         if self.files.image_status(index) == ImageStatus.LOADED:
-            return self.files.images[index]
+            return self.files.get_consumed_image(index)
         return self.files.image_status(index).value
 
     def get_image_record(self, index):
@@ -205,7 +206,7 @@ class ImageProvider:
                                 slot_id, revision = self._loader_tokens[idx]
                                 self._update_queue.put(("invalid", idx, slot_id, revision))
                                 nloaded += 1
-            nbytes = np.sum([img.nbytes for img in self.files.images if isinstance(img, np.ndarray)])
+            nbytes = np.sum([entry.image.nbytes for entry in self.files.entries if isinstance(entry.image, np.ndarray)])
             if nloaded > 0 and nbytes > 1e4:
                 elapsed = time.time() - t0
                 nbytes = nbytes / 1024**2
@@ -268,9 +269,9 @@ class ImageProvider:
         """
         if idx < len(self._loader_statuses) and self._loader_statuses[idx] == ImageStatus.PENDING:
             try:
-                filespec = self.files.filespecs[idx]
+                filespec = self.files.filespec(idx)
                 suffix = Path(filespec).suffix.lower()
-                self.files.linearize[idx] = suffix in [".jpg", ".jpeg", ".png", ".bmp", ".ppm"]
+                self.files.set_linearize(idx, suffix in [".jpg", ".jpeg", ".png", ".bmp", ".ppm"])
                 info = imsize.read(filespec)
                 if info.cfa_raw:
                     packing = "unpacked"
@@ -289,11 +290,11 @@ class ImageProvider:
                 img = img[::downsample, ::downsample]
                 img = np.atleast_3d(img)  # {2D, 3D} => 3D
                 img = img[:, :, :3]  # scrap alpha channel, if any
-                if self.files.linearize[idx]:
+                if self.files.entry(idx).linearize:
                     # invert sRGB gamma, as OpenGL texture filtering assumes
                     # linear colors; float16 precision is the minimum to avoid
                     # clipping dark colors to black
-                    self.files.linearize[idx] = False
+                    self.files.set_linearize(idx, False)
                     img = self._degamma(img)
                 if img.dtype == np.uint16:
                     # uint16 still doesn't work in ModernGL as of 5.7.4;

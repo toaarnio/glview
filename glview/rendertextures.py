@@ -23,7 +23,7 @@ class RenderTextureManager:
         object on the GPU if necessary, otherwise use an existing one.
         """
         snapshot = snapshot or self.files.snapshot()
-        slot_id = snapshot.image_slots[idx].slot_id
+        slot_id = snapshot.entries[idx].slot_id
         tex = self.cache.get(slot_id)
         img, token = self.loader.get_image_record(idx)
         if not tex:
@@ -44,7 +44,7 @@ class RenderTextureManager:
 
     def prune(self, snapshot):
         """Release textures whose slot ids are no longer present in the catalog."""
-        active_slot_ids = {slot.slot_id for slot in snapshot.image_slots}
+        active_slot_ids = {entry.slot_id for entry in snapshot.entries}
         self.cache.prune(active_slot_ids)
 
     def release_all(self):
