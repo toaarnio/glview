@@ -35,7 +35,7 @@ class Texture:
 
     def create_dummy(self):
         """Create a placeholder texture."""
-        dummy_img = np.random.default_rng().random((32, 32, 3)).astype(np.uint8)
+        dummy_img = np.random.default_rng().integers(0, 256, size=(32, 32, 3), dtype=np.uint8)
         self.texture = self.ctx.texture((32, 32), 3, dummy_img, dtype='f1')
         self.upload_done = True
         self.mipmaps_done = True

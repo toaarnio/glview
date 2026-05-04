@@ -1,4 +1,5 @@
 import unittest
+from unittest import mock
 
 import numpy as np
 
@@ -8,11 +9,12 @@ from glview.texture import Texture
 
 class _FakeTexture:
 
-    def __init__(self, size, components, dtype):
+    def __init__(self, size, components, dtype, data=None):
         self.size = size
         self.width, self.height = size
         self.components = components
         self.dtype = dtype
+        self.data = None if data is None else np.array(data)
         self.released = False
         self.writes = []
         self.mipmaps_built = 0
@@ -33,12 +35,29 @@ class _FakeContext:
         self.created = []
 
     def texture(self, size, components, data=None, dtype=None):
-        texture = _FakeTexture(size, components, dtype)
+        texture = _FakeTexture(size, components, dtype, data=data)
         self.created.append(texture)
         return texture
 
 
 class TextureReuseTests(unittest.TestCase):
+
+    def test_create_dummy_uses_full_uint8_color_range(self):
+        ctx = _FakeContext()
+        dummy = np.full((32, 32, 3), 127, dtype=np.uint8)
+
+        class _FakeRng:
+            def integers(self, low, high, size=None, dtype=None):
+                self.args = (low, high, size, dtype)
+                return dummy
+
+        rng = _FakeRng()
+        with mock.patch("glview.texture.np.random.default_rng", return_value=rng):
+            tex = Texture(ctx, None, idx=0, verbose=False)
+
+        self.assertEqual(rng.args, (0, 256, (32, 32, 3), np.uint8))
+        self.assertEqual(tex.texture.dtype, "f1")
+        np.testing.assert_array_equal(tex.texture.data, dummy)
 
     def test_reuse_recreates_texture_when_channel_count_changes(self):
         ctx = _FakeContext()
