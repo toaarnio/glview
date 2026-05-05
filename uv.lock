@@ -80,8 +80,8 @@ dev = [
 
 [package.metadata]
 requires-dist = [
-    { name = "imgio", specifier = ">=1.7.3" },
-    { name = "imsize", specifier = ">=1.11.0" },
+    { name = "imgio", specifier = ">=1.7.4" },
+    { name = "imsize", specifier = ">=1.11.1" },
     { name = "moderngl", specifier = ">=5.12.0" },
     { name = "natsort", specifier = ">=8.4.0" },
     { name = "numpy", specifier = ">=2.2.6" },
@@ -110,7 +110,7 @@ wheels = [
 
 [[package]]
 name = "imgio"
-version = "1.7.3"
+version = "1.7.4"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "imageio" },
@@ -118,14 +118,14 @@ dependencies = [
     { name = "openexr" },
     { name = "pyexr" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/c5/90/b674ec82cbe48cadbfdf2c872521f5b69ce754162314105dd924723bdda6/imgio-1.7.3.tar.gz", hash = "sha256:2c671ba756d68523e11a0b86b22cad0516f3472518cb03315857c080cf9f43f0", size = 9161, upload-time = "2026-05-05T08:46:02.572Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/51/f3/70f50d1fbf1e135b2385678fcb992b02fbad570216a0b5f00e6e8cf5fe76/imgio-1.7.4.tar.gz", hash = "sha256:0b80bfbe78eb66d1b48992ef87e5b9916241acb3612b713ac97c7a2283ae87f7", size = 9207, upload-time = "2026-05-05T13:35:31.123Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/06/86/35bae0ee529262457878be1bf7c19cd776db6a340be9d39d486ceef0f849/imgio-1.7.3-py3-none-any.whl", hash = "sha256:0c6bef2871386910d1757fbfb00d17e4ed1375e75ec2d0289de09d522291cb1b", size = 12016, upload-time = "2026-05-05T08:46:01.179Z" },
+    { url = "https://files.pythonhosted.org/packages/27/d1/275bf448af16320ebc6261fe4fac24ca4760944a46d1680d796f7c54d10b/imgio-1.7.4-py3-none-any.whl", hash = "sha256:dcb18caea26fb6e5902492caa1c60e9ae47537aeedf4d0d6877d992670568210", size = 12063, upload-time = "2026-05-05T13:35:29.659Z" },
 ]
 
 [[package]]
 name = "imsize"
-version = "1.11.0"
+version = "1.11.1"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "numpy" },
@@ -134,9 +134,9 @@ dependencies = [
     { name = "rawpy" },
     { name = "sympy" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/c1/26/9f8c23abfd855e972274a978a484e1a7beaef38bb607e11a4739b322eb23/imsize-1.11.0.tar.gz", hash = "sha256:90d7126ef1a99c10bc2b25073c61f93b7ac5a84217cc2718f7ab429866577764", size = 16531, upload-time = "2026-04-22T15:07:26.465Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/1f/81/aadba0e56e920f25b10dd94c1591910ac2dea8b4bb44ece224cbff6d23e0/imsize-1.11.1.tar.gz", hash = "sha256:27db277debb8a225ef0797bee938b0215b296ff5648ff056bd108f48a0c65e04", size = 16515, upload-time = "2026-05-05T13:34:55.745Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/fd/6b/1a0f31372357680bac28f598d47f8a70c05c6cbd735153ac19be73785435/imsize-1.11.0-py3-none-any.whl", hash = "sha256:2159a207f33699c1f617ce0b64a1ff8dbd1020b592b944f6887395f556204239", size = 19976, upload-time = "2026-04-22T15:07:24.892Z" },
+    { url = "https://files.pythonhosted.org/packages/c0/57/987bb6f2b2f0679a4f389bfa468fd34c71e4aecc8cffa89294763372a5ce/imsize-1.11.1-py3-none-any.whl", hash = "sha256:2c2fdb6ba97739bc1bc39c8969a07bfedc540be0e65db00f4641bec1a31c542a", size = 19959, upload-time = "2026-05-05T13:34:54.5Z" },
 ]
 
 [[package]]
