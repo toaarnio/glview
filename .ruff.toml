@@ -1,8 +1,9 @@
-target-version = "py311"
+target-version = "py312"
 
 line-length = 150
 
 lint.pylint.max-statements = 75
+lint.mccabe.max-complexity = 12
 lint.pylint.max-args = 13
 
 lint.select = ["ALL"]

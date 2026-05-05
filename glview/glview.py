@@ -418,7 +418,13 @@ def _install_handler_and_exit():
         sys.exit(-1)
     if result.desktop_path is not None:
         print(f"Installed desktop entry: {result.desktop_path}")
-    if result.mimeapps_path is not None:
+    if result.mime_xml_path is not None:
+        print(f"Installed MIME definitions: {result.mime_xml_path}")
+    if result.mimeapps_paths:
+        print("Updated MIME defaults:")
+        for mimeapps_path in result.mimeapps_paths:
+            print(f"  {mimeapps_path}")
+    elif result.mimeapps_path is not None:
         print(f"Updated MIME defaults: {result.mimeapps_path}")
     if result.bundle_path is not None:
         print(f"Registered macOS app bundle: {result.bundle_path}")

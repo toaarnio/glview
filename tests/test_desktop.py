@@ -63,7 +63,27 @@ class _FakeMacOSBackend:
         self.default_handlers.append((uti, bundle_id))
 
 
+class _FakeMimeDatabaseBackend:
+    def __init__(self):
+        self.updated_dirs = []
+
+    def update_database(self, mime_dir):
+        self.updated_dirs.append(Path(mime_dir))
+
+
 class DesktopIntegrationTests(unittest.TestCase):
+
+    def test_shared_mime_info_xml_contains_netpbm_types(self):
+        xml = desktop.shared_mime_info_xml()
+
+        self.assertIn('mime-type type="image/x-portable-floatmap"', xml)
+        self.assertIn('glob pattern="*.pfm"', xml)
+        self.assertIn('mime-type type="image/x-portable-anymap"', xml)
+        self.assertIn('glob pattern="*.pnm"', xml)
+        self.assertIn('mime-type type="image/x-portable-pixmap"', xml)
+        self.assertIn('glob pattern="*.ppm"', xml)
+        self.assertIn('mime-type type="image/x-portable-graymap"', xml)
+        self.assertIn('glob pattern="*.pgm"', xml)
 
     def test_desktop_entry_contains_exec_and_mime_types(self):
         entry = desktop.desktop_entry_text(exec_command="glview")
@@ -76,32 +96,50 @@ class DesktopIntegrationTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmpdir:
             data_home = Path(tmpdir) / "data"
             config_home = Path(tmpdir) / "config"
+            mime_database = _FakeMimeDatabaseBackend()
 
             result = desktop.install_default_handler(
                 data_home=data_home,
                 config_home=config_home,
                 platform_name="linux",
+                mime_database_backend=mime_database,
             )
 
             self.assertEqual(result.desktop_path, data_home / "applications" / "glview.desktop")
             self.assertEqual(result.mimeapps_path, config_home / "mimeapps.list")
+            self.assertEqual(result.mime_xml_path, data_home / "mime" / "packages" / "glview.xml")
+            self.assertEqual(
+                result.mimeapps_paths,
+                (
+                    config_home / "mimeapps.list",
+                    data_home / "applications" / "mimeapps.list",
+                ),
+            )
             self.assertTrue(result.desktop_path.exists())
             self.assertTrue(result.mimeapps_path.exists())
+            self.assertTrue((data_home / "applications" / "mimeapps.list").exists())
+            self.assertTrue(result.mime_xml_path.exists())
+            self.assertEqual(mime_database.updated_dirs, [data_home / "mime"])
 
             desktop_text = result.desktop_path.read_text(encoding="utf-8")
             mimeapps_text = result.mimeapps_path.read_text(encoding="utf-8")
+            applications_mimeapps_text = (data_home / "applications" / "mimeapps.list").read_text(encoding="utf-8")
+            mime_xml_text = result.mime_xml_path.read_text(encoding="utf-8")
 
             self.assertIn("Exec=glview %F", desktop_text)
             self.assertIn("image/vnd.radiance;", desktop_text)
             self.assertIn("[Default Applications]", mimeapps_text)
-            self.assertIn("image/jpeg = glview.desktop;", mimeapps_text)
+            self.assertIn("image/jpeg=glview.desktop;", mimeapps_text)
             self.assertIn("[Added Associations]", mimeapps_text)
+            self.assertIn("image/jpeg=glview.desktop;", applications_mimeapps_text)
+            self.assertIn('glob pattern="*.pfm"', mime_xml_text)
 
     def test_install_default_handler_keeps_glview_first_without_duplicates(self):
         with tempfile.TemporaryDirectory() as tmpdir:
             config_home = Path(tmpdir) / "config"
             config_home.mkdir(parents=True, exist_ok=True)
             mimeapps_path = config_home / "mimeapps.list"
+            mime_database = _FakeMimeDatabaseBackend()
             mimeapps_path.write_text(
                 (
                     "[Added Associations]\n"
@@ -116,12 +154,13 @@ class DesktopIntegrationTests(unittest.TestCase):
                 data_home=Path(tmpdir) / "data",
                 config_home=config_home,
                 platform_name="linux",
+                mime_database_backend=mime_database,
             )
 
             mimeapps_text = mimeapps_path.read_text(encoding="utf-8")
 
-            self.assertIn("image/jpeg = glview.desktop;", mimeapps_text)
-            self.assertIn("image/jpeg = glview.desktop;other.desktop;", mimeapps_text)
+            self.assertIn("image/jpeg=glview.desktop;", mimeapps_text)
+            self.assertIn("image/jpeg=glview.desktop;other.desktop;", mimeapps_text)
 
     def test_install_default_handler_rejects_non_linux_platforms(self):
         with self.assertRaises(NotImplementedError):

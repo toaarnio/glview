@@ -24,7 +24,11 @@ brew install exiv2
 
 - Linux desktop environments that honor XDG desktop entries and `mimeapps.list`.
   It installs a per-user desktop entry under `~/.local/share/applications/` and
-  updates `~/.config/mimeapps.list`.
+  updates both `~/.config/mimeapps.list` and
+  `~/.local/share/applications/mimeapps.list` for broader desktop-environment
+  compatibility. It also installs user-scoped shared MIME definitions under
+  `~/.local/share/mime/packages/` and runs `update-mime-database` so `.pfm`,
+  `.pnm`, `.ppm`, and `.pgm` resolve to concrete image MIME types.
 - Windows. It registers `glview` under `HKCU\Software\Classes` for supported file
   types, adds a `RegisteredApplications`/Capabilities entry for the Default Apps
   UI, and opens the `glview` page in Windows Default Apps directly. File

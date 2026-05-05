@@ -9,6 +9,8 @@ from dataclasses import dataclass
 import os
 from pathlib import Path
 import plistlib
+import shutil
+import subprocess
 from urllib.parse import quote
 
 
@@ -63,6 +65,8 @@ class InstallResult:
     extensions: tuple[str, ...]
     desktop_path: Path | None = None
     mimeapps_path: Path | None = None
+    mimeapps_paths: tuple[Path, ...] = ()
+    mime_xml_path: Path | None = None
     bundle_id: str | None = None
     bundle_path: Path | None = None
     settings_uri: str | None = None
@@ -92,6 +96,7 @@ def install_default_handler(
     data_home: Path | None = None,
     config_home: Path | None = None,
     platform_name: str | None = None,
+    mime_database_backend=None,
     registry_backend=None,
     launcher_backend=None,
     executable_path: Path | None = None,
@@ -103,6 +108,7 @@ def install_default_handler(
             exec_command=exec_command,
             data_home=data_home,
             config_home=config_home,
+            mime_database_backend=mime_database_backend,
         )
     if platform_name.startswith("win"):
         return _install_windows(
@@ -123,23 +129,35 @@ def _install_linux(
     exec_command: str,
     data_home: Path | None,
     config_home: Path | None,
+    mime_database_backend,
 ) -> InstallResult:
     data_home = _data_home() if data_home is None else Path(data_home)
     config_home = _config_home() if config_home is None else Path(config_home)
     applications_dir = data_home / "applications"
+    mime_dir = data_home / "mime"
+    mime_packages_dir = mime_dir / "packages"
     desktop_path = applications_dir / DESKTOP_FILENAME
-    mimeapps_path = config_home / "mimeapps.list"
+    mimeapps_paths = _linux_mimeapps_paths(config_home, data_home)
+    mime_xml_path = mime_packages_dir / "glview.xml"
 
     applications_dir.mkdir(parents=True, exist_ok=True)
     config_home.mkdir(parents=True, exist_ok=True)
+    mime_packages_dir.mkdir(parents=True, exist_ok=True)
 
     desktop_path.write_text(desktop_entry_text(exec_command=exec_command), encoding="utf-8")
-    _update_mimeapps_list(mimeapps_path, DESKTOP_FILENAME, SUPPORTED_MIME_TYPES)
+    mime_xml_path.write_text(shared_mime_info_xml(), encoding="utf-8")
+    backend = mime_database_backend if mime_database_backend is not None else _UpdateMimeDatabaseBackend()
+    backend.update_database(mime_dir)
+    for mimeapps_path in mimeapps_paths:
+        mimeapps_path.parent.mkdir(parents=True, exist_ok=True)
+        _update_mimeapps_list(mimeapps_path, DESKTOP_FILENAME, SUPPORTED_MIME_TYPES)
 
     return InstallResult(
         platform="linux",
         desktop_path=desktop_path,
-        mimeapps_path=mimeapps_path,
+        mimeapps_path=mimeapps_paths[0],
+        mimeapps_paths=mimeapps_paths,
+        mime_xml_path=mime_xml_path,
         mime_types=SUPPORTED_MIME_TYPES,
         extensions=SUPPORTED_EXTENSIONS,
     )
@@ -255,6 +273,45 @@ def _config_home() -> Path:
     return Path(os.environ.get("XDG_CONFIG_HOME", Path.home() / ".config"))
 
 
+def shared_mime_info_xml() -> str:
+    return """<?xml version="1.0" encoding="UTF-8"?>
+<mime-info xmlns="http://www.freedesktop.org/standards/shared-mime-info">
+  <mime-type type="image/x-portable-floatmap">
+    <comment>Portable FloatMap image</comment>
+    <glob pattern="*.pfm"/>
+    <magic priority="80">
+      <match type="string" offset="0" value="PF"/>
+      <match type="string" offset="0" value="Pf"/>
+    </magic>
+  </mime-type>
+  <mime-type type="image/x-portable-anymap">
+    <glob pattern="*.pnm"/>
+  </mime-type>
+  <mime-type type="image/x-portable-pixmap">
+    <glob pattern="*.ppm"/>
+  </mime-type>
+  <mime-type type="image/x-portable-graymap">
+    <glob pattern="*.pgm"/>
+  </mime-type>
+</mime-info>
+"""
+
+
+def _linux_mimeapps_paths(config_home: Path, data_home: Path) -> tuple[Path, ...]:
+    candidates = (
+        config_home / "mimeapps.list",
+        data_home / "applications" / "mimeapps.list",
+    )
+    unique_paths = []
+    seen = set()
+    for candidate in candidates:
+        if candidate in seen:
+            continue
+        seen.add(candidate)
+        unique_paths.append(candidate)
+    return tuple(unique_paths)
+
+
 def _update_mimeapps_list(path: Path, desktop_filename: str, mime_types: tuple[str, ...]) -> None:
     parser = RawConfigParser(interpolation=None, strict=False)
     parser.optionxform = str
@@ -272,7 +329,7 @@ def _update_mimeapps_list(path: Path, desktop_filename: str, mime_types: tuple[s
         parser.set("Added Associations", mime_type, _association_list(existing, desktop_filename))
 
     with path.open("w", encoding="utf-8") as handle:
-        parser.write(handle)
+        parser.write(handle, space_around_delimiters=False)
 
 
 def _association_list(existing: str, desktop_filename: str) -> str:
@@ -280,6 +337,24 @@ def _association_list(existing: str, desktop_filename: str) -> str:
     entries = [entry for entry in entries if entry != desktop_filename]
     entries.insert(0, desktop_filename)
     return ";".join(entries) + ";"
+
+
+class _UpdateMimeDatabaseBackend:
+
+    def __init__(self, command_path: str | None = None) -> None:
+        resolved = command_path if command_path is not None else shutil.which("update-mime-database")
+        if resolved is None:
+            message = "update-mime-database was not found on PATH"
+            raise FileNotFoundError(message)
+        self._command_path = resolved
+
+    def update_database(self, mime_dir: Path) -> None:
+        subprocess.run(  # noqa: S603 - fixed command path and installer-owned target directory.
+            [self._command_path, str(mime_dir)],
+            check=True,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        )
 
 
 def _import_winreg():
