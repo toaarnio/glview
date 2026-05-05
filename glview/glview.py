@@ -387,14 +387,19 @@ def main():  # noqa: PLR0915
 
 
 def main_loop(modules):
-    """ Keep the application running until exit request or out of memory. """
+    """Keep the application running until exit request."""
     try:
         ram_minimum = 512  # exit if available RAM drops below 512 MB
+        low_memory_active = False
         while all(m.running for m in modules):
             ram_available = psutil.virtual_memory().available / 1024**2
             if ram_available < ram_minimum:
-                print(f"ERROR: Only {ram_available:.0f} MB of RAM remaining. Terminating.")
-                break
+                if not low_memory_active:
+                    print(f"WARNING: Only {ram_available:.0f} MB of RAM remaining. Pausing background loading until memory recovers.")
+                    low_memory_active = True
+            elif low_memory_active:
+                print(f"INFO: System RAM recovered to {ram_available:.0f} MB. Background loading can continue.")
+                low_memory_active = False
             time.sleep(0.1)
     except (KeyboardInterrupt, SystemExit):
         print("Ctrl+C pressed, terminating...")
