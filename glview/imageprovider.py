@@ -324,8 +324,10 @@ class ImageProvider:
                 img = img.astype(np.float32)
             return img
         except (imgio.ImageIOError, imsize.ImageFileError) as e:
-            print(f"\n{e}")
-            self._vprint(e)
+            if not self.verbose:
+                self._print(e)
+            else:
+                self._vprint(e)
             return ImageStatus.INVALID.value
 
     def _publish_result_locked(self, request, img):
