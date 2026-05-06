@@ -1,5 +1,3 @@
-#!/usr/bin/python3 -B
-
 """
 The 'glview' command-line application.
 """

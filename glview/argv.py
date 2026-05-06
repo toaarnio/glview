@@ -1,5 +1,3 @@
-#!/usr/bin/env -S python3 -B
-
 """
 A collection of simple command-line parsing functions.
 
