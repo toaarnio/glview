@@ -169,27 +169,6 @@ class PygletUISmokeTests(unittest.TestCase):
 
         self.assertEqual(ui.renderer.textures.upload_calls, [])
 
-    def test_caption_uses_filenames_when_all_files_share_directory(self):
-        ui = self._ui(["/tmp/set/a.png", "/tmp/set/b.png"])
-        ui.state.numtiles = 2
-        ui.state.img_per_tile = np.array([0, 1, 2, 3], dtype=int)
-
-        caption = ui._caption()
-
-        self.assertIn("a.png [1/2]", caption)
-        self.assertIn("b.png [2/2]", caption)
-
-    def test_caption_uses_directory_names_in_multi_tile_mixed_directory_mode(self):
-        ui = self._ui(["/tmp/set1/a.png", "/var/set2/b.png"])
-        ui.state.numtiles = 2
-        ui.state.img_per_tile = np.array([0, 1, 2, 3], dtype=int)
-
-        caption = ui._caption()
-
-        self.assertIn(str(Path("/tmp/set1")), caption)
-        self.assertIn(str(Path("/var/set2")), caption)
-        self.assertNotIn("a.png [1/2]", caption)
-
     def test_retile_returns_expected_viewports_for_two_tile_vertical_layout(self):
         ui = self._ui(["a.png", "b.png"])
 

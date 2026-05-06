@@ -3,12 +3,12 @@
 import time                    # built-in library
 import threading               # built-in library
 import traceback               # built-in library
-from pathlib import Path       # built-in library
 
 import pyglet                  # pip install pyglet
 import numpy as np             # pip install numpy
 
 from glview import uiops
+from glview.hud import HUD
 from glview.imagestate import ImageStatus
 from glview.viewconfig import ViewConfigState
 from glview.viewerstate import ViewerState
@@ -32,6 +32,7 @@ class PygletUI:
         self.need_redraw = True
         self.window = None
         self.ops = uiops.UIOperations(self)
+        self.hud = None  # created after window in _init_pyglet()
         self.key_state = None
         self.winsize = None
         self.mouse_speed = 2.0
@@ -124,6 +125,7 @@ class PygletUI:
         self.window.set_fullscreen(self.fullscreen)
         self.window.set_mouse_visible(not self.fullscreen)
         self.key_state = dict.fromkeys(pyglet.window.key._key_names, False)
+        self.hud = HUD()
         self._patch_gl_cleanup()
         self._setup_events()
         self._vprint("Pyglet & native OpenGL initialized")
@@ -226,20 +228,6 @@ class PygletUI:
         gamma = ["off", "sRGB", "HLG", "HDR10"][self.config.gamma]
         caption = f"glview {ver} | {self.config.ev:+1.2f}EV | norm {norm} | {csc} | "
         caption += f"ae {ae} | tonemap {gtm} | gamut {gmap} | sharpen {sharpen} | gamma {gamma} | {fps:.0f} fps"
-
-        # Filenames and paths are hard to fit into the title bar in multi-tile mode,
-        # so we need to make a compromise: show filenames if all files are in the same
-        # directory; otherwise show the directory name but not the filename
-
-        dirnames = [Path(entry.filespec).parent for entry in snapshot.entries]
-        basenames = [Path(entry.filespec).name for entry in snapshot.entries]
-        hide_dirname = np.unique(dirnames).size == 1
-        for tileidx in range(self.state.numtiles):
-            imgidx = self.state.img_per_tile[tileidx]
-            label = Path(snapshot.entries[imgidx].filespec)
-            if self.state.numtiles > 1:  # show folder name or filename but not both
-                label = basenames[imgidx] if hide_dirname else dirnames[imgidx]
-            caption = f"{caption} | {label} [{imgidx+1}/{snapshot.numfiles}]"
         return caption
 
     def _retile(self, numtiles, winsize, layout):
@@ -323,6 +311,10 @@ class PygletUI:
     def _reset_view_command(self):
         self.state.reset_view()
         self.config.reset_exposure()
+        self.need_redraw = True
+
+    def _toggle_hud(self):
+        self.hud.toggle()
         self.need_redraw = True
 
     def _toggle_linearize_current(self):
@@ -413,6 +405,7 @@ class PygletUI:
             keys.M: self._cycle_mirror_command,
             keys.U: self.ops.reload_visible_images,
             keys.SPACE: self.ops.toggle_debug_mode,
+            keys.V: self._toggle_hud,
         }
 
     def _handle_key_press(self, symbol, modifiers):
@@ -457,9 +450,27 @@ class PygletUI:
                 elapsed = self.renderer.redraw()
                 if elapsed is None:
                     return
+                self._draw_hud()
                 self.window.set_caption(self._caption())
                 self.window.flip()
                 self.need_redraw = False
+
+    def _draw_hud(self):
+        if not self.hud.visible:
+            return
+        w, h = self.winsize
+        self.renderer.ctx.screen.use()
+        # ModernGL leaves the viewport set to the last tile's sub-region; reset it.
+        pyglet.gl.glViewport(0, 0, w, h)
+        self.hud.update(
+            (w, h),
+            self.state,
+            self.config,
+            self.files.snapshot(),
+            self.viewports,
+            self.renderer.textures,
+        )
+        self.hud.draw()
 
     def _setup_resize_event(self):
         @self.window.event

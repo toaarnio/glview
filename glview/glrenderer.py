@@ -51,7 +51,7 @@ class GLRenderer:
         # OpenGL window must already exist and be owned by this thread
         self._vprint("attaching to native OpenGL window...")
         self.ctx = moderngl.create_context(require=310)
-        self.ctx.enable(moderngl.DEPTH_TEST)
+
         self._vprint("compiling shaders...")
         # Initialize the main shader
         shader_path = os.path.dirname(os.path.realpath(__file__))

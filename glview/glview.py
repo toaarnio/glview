@@ -306,6 +306,7 @@ def main():  # noqa: PLR0915
         print("    left / right            pan image; synchronized if multiple tiles")
         print("    PageUp / PageDown       cycle through images on active tile")
         print("    ctrl + left / right     cycle through images on all tiles")
+        print("    v                       toggle on-screen HUD on/off")
         print("    s                       split window into 1/2/3/4 tiles")
         print("    1 / 2 / 3 / 4           select active tile for per-tile operations")
         print("    p                       in 2-tile layouts, flip the image pair")
