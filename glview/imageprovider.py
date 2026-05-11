@@ -13,6 +13,7 @@ import imgio                   # pip install imgio
 from pqdm.threads import pqdm  # pip install pqdm
 
 from glview.imagestate import ImageStatus
+import glview._io  # noqa: F401 (ensures builtins.print is patched on Windows)
 
 
 @dataclass(frozen=True)
@@ -374,5 +375,5 @@ class ImageProvider:
 
     def _vprint(self, message, **kwargs):
         if self.verbose:
-            prefix = f"[{self.__class__.__name__}/{threading.current_thread().name}]"
+            prefix = f"[ImageProvider/{threading.current_thread().name}]"
             print(f"{prefix} {message}", **kwargs)

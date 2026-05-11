@@ -3,6 +3,8 @@ import threading
 import moderngl
 import numpy as np
 
+import glview._io  # noqa: F401 (ensures builtins.print is patched on Windows)
+
 
 def _build_degamma_lut(n: int, out_dtype) -> np.ndarray:
     """Build an n-entry sRGB inverse gamma LUT (uint index -> linear float)."""
@@ -210,7 +212,7 @@ class Texture:
 
     def _vprint(self, message, log_level=1):
         if self.verbose >= log_level:
-            print(f"[{self.__class__.__name__}/{threading.current_thread().name}] {message}")
+            print(f"[Texture/{threading.current_thread().name}] {message}")
 
     def _refresh_image_properties(self):
         """Update cached image metadata used when creating or reusing textures."""

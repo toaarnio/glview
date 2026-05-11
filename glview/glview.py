@@ -21,6 +21,7 @@ from glview import imageprovider
 from glview import macosapp
 from glview import pygletui
 from glview import version
+import glview._io  # noqa: F401 (ensures builtins.print is patched on Windows)
 from glview.imagestate import ImageSlot, ImageStatus
 
 
@@ -222,7 +223,7 @@ class FileList:
             try:
                 self.entries = self._drop(self.entries, indices)
                 self._update()
-                print(f"[{threading.current_thread().name}] Dropped images {indices}")
+                print(f"[FileList] Dropped images {indices}")
             except IndexError:
                 pass
 
@@ -234,7 +235,7 @@ class FileList:
                 self.entries = self._drop(self.entries, [idx])
                 self._update()
                 os.remove(filespec)
-                print(f"[{threading.current_thread().name}] Deleted {filespec}")
+                print(f"[FileList] Deleted {filespec}")
             except IndexError:
                 pass
 

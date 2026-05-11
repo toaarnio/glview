@@ -12,6 +12,7 @@ from glview.hud import HUD
 from glview.imagestate import ImageStatus
 from glview.viewconfig import ViewConfigState
 from glview.viewerstate import ViewerState
+import glview._io  # noqa: F401 (ensures builtins.print is patched on Windows)
 
 
 class PygletUI:
@@ -566,8 +567,8 @@ class PygletUI:
                 self._vprint(f"exception in {func.__name__}():")
                 traceback.print_exc()
             else:
-                print(f"[{self.__class__.__name__}/{threading.current_thread().name}] {type(e).__name__}: {e}")
+                print(f"[PygletUI/{threading.current_thread().name}] {type(e).__name__}: {e}")
 
     def _vprint(self, message):
         if self.verbose:
-            print(f"[{self.__class__.__name__}/{threading.current_thread().name}] {message}")
+            print(f"[PygletUI/{threading.current_thread().name}] {message}")

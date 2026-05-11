@@ -11,6 +11,7 @@ import moderngl                # pip install moderngl
 from glview import ae
 from glview import rendertargets
 from glview import rendertextures
+import glview._io  # noqa: F401 (ensures builtins.print is patched on Windows)
 
 
 class GLRenderer:
@@ -483,4 +484,4 @@ class GLRenderer:
 
     def _vprint(self, message, log_level=1):
         if self.verbose >= log_level:
-            print(f"[{self.__class__.__name__}/{threading.current_thread().name}] {message}")
+            print(f"[GLRenderer/{threading.current_thread().name}] {message}")
