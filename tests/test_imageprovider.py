@@ -49,7 +49,7 @@ class ImageProviderTests(unittest.TestCase):
         provider = self._provider(["a.png"])
         img = np.ones((2, 2, 3), dtype=np.uint8)
         slot_id, revision = provider.files.image_token(0)
-        provider._update_queue.put(("loaded", 0, slot_id, revision, img))
+        provider._update_queue.put(("loaded", 0, slot_id, revision, img, 65535))
 
         provider.apply_updates()
 
@@ -75,7 +75,7 @@ class ImageProviderTests(unittest.TestCase):
         img = np.ones((2, 2, 3), dtype=np.uint8)
         stale_token = provider.files.image_token(0)
         provider.files.mark_pending(0)
-        provider._update_queue.put(("loaded", 0, stale_token[0], stale_token[1], img))
+        provider._update_queue.put(("loaded", 0, stale_token[0], stale_token[1], img, 65535))
 
         provider.apply_updates()
 
@@ -89,7 +89,7 @@ class ImageProviderTests(unittest.TestCase):
         provider.files.drop([0])
         provider._loader_statuses = [provider.files.image_status(0)]
         provider._loader_tokens = [provider.files.image_token(0)]
-        provider._update_queue.put(("loaded", 0, stale_token[0], stale_token[1], img))
+        provider._update_queue.put(("loaded", 0, stale_token[0], stale_token[1], img, 65535))
 
         provider.apply_updates()
 
@@ -113,7 +113,7 @@ class ImageProviderTests(unittest.TestCase):
         provider = self._provider(["a.png"])
         img = np.ones((2, 2, 3), dtype=np.uint8)
         slot_id, revision = provider.files.image_token(0)
-        provider._update_queue.put(("loaded", 0, slot_id, revision, img))
+        provider._update_queue.put(("loaded", 0, slot_id, revision, img, 65535))
 
         removed = provider.apply_updates()
 
@@ -163,7 +163,6 @@ class ImageProviderTests(unittest.TestCase):
             idx=0,
             token=provider.files.image_token(0),
             filespec="a.png",
-            linearize=False,
         )
         provider.release_image(0, token=request.token)
         with provider.files.mutex:
@@ -211,24 +210,24 @@ class ImageProviderTests(unittest.TestCase):
         self.assertEqual(result.shape, (4, 5, 3))
         np.testing.assert_array_equal(result, rgba[:, :, :3])
 
-    def test_load_single_applies_degamma_for_srgb_like_formats(self):
+    def test_load_single_does_not_degamma_srgb_formats(self):
+        """Degamma is now deferred to texture upload; the loader returns raw uint8."""
         provider = self._provider(["a.jpg"])
         rgb = np.arange(3 * 4 * 3, dtype=np.uint8).reshape(3, 4, 3)
-        degamma = np.full((3, 4, 3), 0.25, dtype=np.float16)
         info = SimpleNamespace(cfa_raw=False)
 
         with (
             mock.patch("glview.imageprovider.imsize.read", return_value=info),
             mock.patch("glview.imageprovider.imgio.imread", return_value=(rgb, 255)),
-            mock.patch.object(provider, "_degamma", return_value=degamma) as degamma_mock,
         ):
             result = provider._load_single(0, downsample=1, verbose=False)
 
-        degamma_mock.assert_called_once()
-        np.testing.assert_array_equal(result, degamma)
+        self.assertEqual(result.dtype, np.uint8)
+        np.testing.assert_array_equal(result, rgb)
         self.assertFalse(provider.files.entry(0).linearize)
 
-    def test_load_single_converts_uint16_to_float32_using_max_of_image_and_header(self):
+    def test_load_single_keeps_uint16_as_uint16(self):
+        """Linear uint16 (TIFF, RAW) is kept as uint16; texture.py uploads via nu2."""
         provider = self._provider(["a.tif"])
         img = np.array([[[0], [512]], [[1024], [2048]]], dtype=np.uint16)
         info = SimpleNamespace(cfa_raw=False)
@@ -239,8 +238,8 @@ class ImageProviderTests(unittest.TestCase):
         ):
             result = provider._load_single(0, downsample=1, verbose=False)
 
-        self.assertEqual(result.dtype, np.float32)
-        np.testing.assert_allclose(result[:, :, 0], img[:, :, 0].astype(np.float32) / 2048.0)
+        self.assertEqual(result.dtype, np.uint16)
+        np.testing.assert_array_equal(result[:, :, 0], img[:, :, 0])
 
     def test_load_single_converts_float64_to_float32(self):
         provider = self._provider(["a.exr"])
@@ -283,7 +282,7 @@ class ImageProviderTests(unittest.TestCase):
             result = provider._load_single(0, downsample=1, verbose=True)
 
         rawread_mock.assert_called_once_with("a.raw", 640, 480, 10, 2048, "mipi", verbose=True)
-        self.assertEqual(result.dtype, np.float32)
+        self.assertEqual(result.dtype, np.uint16)
         self.assertEqual(result.shape, (4, 4, 1))
 
     def test_load_single_uses_detected_raw_packing_when_not_overridden(self):

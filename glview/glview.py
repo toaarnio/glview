@@ -40,6 +40,7 @@ class FileEntry:
     loaded_image: object = None
     image: object = None
     metadata: object = None
+    rawmax: int = 65535  # bit-depth maximum (e.g., 1023 for 10-bit, 4095 for 12-bit, 65535 for 16-bit)
 
     @property
     def slot_id(self) -> int:
@@ -65,6 +66,7 @@ class FileEntrySnapshot:
     linearize: bool
     image_slot: ImageSlot
     metadata: object = None
+    rawmax: int = 65535  # bit-depth maximum from the loader (e.g., 1023 for 10-bit RAW)
 
     @classmethod
     def from_entry(cls, entry: FileEntry):
@@ -78,6 +80,7 @@ class FileEntrySnapshot:
                 revision=entry.revision,
             ),
             metadata=entry.metadata,
+            rawmax=entry.rawmax,
         )
 
     @property
@@ -95,6 +98,11 @@ class FileEntrySnapshot:
     @property
     def token(self):
         return (self.slot_id, self.revision)
+
+    @property
+    def auto_linearize(self) -> bool:
+        """True for file types that are gamma-encoded and need sRGB degamma before display."""
+        return pathlib.Path(self.filespec).suffix.lower() in {".jpg", ".jpeg", ".png", ".bmp", ".ppm"}
 
 
 @dataclass(frozen=True)
@@ -176,10 +184,11 @@ class FileList:
         entry.loaded_image = None
         entry.image = None
 
-    def mark_loaded(self, idx, img):
+    def mark_loaded(self, idx, img, rawmax=65535):
         entry = self.entries[idx]
         entry.image_slot.status = ImageStatus.LOADED
         entry.loaded_image = img
+        entry.rawmax = rawmax
 
     def mark_released(self, idx):
         entry = self.entries[idx]

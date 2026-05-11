@@ -105,10 +105,10 @@ class GLRenderer:
             # Render the image into an offscreen texture representing the current
             # tile; note that all tiles are the same size, so we can use the same
             # texture for as long as window size and tiling scheme are unchanged.
-            # The second rendering pass expects linear colors, so it's important
-            # to remove sRGB gamma in the first pass.
+            # GPU texture filtering expects linear colors, so it's important that
+            # sRGB gamma has been removed before we reach this point.
 
-            self._render_tile_scene(i, imgidx, gpu_texture, orientation, scalex, scaley, snapshot)
+            self._render_tile_scene(i, imgidx, gpu_texture, orientation, scalex, scaley, snapshot, texture.bitdepth_scale)
 
             # Derive exposure parameters for the current tile, to be applied in the
             # second rendering pass
@@ -201,7 +201,15 @@ class GLRenderer:
         scalex, scaley = self._get_aspect_ratio(vpw, vph, texw, texh)
         return gpu_texture, orientation, scalex, scaley
 
-    def _render_tile_scene(self, tileidx: int, imgidx: int, gpu_texture, orientation: int, scalex: float, scaley: float, snapshot):
+    def _render_tile_scene(self,
+                           tileidx: int,
+                           imgidx: int,
+                           gpu_texture,
+                           orientation: int,
+                           scalex: float,
+                           scaley: float,
+                           snapshot,
+                           bitdepth_scale: float = 1.0):
         fbo = self.tile_target.fbo
         fbo.use()
         fbo.clear(*self._get_debug_tile_color(tileidx))
@@ -212,6 +220,7 @@ class GLRenderer:
         self.prog['orientation'] = orientation
         self.prog['grayscale'] = (gpu_texture.components == 1)
         self.prog['degamma'] = snapshot.entries[imgidx].linearize
+        self.prog['bitdepth_scale'] = bitdepth_scale
         self.vao.render(moderngl.TRIANGLE_STRIP)
 
     def _render_postprocess_tile(
@@ -253,8 +262,11 @@ class GLRenderer:
         self.vao_post.render(moderngl.TRIANGLE_STRIP)
 
     def _normalization_levels(self, texture_obj):
-        norm_maxvals = np.r_[1, texture_obj.maxval, texture_obj.maxval, texture_obj.percentiles, texture_obj.diffuse_white]
-        norm_minvals = np.r_[0, 0, texture_obj.minval, 0, 0, 0, 0, 0]
+        # Scale all data-derived values to match texture.fs output range (always [0, 1]
+        # after bitdepth_scale is applied for nu2 uint16 data).
+        bs = texture_obj.bitdepth_scale
+        norm_maxvals = np.r_[1, texture_obj.maxval * bs, texture_obj.maxval * bs, texture_obj.percentiles * bs, texture_obj.diffuse_white * bs]
+        norm_minvals = np.r_[0, 0, texture_obj.minval * bs, 0, 0, 0, 0, 0]
         return norm_maxvals[self.ui.config.normalize], norm_minvals[self.ui.config.normalize]
 
     def _resolve_tile_exposure(self, tileidx: int, texture, ae_gain, tile_diffuse, tile_peak):
@@ -271,8 +283,8 @@ class GLRenderer:
             self.ae_converged[tileidx] = True
 
         if tile_peak is None:
-            tile_peak = texture.maxval
-            tile_diffuse = texture.diffuse_white
+            tile_peak = texture.maxval * texture.bitdepth_scale
+            tile_diffuse = texture.diffuse_white * texture.bitdepth_scale
         peak_white = tile_peak / tile_diffuse
         diffuse_white = tile_diffuse
         return self.ae_gain_per_tile[tileidx], diffuse_white, peak_white

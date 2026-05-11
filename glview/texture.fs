@@ -2,6 +2,7 @@ uniform sampler2D img;
 uniform int orientation;
 uniform bool degamma;
 uniform bool grayscale;
+uniform float bitdepth_scale;
 
 in vec2 texcoords;
 out vec4 color;
@@ -63,6 +64,7 @@ vec2 rotate(vec2 tc, int degrees) {
 
 void main() {
   color = texture(img, rotate(texcoords, orientation));
+  color.rgb *= bitdepth_scale;
   color.rgb = degamma ? srgb_degamma(color.rgb) : color.rgb;
   color.rgb = grayscale ? color.rrr : color.rgb;
 }

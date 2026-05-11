@@ -27,10 +27,11 @@ class _FakeLoader:
 
 class _FakeTextureObject:
 
-    def __init__(self, _ctx, img, idx, verbose):
+    def __init__(self, _ctx, img, idx, verbose, linearize=False, rawmax=65535):
         self.img = img
         self.idx = idx
         self.verbose = verbose
+        self.rawmax = rawmax
         self.texture = SimpleNamespace(
             width=img.shape[1] if isinstance(img, np.ndarray) else 1,
             height=img.shape[0] if isinstance(img, np.ndarray) else 1,
@@ -202,6 +203,7 @@ class GLRendererParameterTests(unittest.TestCase):
             minval=0.25,
             percentiles=np.array([8.0, 7.0, 6.0, 5.0, 4.0]),
             diffuse_white=3.0,
+            bitdepth_scale=1.0,
         )
 
         whitelevel, blacklevel = renderer._normalization_levels(texture_obj)
@@ -219,7 +221,7 @@ class GLRendererParameterTests(unittest.TestCase):
         renderer = self._renderer(ui=ui)
         renderer.ae_gain_per_tile = np.ones(4)
         renderer.ae_converged = [True, True, True, True]
-        texture_obj = SimpleNamespace(maxval=12.0, diffuse_white=3.0)
+        texture_obj = SimpleNamespace(maxval=12.0, diffuse_white=3.0, bitdepth_scale=1.0)
 
         ae_gain, diffuse_white, peak_white = renderer._resolve_tile_exposure(
             tileidx=0,

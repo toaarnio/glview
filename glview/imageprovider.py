@@ -6,7 +6,6 @@ import time                    # built-in library
 import threading               # built-in library
 import traceback               # built-in library
 from dataclasses import dataclass  # built-in library
-from pathlib import Path       # built-in library
 import numpy as np             # pip install numpy
 import psutil                  # pip install psutil
 import imsize                  # pip install imsize
@@ -21,7 +20,6 @@ class LoadRequest:
     idx: int
     token: tuple[int, int]
     filespec: str
-    linearize: bool
 
 
 class ImageProvider:
@@ -138,7 +136,7 @@ class ImageProvider:
             if not self._matches_current_slot(idx, slot_id, revision):
                 continue
             if action == "loaded":
-                loaded_updates.append((idx, slot_id, revision, payload[0]))
+                loaded_updates.append((idx, slot_id, revision, payload[0], payload[1]))
             elif action == "invalid":
                 invalid_updates.append((idx, slot_id, revision))
         return loaded_updates, invalid_updates
@@ -153,34 +151,16 @@ class ImageProvider:
         return removed
 
     def _apply_loaded_updates(self, loaded_updates):
-        for idx, slot_id, revision, img in loaded_updates:
+        for idx, slot_id, revision, img, rawmax in loaded_updates:
             if not self._matches_current_slot(idx, slot_id, revision):
                 continue
-            self.files.mark_loaded(idx, img)
+            self.files.mark_loaded(idx, img, rawmax)
             self.files.consume_image(idx, img)
 
     def _matches_current_slot(self, idx, slot_id, revision):
         if idx >= self.files.numfiles:
             return False
         return (slot_id, revision) == self.files.image_token(idx)
-
-    def _degamma(self, frame: np.ndarray) -> np.ndarray:
-        """
-        Apply standard sRGB inverse gamma on the given uint8/16 frame, returning
-        the result in normalized float16 format.
-        """
-        assert frame.dtype in [np.uint8, np.uint16], frame.dtype
-        t0 = time.time()
-        bpp = 8 if frame.dtype == np.uint8 else 16
-        lut = np.linspace(0, 1, 2 ** bpp).astype(np.float16)
-        srgb_lo = lut / 12.92
-        srgb_hi = np.power((lut + 0.055) / 1.055, 2.4)
-        threshold_mask = (lut > 0.04045)
-        lut = srgb_hi * threshold_mask + srgb_lo * (~threshold_mask)
-        frame = lut[frame]
-        elapsed = (time.time() - t0) * 1000
-        self._vprint(f"Applying inverse sRGB gamma took {elapsed:.1f} ms")
-        return frame
 
     def _parallel_loader(self, downsample):
         ram_total = psutil.virtual_memory().total / 1024**2
@@ -210,8 +190,8 @@ class ImageProvider:
                 with self.files.mutex:
                     self._sync_loader_state_locked()
                     self._drain_requests_locked()
-                    for request, img in zip(requests, images, strict=True):
-                        published = self._publish_result_locked(request, img)
+                    for request, (img, rawmax) in zip(requests, images, strict=True):
+                        published = self._publish_result_locked(request, img, rawmax)
                         if published:
                             nloaded += 1
                             if isinstance(img, np.ndarray):
@@ -247,12 +227,12 @@ class ImageProvider:
                         break
                     request = self._take_pending_request_locked(idx)
                 verbose = self.verbose or self.files.numfiles < 200
-                img = self._load_request(request, downsample, verbose) if request else None
+                img, rawmax = self._load_request(request, downsample, verbose) if request else (None, 65535)
                 if request is not None:
                     with self.files.mutex:
                         self._sync_loader_state_locked()
                         self._drain_requests_locked()
-                        published = self._publish_result_locked(request, img)
+                        published = self._publish_result_locked(request, img, rawmax)
                         if published and isinstance(img, np.ndarray):
                             nbytes += img.nbytes
                         nloaded += int(published)
@@ -279,15 +259,18 @@ class ImageProvider:
         """
         with self.files.mutex:
             request = self._take_pending_request_locked(idx)
-        return self._load_request(request, downsample, verbose) if request else None
+        if not request:
+            return None
+        img, rawmax = self._load_request(request, downsample, verbose)
+        with self.files.mutex:
+            self._publish_result_locked(request, img, rawmax)
+        return img
 
     def _take_pending_request_locked(self, idx):
         if idx >= len(self._loader_statuses) or self._loader_statuses[idx] != ImageStatus.PENDING:
             return None
         filespec = self.files.filespec(idx)
-        suffix = Path(filespec).suffix.lower()
-        linearize = suffix in [".jpg", ".jpeg", ".png", ".bmp", ".ppm"]
-        return LoadRequest(idx=idx, token=self._loader_tokens[idx], filespec=filespec, linearize=linearize)
+        return LoadRequest(idx=idx, token=self._loader_tokens[idx], filespec=filespec)
 
     def _load_request(self, request, downsample, verbose):
         try:
@@ -303,34 +286,25 @@ class ImageProvider:
                 bpp = self.config.bpp or info.bitdepth
                 stride = self.config.stride or info.stride
                 packing = self.config.packing or packing
-                img, maxval = imgio.rawread(request.filespec, width, height, bpp, stride, packing, verbose=verbose)
+                img, rawmax = imgio.rawread(request.filespec, width, height, bpp, stride, packing, verbose=verbose)
             else:
-                img, maxval = imgio.imread(request.filespec, verbose=verbose)
+                img, rawmax = imgio.imread(request.filespec, verbose=verbose)
             img = img[::downsample, ::downsample]
             img = np.atleast_3d(img)  # {2D, 3D} => 3D
             img = img[:, :, :3]  # scrap alpha channel, if any
-            if request.linearize:
-                # invert sRGB gamma, as OpenGL texture filtering assumes
-                # linear colors; float16 precision is the minimum to avoid
-                # clipping dark colors to black
-                img = self._degamma(img)
-            if img.dtype == np.uint16:
-                # uint16 still doesn't work in ModernGL as of 5.7.4;
-                # scale to [0, 1] and use float32 instead
-                norm = max(maxval, np.max(img))
-                img = img.astype(np.float32) / norm
             if img.dtype == np.float64:
                 # float64 is not universally supported yet
                 img = img.astype(np.float32)
-            return img
+                rawmax = 1
+            return img, int(rawmax)
         except (imgio.ImageIOError, imsize.ImageFileError) as e:
             if not self.verbose:
                 self._print(e)
             else:
                 self._vprint(e)
-            return ImageStatus.INVALID.value
+            return ImageStatus.INVALID.value, 65535
 
-    def _publish_result_locked(self, request, img):
+    def _publish_result_locked(self, request, img, rawmax=65535):
         idx = request.idx
         if idx >= len(self._loader_statuses):
             return False
@@ -341,7 +315,7 @@ class ImageProvider:
         slot_id, revision = request.token
         if isinstance(img, np.ndarray):
             self._loader_statuses[idx] = ImageStatus.LOADED
-            self._update_queue.put(("loaded", idx, slot_id, revision, img))
+            self._update_queue.put(("loaded", idx, slot_id, revision, img, rawmax))
             return True
         if img == ImageStatus.INVALID.value:
             self._loader_statuses[idx] = ImageStatus.INVALID

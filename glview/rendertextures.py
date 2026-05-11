@@ -28,7 +28,9 @@ class RenderTextureManager:
         img, token = self.loader.get_image_record(idx)
         if not tex:
             img = img if isinstance(img, np.ndarray) else None
-            tex = texture.Texture(self.ctx, img, idx, self.verbose)
+            auto_linearize = snapshot.entries[idx].auto_linearize
+            rawmax = snapshot.entries[idx].rawmax
+            tex = texture.Texture(self.ctx, img, idx, self.verbose, linearize=auto_linearize, rawmax=rawmax)
             self.cache.store(slot_id, tex)
         elif isinstance(img, np.ndarray):
             tex.reuse(img)
