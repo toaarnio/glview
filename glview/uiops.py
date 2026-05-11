@@ -80,6 +80,13 @@ class UIOperations:
         self.ui.window.set_caption(self.ui._caption())
         self.ui.need_redraw = True
 
+    def set_active_tile_image(self, imgidx: int):
+        if self.ui.files.numfiles == 0:
+            return
+        if self.ui.state.set_active_tile_image(imgidx, self.ui.files.numfiles):
+            self.ui.window.set_caption(self.ui._caption())
+            self.ui.need_redraw = True
+
     def step_all_tiles(self, incr: int):
         self.ui.state.step_all_tiles(incr, self.ui.files.numfiles)
         self.ui.window.set_caption(self.ui._caption())

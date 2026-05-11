@@ -116,6 +116,36 @@ class ViewerStateTests(unittest.TestCase):
 
         np.testing.assert_array_equal(state.img_per_tile, np.array([2, 3, 4, 8]))
 
+    def test_set_active_tile_image_writes_active_tile_only(self):
+        state = ViewerState(tileidx=2, img_per_tile=np.array([0, 1, 2, 3]))
+
+        changed = state.set_active_tile_image(7, numfiles=10)
+
+        self.assertTrue(changed)
+        np.testing.assert_array_equal(state.img_per_tile, np.array([0, 1, 7, 3]))
+        self.assertEqual(state.ae_reset_per_tile, [False, False, True, False])
+
+    def test_set_active_tile_image_clamps_out_of_range(self):
+        state = ViewerState(tileidx=0, img_per_tile=np.array([0, 1, 2, 3]))
+
+        state.set_active_tile_image(99, numfiles=5)
+        np.testing.assert_array_equal(state.img_per_tile, np.array([4, 1, 2, 3]))
+
+        state.set_active_tile_image(-3, numfiles=5)
+        np.testing.assert_array_equal(state.img_per_tile, np.array([0, 1, 2, 3]))
+
+    def test_set_active_tile_image_noop_when_unchanged(self):
+        state = ViewerState(tileidx=1, img_per_tile=np.array([0, 5, 2, 3]))
+
+        changed = state.set_active_tile_image(5, numfiles=10)
+
+        self.assertFalse(changed)
+        self.assertEqual(state.ae_reset_per_tile, [False, False, False, False])
+
+    def test_set_active_tile_image_returns_false_when_no_files(self):
+        state = ViewerState()
+        self.assertFalse(state.set_active_tile_image(0, numfiles=0))
+
 
 if __name__ == "__main__":
     unittest.main()

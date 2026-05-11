@@ -93,6 +93,7 @@ Usage: glview [options] [image.(pgm|ppm|pnm|png|jpg|..)] ...
     left / right            pan image; synchronized if multiple tiles
     PageUp / PageDown       cycle through images on active tile
     ctrl + left / right     cycle through images on all tiles
+    tab                     toggle thumbnail filmstrip; click a thumbnail to jump
     s                       split window into 1/2/3/4 tiles
     1 / 2 / 3 / 4           select active tile for per-tile operations
     p                       in 2-tile layouts, flip the image pair

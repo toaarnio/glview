@@ -80,6 +80,17 @@ class ViewerState:
         self.img_per_tile = uistate.step_active_tile(self.img_per_tile, self.tileidx, incr, numfiles)
         self.ae_reset_per_tile[self.tileidx] = True
 
+    def set_active_tile_image(self, imgidx: int, numfiles: int) -> bool:
+        if numfiles <= 0:
+            return False
+        clamped = int(np.clip(imgidx, 0, numfiles - 1))
+        if self.img_per_tile[self.tileidx] == clamped:
+            return False
+        self.img_per_tile = np.array(self.img_per_tile, copy=True)
+        self.img_per_tile[self.tileidx] = clamped
+        self.ae_reset_per_tile[self.tileidx] = True
+        return True
+
     def step_all_tiles(self, incr: int, numfiles: int):
         self.img_per_tile = uistate.step_all_tiles(self.img_per_tile, self.numtiles, incr, numfiles)
         self.reset_ae()

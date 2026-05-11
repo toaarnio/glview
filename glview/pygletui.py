@@ -8,6 +8,7 @@ import pyglet                  # pip install pyglet
 import numpy as np             # pip install numpy
 
 from glview import uiops
+from glview.filmstrip import Filmstrip
 from glview.hud import HUD
 from glview.imagestate import ImageStatus
 from glview.viewconfig import ViewConfigState
@@ -34,6 +35,7 @@ class PygletUI:
         self.window = None
         self.ops = uiops.UIOperations(self)
         self.hud = None  # created after window in _init_pyglet()
+        self.filmstrip = None  # created after window in _init_pyglet()
         self.key_state = None
         self.winsize = None
         self.mouse_speed = 2.0
@@ -97,6 +99,7 @@ class PygletUI:
                 parent._keyboard_zoom_pan()
                 parent._smooth_exposure()
                 parent._poll_loading()
+                parent._preload_filmstrip_thumbnails()
                 parent._upload_textures()
                 if parent._frame_needed():
                     window = next(iter(pyglet.app.windows))
@@ -127,6 +130,7 @@ class PygletUI:
         self.window.set_mouse_visible(not self.fullscreen)
         self.key_state = dict.fromkeys(pyglet.window.key._key_names, False)
         self.hud = HUD()
+        self.filmstrip = Filmstrip(strip_height=192, cell_size=184, cell_pad=4)
         self._patch_gl_cleanup()
         self._setup_events()
         self._vprint("Pyglet & native OpenGL initialized")
@@ -318,6 +322,10 @@ class PygletUI:
         self.hud.toggle()
         self.need_redraw = True
 
+    def _toggle_filmstrip(self):
+        self.filmstrip.toggle()
+        self.need_redraw = True
+
     def _toggle_linearize_current(self):
         imgidx = self.state.img_per_tile[self.state.tileidx]
         self.files.toggle_linearize(imgidx)
@@ -407,6 +415,7 @@ class PygletUI:
             keys.U: self.ops.reload_visible_images,
             keys.SPACE: self.ops.toggle_debug_mode,
             keys.V: self._toggle_hud,
+            keys.TAB: self._toggle_filmstrip,
         }
 
     def _handle_key_press(self, symbol, modifiers):
@@ -452,6 +461,7 @@ class PygletUI:
                 if elapsed is None:
                     return
                 self._draw_hud()
+                self._draw_filmstrip()
                 self.window.set_caption(self._caption())
                 self.window.flip()
                 self.need_redraw = False
@@ -473,6 +483,29 @@ class PygletUI:
         )
         self.hud.draw()
 
+    def _draw_filmstrip(self):
+        if not self.filmstrip.visible:
+            return
+        w, h = self.winsize
+        self.renderer.ctx.screen.use()
+        pyglet.gl.glViewport(0, 0, w, h)
+        self.filmstrip.update(
+            (w, h),
+            self.state,
+            self.files.snapshot(),
+            self.files,
+        )
+        self.filmstrip.draw()
+
+    def _preload_filmstrip_thumbnails(self):
+        """Capture CPU thumbnails before the renderer's upload() releases them."""
+        if self.filmstrip is None:
+            return
+        snapshot = self.files.snapshot()
+        if snapshot.numfiles == 0:
+            return
+        self.filmstrip.preload(snapshot, self.files)
+
     def _setup_resize_event(self):
         @self.window.event
         def on_resize(width, height):
@@ -491,8 +524,10 @@ class PygletUI:
 
     def _setup_mouse_events(self):
         @self.window.event
-        def on_mouse_press(_x, _y, button, _modifiers):
+        def on_mouse_press(x, y, button, _modifiers):
             if button == pyglet.window.mouse.LEFT:
+                if self._handle_filmstrip_click(x, y):
+                    return
                 self.window.set_mouse_visible(False)
 
         @self.window.event
@@ -501,8 +536,10 @@ class PygletUI:
                 self.window.set_mouse_visible(True)
 
         @self.window.event
-        def on_mouse_drag(_x, _y, dx, dy, buttons, modifiers):
+        def on_mouse_drag(x, y, dx, dy, buttons, modifiers):
             if buttons & pyglet.window.mouse.LEFT:
+                if self._point_in_filmstrip(x, y):
+                    return
                 keys = pyglet.window.key
                 shift_down = modifiers & keys.MOD_SHIFT
                 self.state.drag_mouse(
@@ -520,6 +557,21 @@ class PygletUI:
             shift_down = self.key_state[keys.LSHIFT] or self.key_state[keys.RSHIFT]
             self.state.scroll_zoom(scroll_y, shift_down)
             self.need_redraw = True
+
+    def _point_in_filmstrip(self, x, y) -> bool:
+        if self.filmstrip is None or not self.filmstrip.visible:
+            return False
+        sx, sy, sw, sh = self.filmstrip.strip_rect(self.winsize)
+        return sx <= x < sx + sw and sy <= y < sy + sh
+
+    def _handle_filmstrip_click(self, x, y) -> bool:
+        if not self._point_in_filmstrip(x, y):
+            return False
+        imgidx = self.filmstrip.hit_test(x, y)
+        if imgidx is None:
+            return True  # swallow click on the strip background to avoid panning
+        self.ops.set_active_tile_image(imgidx)
+        return True
 
     def _setup_keyboard_events(self):
         @self.window.event
