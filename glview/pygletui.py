@@ -316,106 +316,69 @@ class PygletUI:
     def _reset_view_command(self):
         self.state.reset_view()
         self.config.reset_exposure()
-        self.need_redraw = True
-
-    def _toggle_hud(self):
-        self.hud.toggle()
-        self.need_redraw = True
-
-    def _toggle_filmstrip(self):
-        self.filmstrip.toggle()
-        self.need_redraw = True
 
     def _toggle_linearize_current(self):
         imgidx = self.state.img_per_tile[self.state.tileidx]
         self.files.toggle_linearize(imgidx)
-        self.need_redraw = True
 
-    def _cycle_gamma(self):
-        self.config.cycle_gamma()
-        self.need_redraw = True
-
-    def _cycle_input_colorspace(self):
-        self.config.cycle_input_colorspace()
-        self.need_redraw = True
-
-    def _cycle_output_colorspace(self):
-        self.config.cycle_output_colorspace()
-        self.need_redraw = True
-
-    def _toggle_exposure_range(self):
-        self.config.toggle_exposure_range()
-        self.need_redraw = True
-
-    def _cycle_normalize(self):
+    def _cycle_normalize_command(self):
         self.config.cycle_normalize()
         self.state.reset_ae()
-        self.need_redraw = True
-
-    def _toggle_texture_filter(self):
-        self.config.toggle_texture_filter()
-        self.need_redraw = True
-
-    def _toggle_ae_command(self):
-        self.state.toggle_ae()
-        self.need_redraw = True
-
-    def _toggle_tonemap_command(self):
-        self.state.toggle_tonemap()
-        self.need_redraw = True
-
-    def _toggle_gamutmap_command(self):
-        self.state.toggle_gamutmap()
-        self.need_redraw = True
-
-    def _toggle_sharpen_command(self):
-        self.state.toggle_sharpen()
-        self.need_redraw = True
 
     def _cycle_split_command(self):
         self.state.cycle_split(self.files.numfiles)
         self.viewports = self._retile(self.state.numtiles, self.winsize, self.state.layout)
         self.window.set_caption(self._caption())
-        self.need_redraw = True
 
     def _flip_pair_command(self):
         self.state.flip_pair()
         self.window.set_caption(self._caption())
-        self.need_redraw = True
 
     def _rotate_current_image(self):
         imgidx = self.state.img_per_tile[self.state.tileidx]
         self.files.rotate_orientation(imgidx)
-        self.need_redraw = True
 
-    def _cycle_mirror_command(self):
-        self.state.cycle_mirror()
-        self.need_redraw = True
+    def _select_tile_command(self, tileidx: int):
+        # Forwarded to ops because tile selection is also wired into the
+        # filmstrip click handler; keep the path consistent.
+        self.ops.select_tile(tileidx)
 
-    def _simple_key_actions(self, keys):
+    def _key_actions(self, keys):
+        """Map each key to a zero-arg action; redraw is requested automatically."""
+        K = keys
+        # Each entry: key → callable. The dispatcher sets `need_redraw = True`
+        # after invoking it, so individual actions only need to mutate state.
         return {
-            keys.ESCAPE: self.ops.request_exit,
-            keys.Q: self.ops.request_exit,
-            keys.F: self.ops.toggle_fullscreen,
-            keys.H: self._reset_view_command,
-            keys.L: self._toggle_linearize_current,
-            keys.G: self._cycle_gamma,
-            keys.A: self._toggle_ae_command,
-            keys.C: self._toggle_tonemap_command,
-            keys.K: self._toggle_gamutmap_command,
-            keys.Z: self._toggle_sharpen_command,
-            keys.I: self._cycle_input_colorspace,
-            keys.O: self._cycle_output_colorspace,
-            keys.B: self._toggle_exposure_range,
-            keys.N: self._cycle_normalize,
-            keys.T: self._toggle_texture_filter,
-            keys.S: self._cycle_split_command,
-            keys.R: self._rotate_current_image,
-            keys.M: self._cycle_mirror_command,
-            keys.U: self.ops.reload_visible_images,
-            keys.SPACE: self.ops.toggle_debug_mode,
-            keys.V: self._toggle_hud,
-            keys.TAB: self._toggle_filmstrip,
+            K.ESCAPE: self.ops.request_exit,
+            K.Q:      self.ops.request_exit,
+            K.F:      self.ops.toggle_fullscreen,
+            K.U:      self.ops.reload_visible_images,
+            K.SPACE:  self.ops.toggle_debug_mode,
+            K.X:      self.ops.show_exif_for_current,
+            K.W:      self.ops.take_screenshot,
+            K.D:      self.ops.remove_visible_images,
+            K.DELETE: self.ops.delete_current_image,
+            K.V:      self.hud.toggle,
+            K.TAB:    self.filmstrip.toggle,
+            K.S:      self._cycle_split_command,
+            K.H:      self._reset_view_command,
+            K.L:      self._toggle_linearize_current,
+            K.R:      self._rotate_current_image,
+            K.N:      self._cycle_normalize_command,
+            K.G:      self.config.cycle_gamma,
+            K.I:      self.config.cycle_input_colorspace,
+            K.O:      self.config.cycle_output_colorspace,
+            K.B:      self.config.toggle_exposure_range,
+            K.T:      self.config.toggle_texture_filter,
+            K.A:      self.state.toggle_ae,
+            K.C:      self.state.toggle_tonemap,
+            K.K:      self.state.toggle_gamutmap,
+            K.Z:      self.state.toggle_sharpen,
+            K.M:      self.state.cycle_mirror,
+            K._1:     lambda: self._select_tile_command(0),
+            K._2:     lambda: self._select_tile_command(1),
+            K._3:     lambda: self._select_tile_command(2),
+            K._4:     lambda: self._select_tile_command(3),
         }
 
     def _handle_key_press(self, symbol, modifiers):
@@ -424,26 +387,17 @@ class PygletUI:
         disallowed_keys = keys.MOD_CTRL | keys.MOD_ALT | keys.MOD_WINDOWS | keys.MOD_COMMAND
         if symbol == keys.C and modifiers == keys.MOD_CTRL:
             self.ops.request_exit()
-        if (modifiers & disallowed_keys) == 0:
-            self._dispatch_key_press(symbol, keys)
-
-    def _dispatch_key_press(self, symbol, keys):
-        action = self._simple_key_actions(keys).get(symbol)
+            return
+        if modifiers & disallowed_keys:
+            return
+        if symbol == keys.P and self.state.numtiles == 2:
+            self._flip_pair_command()
+            self.need_redraw = True
+            return
+        action = self._key_actions(keys).get(symbol)
         if action is not None:
             action()
-        elif symbol == keys.P and self.state.numtiles == 2:
-            self._flip_pair_command()
-        elif symbol == keys.X:
-            self.ops.show_exif_for_current()
-        elif symbol == keys.W:
-            self.ops.take_screenshot()
-        elif symbol == keys.D:
-            self.ops.remove_visible_images()
-        elif symbol == keys.DELETE:
-            self.ops.delete_current_image()
-        elif symbol in [keys._1, keys._2, keys._3, keys._4]:
-            tileidx = symbol - keys._1
-            self.ops.select_tile(tileidx)
+            self.need_redraw = True
 
     def _setup_events(self):
         self._vprint("setting up Pyglet window event handlers...")
@@ -460,13 +414,14 @@ class PygletUI:
                 elapsed = self.renderer.redraw()
                 if elapsed is None:
                     return
-                self._draw_hud()
-                self._draw_filmstrip()
+                snapshot = self.files.snapshot()
+                self._draw_hud(snapshot)
+                self._draw_filmstrip(snapshot)
                 self.window.set_caption(self._caption())
                 self.window.flip()
                 self.need_redraw = False
 
-    def _draw_hud(self):
+    def _draw_hud(self, snapshot):
         if not self.hud.visible:
             return
         w, h = self.winsize
@@ -477,13 +432,13 @@ class PygletUI:
             (w, h),
             self.state,
             self.config,
-            self.files.snapshot(),
+            snapshot,
             self.viewports,
             self.renderer.textures,
         )
         self.hud.draw()
 
-    def _draw_filmstrip(self):
+    def _draw_filmstrip(self, snapshot):
         if not self.filmstrip.visible:
             return
         w, h = self.winsize
@@ -492,7 +447,7 @@ class PygletUI:
         self.filmstrip.update(
             (w, h),
             self.state,
-            self.files.snapshot(),
+            snapshot,
             self.files,
         )
         self.filmstrip.draw()

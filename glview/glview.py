@@ -1,18 +1,13 @@
-"""
-The 'glview' command-line application.
-"""
+"""The 'glview' command-line application: argument parsing and bootstrap."""
 
-import sys                     # built-in library
-import os                      # built-in library
-import time                    # built-in library
-import threading               # built-in library
-import pathlib                 # built-in library
-import types                   # built-in library
-from dataclasses import dataclass  # built-in library
-import numpy as np             # pip install numpy
-import natsort                 # pip install natsort
-import psutil                  # pip install psutil
-import imgio                   # pip install imgio
+import pathlib
+import sys
+import time
+import types
+
+import imgio
+import natsort
+import psutil
 
 from glview import argv
 from glview import desktop
@@ -22,7 +17,7 @@ from glview import macosapp
 from glview import pygletui
 from glview import version
 import glview._io  # noqa: F401 (ensures builtins.print is patched on Windows)
-from glview.imagestate import ImageSlot, ImageStatus
+from glview.filelist import FileEntry, FileEntrySnapshot, FileList, FileListSnapshot  # noqa: F401 (back-compat re-exports)
 
 
 IMAGE_TYPES = imgio.RO_FORMATS
@@ -32,231 +27,82 @@ COLORSPACES = {"sRGB": 0, "P3": 1, "Rec2020": 2, "XYZ": 3}
 NORMS = {"off": 0, "max": 1, "stretch": 2, "99": 3, "98": 4, "95": 5, "90": 6, "mean": 7}
 
 
-@dataclass
-class FileEntry:
-    filespec: str
-    orientation: int
-    linearize: bool
-    image_slot: ImageSlot
-    loaded_image: object = None
-    image: object = None
-    metadata: object = None
-    rawmax: int = 65535  # bit-depth maximum (e.g., 1023 for 10-bit, 4095 for 12-bit, 65535 for 16-bit)
+HELP_TEXT = """\
+Usage: glview [options] [image.(pgm|ppm|pnm|png|jpg|..)] ...
 
-    @property
-    def slot_id(self) -> int:
-        return self.image_slot.slot_id
+  options:
+    --fullscreen            start in full-screen mode; default = windowed
+    --split 1|2|3|4         display images in N separate tiles
+    --downsample N          downsample images N-fold to save memory
+    --normalize off|max|... exposure normalization mode; default = off
+    --filter                use linear filtering; default = nearest
+    --idt sRGB|P3|...       input image color space; default = sRGB
+    --odt sRGB|P3|...       output device color space; default = sRGB
+    --width N               [.raw only] width of the image in pixels
+    --height N              [.raw only] height of the image in pixels
+    --bpp 10|12             [.raw only] bit depth of the image: 10/12
+    --stride N              [.raw only] row stride of the image in bytes
+    --packing plain|...     [.raw only] bit packing: unpacked/plain/mipi
+    --debug 1|2|...|r|g|b   select debug rendering mode; default = 1
+    --verbose               print extra traces to the console
+    --verbose               print even more traces to the console
+    --install-default-handler  register glview for desktop file associations
+    --create-macos-app      build a minimal macOS .app bundle into dist/
+    --version               show glview version number & exit
+    --help                  show this help message
 
-    @property
-    def status(self) -> ImageStatus:
-        return self.image_slot.status
+  keyboard commands:
+    mouse wheel             zoom in/out; synchronized if multiple tiles
+    + / -                   zoom in/out; synchronized if multiple tiles
+    mouse left + move       pan image; synchronized if multiple tiles
+    left / right            pan image; synchronized if multiple tiles
+    PageUp / PageDown       cycle through images on active tile
+    ctrl + left / right     cycle through images on all tiles
+    tab                     toggle thumbnail filmstrip on/off; click to jump
+    v                       toggle on-screen HUD on/off
+    s                       split window into 1/2/3/4 tiles
+    1 / 2 / 3 / 4           select active tile for per-tile operations
+    p                       in 2-tile layouts, flip the image pair
+    h                       reset zoom/pan/exposure to initial state
+    f                       toggle fullscreen <-> windowed
+    g                       cycle through gamma curves: sRGB/HLG/HDR10
+    n                       cycle through exposure normalization modes
+    k                       cycle through gamut compression modes
+    t                       toggle nearest <-> linear filtering
+    e                       adjust exposure within [-2EV, +2EV]
+    b                       toggle between HDR/LDR exposure control
+    i                       toggle input color space: sRGB/P3/Rec2020
+    o                       toggle output color space: sRGB/P3/Rec2020
+    r                       [per-image] rotate 90 degrees clockwise
+    l                       [per-image] toggle linearization on/off
+    m                       [per-tile] toggle mirroring x/y/both/none
+    a                       [per-tile] toggle autoexposure on/off
+    z                       [per-tile] toggle sharpening on/off
+    c                       [per-tile] toggle tonemapping on/off
+    x                       [per-tile] print image information (EXIF)
+    w                       write a screenshot as both JPG & PFM
+    u                       reload currently shown images from disk
+    d                       drop the currently shown image(s)
+    del                     delete the currently shown image
+    space                   toggle debug rendering on/off
+    q / esc / ctrl+c        terminate
 
-    @property
-    def revision(self) -> int:
-        return self.image_slot.revision
+  available debug rendering modes (--debug M):
+    1 - red => overexposed; blue => out of gamut; magenta => both
+    2 - shades of green => out-of-gamut distance
+    3 - normalized color: rgb' = rgb / max(rgb)
+    4 - red => above diffuse white; magenta => above peak white
+    r - show red channel only, set others to zero
+    g - show green channel only, set others to zero
+    b - show blue channel only, set others to zero
+    l - show image as grayscale (perceived brightness)
 
-    @property
-    def token(self):
-        return (self.slot_id, self.revision)
-
-
-@dataclass(frozen=True)
-class FileEntrySnapshot:
-    filespec: str
-    orientation: int
-    linearize: bool
-    image_slot: ImageSlot
-    metadata: object = None
-    rawmax: int = 65535  # bit-depth maximum from the loader (e.g., 1023 for 10-bit RAW)
-
-    @classmethod
-    def from_entry(cls, entry: FileEntry):
-        return cls(
-            filespec=entry.filespec,
-            orientation=entry.orientation,
-            linearize=entry.linearize,
-            image_slot=ImageSlot(
-                slot_id=entry.slot_id,
-                status=entry.status,
-                revision=entry.revision,
-            ),
-            metadata=entry.metadata,
-            rawmax=entry.rawmax,
-        )
-
-    @property
-    def slot_id(self) -> int:
-        return self.image_slot.slot_id
-
-    @property
-    def status(self) -> ImageStatus:
-        return self.image_slot.status
-
-    @property
-    def revision(self) -> int:
-        return self.image_slot.revision
-
-    @property
-    def token(self):
-        return (self.slot_id, self.revision)
-
-    @property
-    def auto_linearize(self) -> bool:
-        """True for file types that are gamma-encoded and need sRGB degamma before display."""
-        return pathlib.Path(self.filespec).suffix.lower() in {".jpg", ".jpeg", ".png", ".bmp", ".ppm"}
-
-
-@dataclass(frozen=True)
-class FileListSnapshot:
-    entries: tuple
-    numfiles: int
+  glview version {version}.
+"""
 
 
-class FileList:
-    """ An indexed container for images and their source filenames. """
-
-    def __init__(self, filespecs):
-        """
-        Create a new FileList with the given list of filenames. Files can only
-        be removed from the list, not added or reordered.
-        """
-        self.mutex = threading.Lock()
-        self._next_slot_id = 0
-        self.entries = [
-            FileEntry(
-                filespec=filespec,
-                orientation=0,
-                linearize=False,
-                image_slot=self._new_slot(),
-            )
-            for filespec in filespecs
-        ]
-        self._update()
-        self.reindexed = False
-
-    def ready_to_upload(self, idx):
-        """
-        Return True if the given image is ready to be uploaded to OpenGL,
-        or has already been uploaded.
-        """
-        return self.image_status(idx) not in [ImageStatus.PENDING, ImageStatus.INVALID]
-
-    def entry(self, idx) -> FileEntry:
-        return self.entries[idx]
-
-    def image_status(self, idx) -> ImageStatus:
-        return self.entries[idx].status
-
-    def image_revision(self, idx) -> int:
-        return self.entries[idx].revision
-
-    def image_slot_id(self, idx) -> int:
-        return self.entries[idx].slot_id
-
-    def image_token(self, idx):
-        return self.entries[idx].token
-
-    def get_loaded_image(self, idx):
-        return self.entries[idx].loaded_image
-
-    def get_consumed_image(self, idx):
-        return self.entries[idx].image
-
-    def filespec(self, idx) -> str:
-        return self.entries[idx].filespec
-
-    def set_linearize(self, idx, linearize: bool):
-        self.entries[idx].linearize = linearize
-
-    def toggle_linearize(self, idx) -> bool:
-        entry = self.entries[idx]
-        entry.linearize = not entry.linearize
-        return entry.linearize
-
-    def rotate_orientation(self, idx, degrees: int = 90) -> int:
-        entry = self.entries[idx]
-        entry.orientation = (entry.orientation + degrees) % 360
-        return entry.orientation
-
-    def mark_pending(self, idx):
-        entry = self.entries[idx]
-        entry.image_slot.status = ImageStatus.PENDING
-        entry.image_slot.revision += 1
-        entry.loaded_image = None
-        entry.image = None
-
-    def mark_loaded(self, idx, img, rawmax=65535):
-        entry = self.entries[idx]
-        entry.image_slot.status = ImageStatus.LOADED
-        entry.loaded_image = img
-        entry.rawmax = rawmax
-
-    def mark_released(self, idx):
-        entry = self.entries[idx]
-        entry.image_slot.status = ImageStatus.RELEASED
-        entry.loaded_image = None
-
-    def mark_invalid(self, idx):
-        entry = self.entries[idx]
-        entry.image_slot.status = ImageStatus.INVALID
-        entry.loaded_image = None
-        entry.image = None
-
-    def consume_image(self, idx, img):
-        self.entries[idx].image = img
-
-    def clear_consumed_image(self, idx):
-        self.entries[idx].image = None
-
-    def snapshot(self) -> FileListSnapshot:
-        """Return a consistent read-only view of the catalog state."""
-        with self.mutex:
-            entries = tuple(FileEntrySnapshot.from_entry(entry) for entry in self.entries)
-            return FileListSnapshot(
-                entries=entries,
-                numfiles=self.numfiles,
-            )
-
-    def drop(self, indices):
-        """ Drop the given images from this FileList, do not delete the files. """
-        with self.mutex:
-            try:
-                self.entries = self._drop(self.entries, indices)
-                self._update()
-                print(f"[FileList] Dropped images {indices}")
-            except IndexError:
-                pass
-
-    def delete(self, idx):
-        """ Remove the given image from this FileList and delete the file from disk. """
-        with self.mutex:
-            try:
-                filespec = self.entries[idx].filespec
-                self.entries = self._drop(self.entries, [idx])
-                self._update()
-                os.remove(filespec)
-                print(f"[FileList] Deleted {filespec}")
-            except IndexError:
-                pass
-
-    def _drop(self, arr, indices):
-        arr = np.asarray(arr, dtype=object)
-        arr = np.delete(arr, indices)
-        arr = arr.tolist()
-        return arr
-
-    def _update(self):
-        self.numfiles = len(self.entries)
-        self.reindexed = True
-
-    def _new_slot(self):
-        slot = ImageSlot(slot_id=self._next_slot_id)
-        self._next_slot_id += 1
-        return slot
-
-
-def main():  # noqa: PLR0915
-    """ Parse command-line arguments and run the application. """
+def _parse_config():
+    """Parse `sys.argv` into a SimpleNamespace of rendering/loading options."""
     config = types.SimpleNamespace()
     config.fullscreen = argv.exists("--fullscreen")
     config.numtiles = argv.intval("--split", default=1, accepted=[1, 2, 3, 4])
@@ -271,106 +117,29 @@ def main():  # noqa: PLR0915
     config.stride = argv.intval("--stride", default=None, condition="v >= 1")
     config.packing = argv.stringval("--packing", default=None, accepted=["unpacked", "plain", "mipi"])
     config.debug = argv.stringval("--debug", default="1", accepted=list("1234rgbl"))
+    # `argv.exists` consumes one matching token per call, so two `--verbose`
+    # flags raise verbosity to level 2 (verbose loader output + GL traces).
     config.verbose = argv.exists("--verbose")
     config.verbose += argv.exists("--verbose")
-    install_default_handler = argv.exists("--install-default-handler")
-    create_macos_app = argv.exists("--create-macos-app")
-    show_version = argv.exists("--version")
-    show_help = argv.exists("--help")
-    argv.exitIfAnyUnparsedOptions()
-    if install_default_handler:
-        _install_handler_and_exit()
-    if create_macos_app:
-        _create_macos_app_and_exit()
-    if show_version:
-        print(f"glview version {version.__version__}")
-        sys.exit()
-    if show_help:
-        print("Usage: glview [options] [image.(pgm|ppm|pnm|png|jpg|..)] ...")
-        print()
-        print("  options:")
-        print("    --fullscreen            start in full-screen mode; default = windowed")
-        print("    --split 1|2|3|4         display images in N separate tiles")
-        print("    --downsample N          downsample images N-fold to save memory")
-        print("    --normalize off|max|... exposure normalization mode; default = off")
-        print("    --filter                use linear filtering; default = nearest")
-        print("    --idt sRGB|P3|...       input image color space; default = sRGB")
-        print("    --odt sRGB|P3|...       output device color space; default = sRGB")
-        print("    --width N               [.raw only] width of the image in pixels")
-        print("    --height N              [.raw only] height of the image in pixels")
-        print("    --bpp 10|12             [.raw only] bit depth of the image: 10/12")
-        print("    --stride N              [.raw only] row stride of the image in bytes")
-        print("    --packing plain|...     [.raw only] bit packing: unpacked/plain/mipi")
-        print("    --debug 1|2|...|r|g|b   select debug rendering mode; default = 1")
-        print("    --verbose               print extra traces to the console")
-        print("    --verbose               print even more traces to the console")
-        print("    --install-default-handler  register glview for desktop file associations")
-        print("    --create-macos-app      build a minimal macOS .app bundle into dist/")
-        print("    --version               show glview version number & exit")
-        print("    --help                  show this help message")
-        print()
-        print("  keyboard commands:")
-        print("    mouse wheel             zoom in/out; synchronized if multiple tiles")
-        print("    + / -                   zoom in/out; synchronized if multiple tiles")
-        print("    mouse left + move       pan image; synchronized if multiple tiles")
-        print("    left / right            pan image; synchronized if multiple tiles")
-        print("    PageUp / PageDown       cycle through images on active tile")
-        print("    ctrl + left / right     cycle through images on all tiles")
-        print("    tab                     toggle thumbnail filmstrip on/off; click to jump")
-        print("    v                       toggle on-screen HUD on/off")
-        print("    s                       split window into 1/2/3/4 tiles")
-        print("    1 / 2 / 3 / 4           select active tile for per-tile operations")
-        print("    p                       in 2-tile layouts, flip the image pair")
-        print("    h                       reset zoom/pan/exposure to initial state")
-        print("    f                       toggle fullscreen <-> windowed")
-        print("    g                       cycle through gamma curves: sRGB/HLG/HDR10")
-        print("    n                       cycle through exposure normalization modes")
-        print("    k                       cycle through gamut compression modes")
-        print("    t                       toggle nearest <-> linear filtering")
-        print("    e                       adjust exposure within [-2EV, +2EV]")
-        print("    b                       toggle between HDR/LDR exposure control")
-        print("    i                       toggle input color space: sRGB/P3/Rec2020")
-        print("    o                       toggle output color space: sRGB/P3/Rec2020")
-        print("    r                       [per-image] rotate 90 degrees clockwise")
-        print("    l                       [per-image] toggle linearization on/off")
-        print("    m                       [per-tile] toggle mirroring x/y/both/none")
-        print("    a                       [per-tile] toggle autoexposure on/off")
-        print("    z                       [per-tile] toggle sharpening on/off")
-        print("    c                       [per-tile] toggle tonemapping on/off")
-        print("    x                       [per-tile] print image information (EXIF)")
-        print("    w                       write a screenshot as both JPG & PFM")
-        print("    u                       reload currently shown images from disk")
-        print("    d                       drop the currently shown image(s)")
-        print("    del                     delete the currently shown image")
-        print("    space                   toggle debug rendering on/off")
-        print("    q / esc / ctrl+c        terminate")
-        print()
-        print("  supported file types:")
-        print("   ", '\n    '.join(IMAGE_TYPES))
-        print()
-        print("  available debug rendering modes (--debug M):")
-        print("    1 - red => overexposed; blue => out of gamut; magenta => both")
-        print("    2 - shades of green => out-of-gamut distance")
-        print("    3 - normalized color: rgb' = rgb / max(rgb)")
-        print("    4 - red => above diffuse white; magenta => above peak white")
-        print("    r - show red channel only, set others to zero")
-        print("    g - show green channel only, set others to zero")
-        print("    b - show blue channel only, set others to zero")
-        print("    l - show image as grayscale (perceived brightness)")
-        print()
-        print(f"  glview version {version.__version__}.")
-        print()
-        sys.exit()
-    else:
-        print(f"glview version {version.__version__} [{pathlib.Path(__file__)}].")
-        print("See 'glview --help' for command-line options and keyboard commands.")
+    return config
 
+
+def _print_help():
+    print(HELP_TEXT.format(version=version.__version__))
+    print("  supported file types:")
+    print("   ", "\n    ".join(IMAGE_TYPES))
+    print()
+
+
+def _load_filenames():
+    """Expand CLI file patterns into a natsorted list of image filenames."""
     filepatterns = sys.argv[1:] or ["*"]
     filenames = argv.filenames(filepatterns, IMAGE_TYPES, allowAllCaps=True)
     filenames = natsort.natsorted(natsort.natsorted(filenames), key=lambda p: pathlib.Path(p).parent)
-    loader = imageprovider.ImageProvider(FileList(filenames), config)
-    enforce(loader.files.numfiles > 0, "No valid images to show. Terminating.")
+    return filenames
 
+
+def _build_ui(loader, config):
     ui = pygletui.PygletUI(loader.files, ord(config.debug) - ord("0"), bool(config.verbose))
     ui.version = version.__version__
     ui.config.texture_filter = "LINEAR" if config.smooth else "NEAREST"
@@ -379,7 +148,14 @@ def main():  # noqa: PLR0915
     ui.config.cs_out = COLORSPACES[config.odt]
     ui.fullscreen = config.fullscreen
     ui.state.numtiles = config.numtiles
+    return ui
 
+
+def _run_app(config):
+    filenames = _load_filenames()
+    loader = imageprovider.ImageProvider(FileList(filenames), config)
+    enforce(loader.files.numfiles > 0, "No valid images to show. Terminating.")
+    ui = _build_ui(loader, config)
     renderer = glrenderer.GLRenderer(ui, loader.files, loader, config.verbose)
     if sys.platform == "darwin":
         loader.start()
@@ -394,6 +170,29 @@ def main():  # noqa: PLR0915
         main_loop([ui, loader])
         loader.stop()
         ui.stop()
+
+
+def main():
+    """Parse command-line arguments and run the application."""
+    config = _parse_config()
+    install_default_handler = argv.exists("--install-default-handler")
+    create_macos_app = argv.exists("--create-macos-app")
+    show_version = argv.exists("--version")
+    show_help = argv.exists("--help")
+    argv.exitIfAnyUnparsedOptions()
+    if install_default_handler:
+        _install_handler_and_exit()
+    if create_macos_app:
+        _create_macos_app_and_exit()
+    if show_version:
+        print(f"glview version {version.__version__}")
+        sys.exit()
+    if show_help:
+        _print_help()
+        sys.exit()
+    print(f"glview version {version.__version__} [{pathlib.Path(__file__)}].")
+    print("See 'glview --help' for command-line options and keyboard commands.")
+    _run_app(config)
 
 
 def main_loop(modules):
