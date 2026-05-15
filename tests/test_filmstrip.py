@@ -23,6 +23,7 @@ class _StubEntry:
     revision: int = 0
     status: ImageStatus = ImageStatus.LOADED
     image_slot: ImageSlot = None  # noqa: RUF013
+    rawmax: int = 65535
 
     @classmethod
     def make(cls, slot_id, revision=0, status=ImageStatus.LOADED):
@@ -127,6 +128,23 @@ class HelperTests(unittest.TestCase):
         img = np.full((2, 2, 3), 2.0, dtype=np.float32)
         out = _to_rgba_uint8(img, normalize_max=4.0)
         self.assertTrue(np.all(out[..., :3] == 127) or np.all(out[..., :3] == 128))
+
+    def test_to_rgba_uint8_respects_rawmax_for_10bit_uint16(self):
+        # A 10-bit RAW stored as uint16 with values at the bit-depth max should
+        # render as full white, not ~1.6% gray (1023/65535).
+        img = np.full((2, 2, 3), 1023, dtype=np.uint16)
+        out = _to_rgba_uint8(img, rawmax=1023)
+        self.assertTrue(np.all(out[..., :3] == 255))
+
+    def test_to_rgba_uint8_respects_rawmax_for_12bit_uint16(self):
+        img = np.full((2, 2, 3), 4095, dtype=np.uint16)
+        out = _to_rgba_uint8(img, rawmax=4095)
+        self.assertTrue(np.all(out[..., :3] == 255))
+
+    def test_to_rgba_uint8_defaults_to_full_uint16_range(self):
+        img = np.full((2, 2, 3), 65535, dtype=np.uint16)
+        out = _to_rgba_uint8(img)
+        self.assertTrue(np.all(out[..., :3] == 255))
 
     def test_letterbox_centers_landscape_in_square_cell(self):
         thumb = np.full((4, 16, 4), 200, dtype=np.uint8)

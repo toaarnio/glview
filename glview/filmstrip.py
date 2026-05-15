@@ -96,15 +96,21 @@ def _letterbox_to_cell(thumb_rgba: np.ndarray, cell_size: int, bg_rgba=(40, 40, 
     return canvas
 
 
-def _to_rgba_uint8(img: np.ndarray, normalize_max: float = 1.0) -> np.ndarray:
-    """Convert a CPU image (any of the supported dtypes) to RGBA uint8 for display."""
+def _to_rgba_uint8(img: np.ndarray, normalize_max: float = 1.0, rawmax: int = 65535) -> np.ndarray:
+    """Convert a CPU image (any of the supported dtypes) to RGBA uint8 for display.
+
+    `rawmax` is the actual bit-depth maximum for integer inputs (e.g. 1023 for
+    10-bit, 4095 for 12-bit, 65535 for full 16-bit). It is used only for uint16
+    arrays, where the raw sample values may occupy only the low bits.
+    """
     if img.ndim == 2:
         img = img[:, :, np.newaxis]
     h, w, c = img.shape
     if img.dtype == np.uint8:
         flt = img.astype(np.float32) / 255.0
     elif img.dtype == np.uint16:
-        flt = img.astype(np.float32) / 65535.0
+        denom = float(max(1, rawmax))
+        flt = img.astype(np.float32) / denom
     else:
         flt = img.astype(np.float32)
         if normalize_max > 0:
@@ -186,7 +192,7 @@ class Filmstrip:
             if entry.status == ImageStatus.INVALID:
                 self._thumb_cache[key] = None
                 continue
-            thumb = self._build_thumb(imgidx, files)
+            thumb = self._build_thumb(imgidx, files, entry)
             if thumb is not None:
                 self._thumb_cache[key] = thumb
         self._invalidate_stale_cache(snapshot)
@@ -210,7 +216,7 @@ class Filmstrip:
 
     # ------------------------------------------------------------------
 
-    def _build_thumb(self, imgidx, files):
+    def _build_thumb(self, imgidx, files, entry):
         if files is None:
             return None
         try:
@@ -221,7 +227,7 @@ class Filmstrip:
             return None
         stride = max(1, min(img.shape[:2]) // max(1, self.cell_size))
         small = img[::stride, ::stride]
-        rgba = _to_rgba_uint8(small)
+        rgba = _to_rgba_uint8(small, rawmax=entry.rawmax)
         return _letterbox_to_cell(rgba, self.cell_size)
 
     def _invalidate_stale_cache(self, snapshot):
