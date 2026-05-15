@@ -144,6 +144,11 @@ class PygletUI:
         via Context.delete_buffer, or from set_current's _delete_objects/_delete_objects_one_by_one),
         wglGetProcAddress returns NULL and pyglet raises MissingFunctionException.
 
+        If the function pointer was already resolved while a context existed but
+        the context has since been destroyed, invoking it raises an OSError
+        ("access violation") instead. Both occur during interpreter shutdown / GC
+        and are harmless, so swallow them silently.
+
         Wrap the affected GL functions in pyglet.gl with a silent exception handler.
         This covers all call paths without probing (probing caused an access violation).
         """
@@ -151,7 +156,7 @@ class PygletUI:
             def safe(*args, **kwargs):
                 try:
                     return fn(*args, **kwargs)
-                except pyglet.gl.lib.MissingFunctionException:
+                except (pyglet.gl.lib.MissingFunctionException, OSError):
                     pass
             return safe
 
